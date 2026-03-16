@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --version)",
+      "Bash(bun --version)",
+      "Bash(npm create:*)",
+      "Bash(npx vite:*)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}

@@ -1,0 +1,500 @@
+import { useState } from 'react'
+import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import { useData } from '../contexts/DataContext'
+import { formatCurrency } from '../data/mockData'
+import Modal from '../components/Modal'
+import StudentForm from '../components/StudentForm'
+import StudentProfile from '../components/StudentProfile'
+import GroupForm from '../components/GroupForm'
+
+const TABS = [
+  { id: 'students', label: 'Ученики' },
+  { id: 'groups', label: 'Группы' },
+]
+
+export default function Students() {
+  const { user, hasPermission } = useAuth()
+  const {
+    students, branches, payments, groups, teachers,
+    deleteStudent, deleteGroup,
+    getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
+    getBranchName,
+  } = useData()
+
+  const [activeTab, setActiveTab] = useState('students')
+  const [search, setSearch] = useState('')
+  const [branchFilter, setBranchFilter] = useState(user.branch !== 'all' ? user.branch : 'all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [groupFilter, setGroupFilter] = useState('all')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingStudent, setEditingStudent] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [profileStudent, setProfileStudent] = useState(null)
+
+  // Group modals
+  const [groupModalOpen, setGroupModalOpen] = useState(false)
+  const [editingGroup, setEditingGroup] = useState(null)
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null)
+  const [groupSearch, setGroupSearch] = useState('')
+
+  const canAdd = hasPermission('students', 'add')
+  const canEdit = hasPermission('students', 'edit')
+  const canDelete = hasPermission('students', 'delete')
+
+  // ── Scoped data ──
+  const allStudents = user.branch !== 'all'
+    ? students.filter(s => s.branch === user.branch)
+    : students
+
+  const allGroups = user.branch !== 'all'
+    ? groups.filter(g => g.branch === user.branch)
+    : groups
+
+  // ── Student filters ──
+  const filtered = allStudents.filter((s) => {
+    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
+      (s.course || '').toLowerCase().includes(search.toLowerCase()) ||
+      (s.group || '').toLowerCase().includes(search.toLowerCase())
+    const matchBranch = branchFilter === 'all' || s.branch === branchFilter
+    const matchStatus = statusFilter === 'all' || s.status === statusFilter
+    const matchGroup = groupFilter === 'all' || s.group === groupFilter
+    return matchSearch && matchBranch && matchStatus && matchGroup
+  })
+
+  // ── Group filters ──
+  const filteredGroups = allGroups.filter(g => {
+    const matchSearch = g.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
+      (g.course || '').toLowerCase().includes(groupSearch.toLowerCase())
+    const matchBranch = branchFilter === 'all' || g.branch === branchFilter
+    return matchSearch && matchBranch
+  })
+
+  const statusColors = {
+    active: 'bg-emerald-100 text-emerald-700',
+    debtor: 'bg-red-100 text-red-700',
+    frozen: 'bg-slate-100 text-slate-700',
+  }
+  const statusLabels = {
+    active: 'Активен',
+    debtor: 'Должник',
+    frozen: 'Заморожен',
+  }
+
+  // ── Handlers ──
+  const handleEdit = (e, student) => {
+    e.stopPropagation()
+    setEditingStudent(student)
+    setModalOpen(true)
+  }
+
+  const handleAdd = () => {
+    setEditingStudent(null)
+    setModalOpen(true)
+  }
+
+  const handleDelete = (id) => {
+    deleteStudent(id)
+    setConfirmDelete(null)
+  }
+
+  const handleAddGroup = () => {
+    setEditingGroup(null)
+    setGroupModalOpen(true)
+  }
+
+  const handleEditGroup = (group) => {
+    setEditingGroup(group)
+    setGroupModalOpen(true)
+  }
+
+  const handleDeleteGroup = (id) => {
+    const grp = groups.find(g => g.id === id)
+    if (grp) {
+      const studentsInGroup = getGroupStudents(grp.name)
+      if (studentsInGroup.length > 0) {
+        alert(`Невозможно удалить группу: в ней ${studentsInGroup.length} учеников. Сначала переведите их в другую группу.`)
+        setConfirmDeleteGroup(null)
+        return
+      }
+    }
+    deleteGroup(id)
+    setConfirmDeleteGroup(null)
+  }
+
+  const getStudentDebtInfo = (student) => {
+    const studentPays = payments.filter(p => p.type === 'income' && p.studentId === student.id)
+    const totalPaid = studentPays.reduce((sum, p) => sum + p.amount, 0)
+    const totalCoursePrice = student.totalCoursePrice || 0
+    const debt = totalCoursePrice > 0 ? Math.max(0, totalCoursePrice - totalPaid) : 0
+    const lastPayment = studentPays.sort((a, b) => new Date(b.date) - new Date(a.date))[0]
+    const nextPaymentDate = lastPayment?.nextPaymentDate
+    const isOverdue = nextPaymentDate && new Date(nextPaymentDate) < new Date()
+    return { totalPaid, debt, nextPaymentDate, isOverdue, trancheCount: studentPays.length }
+  }
+
+  // Unique groups for dropdown
+  const uniqueGroups = [...new Set(allStudents.map(s => s.group).filter(Boolean))]
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Ученики и группы</h2>
+          <p className="text-slate-500 mt-1">{allStudents.length} учеников · {allGroups.length} групп</p>
+        </div>
+        <div className="flex gap-2">
+          {canAdd && activeTab === 'groups' && (
+            <button onClick={handleAddGroup}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2">
+              <Plus size={16} /> Новая группа
+            </button>
+          )}
+          {canAdd && activeTab === 'students' && (
+            <button onClick={handleAdd}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
+              <Plus size={16} /> Добавить ученика
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+        {TABS.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${
+              activeTab === tab.id
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ═══════ STUDENTS TAB ═══════ */}
+      {activeTab === 'students' && (
+        <>
+          {/* Filters */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="text" placeholder="Поиск по имени, курсу, группе..." value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter size={16} className="text-slate-400" />
+              {user.branch === 'all' && (
+                <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
+                  className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="all">Все филиалы</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              )}
+              <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}
+                className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Все группы</option>
+                {uniqueGroups.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Все статусы</option>
+                <option value="active">Активные</option>
+                <option value="debtor">Должники</option>
+                <option value="frozen">Замороженные</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Имя</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Филиал</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Группа</th>
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium">Формат</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Телефон</th>
+                    <th className="text-right py-3 px-4 text-slate-500 font-medium">Оплачено</th>
+                    <th className="text-right py-3 px-4 text-slate-500 font-medium">Дебиторка</th>
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium">Статус</th>
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium">Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((student) => {
+                    const info = getStudentDebtInfo(student)
+                    const isOnline = student.learningFormat === 'Онлайн'
+                    return (
+                      <tr key={student.id}
+                        className="border-b border-slate-50 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                        onClick={() => setProfileStudent(student)}>
+                        <td className="py-3 px-4">
+                          <p className="font-medium text-slate-900">{student.name}</p>
+                          <p className="text-xs text-slate-400">
+                            {student.course || '—'}
+                            {info.trancheCount > 0 && <span className="ml-1 text-emerald-500">· {info.trancheCount} транш(ей)</span>}
+                          </p>
+                        </td>
+                        <td className="py-3 px-4 text-slate-600">{getBranchName(student.branch)}</td>
+                        <td className="py-3 px-4">
+                          <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-mono">{student.group || '—'}</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {isOnline ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                              <Wifi size={10} /> Онлайн
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                              <Users size={10} /> Оффлайн
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-slate-500">{student.phone}</td>
+                        <td className={`py-3 px-4 text-right font-semibold ${info.totalPaid > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {info.totalPaid > 0 ? formatCurrency(info.totalPaid) : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {info.debt > 0 ? (
+                            <div>
+                              <span className="font-semibold text-red-500">{formatCurrency(info.debt)}</span>
+                              {info.isOverdue && (
+                                <div className="flex items-center justify-end gap-1 mt-0.5">
+                                  <AlertTriangle size={11} className="text-amber-500" />
+                                  <span className="text-xs text-amber-500">Просрочено</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[student.status]}`}>
+                            {statusLabels[student.status]}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); setProfileStudent(student) }}
+                              className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title="Профиль">
+                              <Eye size={15} className="text-blue-600" />
+                            </button>
+                            {canEdit && (
+                              <button onClick={(e) => handleEdit(e, student)}
+                                className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title="Редактировать">
+                                <Pencil size={15} className="text-slate-500" />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(student.id) }}
+                                className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="Удалить">
+                                <Trash2 size={15} className="text-red-500" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {filtered.length === 0 && (
+              <div className="text-center py-12 text-slate-400">Ученики не найдены</div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ═══════ GROUPS TAB ═══════ */}
+      {activeTab === 'groups' && (
+        <>
+          {/* Filters */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="text" placeholder="Поиск по названию группы или курсу..." value={groupSearch}
+                onChange={(e) => setGroupSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            {user.branch === 'all' && (
+              <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
+                className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Все филиалы</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            )}
+          </div>
+
+          {/* Group Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredGroups.map(group => {
+              const offlineCount = getGroupOfflineCount(group.name)
+              const onlineCount = getGroupOnlineCount(group.name)
+              const totalCount = offlineCount + onlineCount
+              const offlinePct = group.maxOffline > 0 ? Math.round((offlineCount / group.maxOffline) * 100) : 0
+              const isFull = offlineCount >= group.maxOffline
+              const teacher = group.teacherId ? teachers.find(t => t.id === group.teacherId) : null
+
+              return (
+                <div key={group.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow">
+                  {/* Header */}
+                  <div className={`px-5 py-4 ${isFull ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'} text-white`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-bold text-lg">{group.name}</h3>
+                        <p className="text-sm opacity-90">{group.course}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        {canEdit && (
+                          <button onClick={() => handleEditGroup(group)}
+                            className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => setConfirmDeleteGroup(group.id)}
+                            className="p-1.5 bg-white/20 hover:bg-red-500/50 rounded-lg transition-colors">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-5 space-y-4">
+                    {/* Stats */}
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div className="bg-blue-50 rounded-lg p-2.5">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Users size={13} className="text-blue-600" />
+                        </div>
+                        <p className="text-lg font-bold text-slate-900">{offlineCount}</p>
+                        <p className="text-[10px] text-slate-500">Оффлайн</p>
+                      </div>
+                      <div className="bg-purple-50 rounded-lg p-2.5">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Wifi size={13} className="text-purple-600" />
+                        </div>
+                        <p className="text-lg font-bold text-slate-900">{onlineCount}</p>
+                        <p className="text-[10px] text-slate-500">Онлайн</p>
+                      </div>
+                      <div className="bg-emerald-50 rounded-lg p-2.5">
+                        <p className="text-lg font-bold text-slate-900">{totalCount}</p>
+                        <p className="text-[10px] text-slate-500">Всего</p>
+                      </div>
+                    </div>
+
+                    {/* Offline capacity bar */}
+                    <div>
+                      <div className="flex justify-between text-xs text-slate-500 mb-1">
+                        <span>Оффлайн места</span>
+                        <span className={`font-semibold ${isFull ? 'text-red-500' : 'text-slate-700'}`}>
+                          {offlineCount}/{group.maxOffline}
+                          {isFull && ' ПОЛНАЯ'}
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2.5">
+                        <div className={`h-2.5 rounded-full transition-all ${
+                          offlinePct >= 100 ? 'bg-red-500' : offlinePct >= 80 ? 'bg-amber-500' : 'bg-blue-500'
+                        }`} style={{ width: `${Math.min(offlinePct, 100)}%` }} />
+                      </div>
+                    </div>
+
+                    {/* Details */}
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center gap-2 text-slate-600">
+                        <BookOpen size={14} className="text-slate-400" />
+                        <span>{getBranchName(group.branch)}</span>
+                      </div>
+                      {teacher && (
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <User size={14} className="text-slate-400" />
+                          <span>{teacher.name}</span>
+                        </div>
+                      )}
+                      {group.schedule && (
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Clock size={14} className="text-slate-400" />
+                          <span>{group.schedule}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status badge */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                        group.status === 'active' ? 'bg-emerald-50 text-emerald-700' :
+                        group.status === 'full' ? 'bg-amber-50 text-amber-700' :
+                        'bg-slate-100 text-slate-500'
+                      }`}>
+                        {group.status === 'active' ? 'Активная' : group.status === 'full' ? 'Набор закрыт' : 'Архивная'}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        Онлайн: без лимита
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {filteredGroups.length === 0 && (
+            <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
+              Группы не найдены
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ═══════ MODALS ═══════ */}
+
+      {/* Add/Edit Student */}
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}
+        title={editingStudent ? 'Редактировать ученика' : 'Новый ученик'} size="lg">
+        <StudentForm student={editingStudent} onClose={() => setModalOpen(false)} />
+      </Modal>
+
+      {/* Confirm Delete Student */}
+      <Modal isOpen={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Подтвердите удаление" size="sm">
+        <p className="text-sm text-slate-600 mb-4">Вы уверены, что хотите удалить этого ученика?</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">Отмена</button>
+          <button onClick={() => handleDelete(confirmDelete)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Удалить</button>
+        </div>
+      </Modal>
+
+      {/* Student Profile */}
+      <Modal isOpen={!!profileStudent} onClose={() => setProfileStudent(null)} title="Профиль ученика" size="xl">
+        {profileStudent && (
+          <StudentProfile
+            student={students.find(s => s.id === profileStudent.id) || profileStudent}
+            onClose={() => setProfileStudent(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Add/Edit Group */}
+      <Modal isOpen={groupModalOpen} onClose={() => setGroupModalOpen(false)}
+        title={editingGroup ? 'Редактировать группу' : 'Новая группа'} size="lg">
+        <GroupForm group={editingGroup} onClose={() => setGroupModalOpen(false)} />
+      </Modal>
+
+      {/* Confirm Delete Group */}
+      <Modal isOpen={!!confirmDeleteGroup} onClose={() => setConfirmDeleteGroup(null)} title="Удаление группы" size="sm">
+        <p className="text-sm text-slate-600 mb-4">Вы уверены, что хотите удалить эту группу?</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={() => setConfirmDeleteGroup(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">Отмена</button>
+          <button onClick={() => handleDeleteGroup(confirmDeleteGroup)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Удалить</button>
+        </div>
+      </Modal>
+    </div>
+  )
+}
