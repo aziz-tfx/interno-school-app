@@ -1,4 +1,14 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { db } from '../firebase'
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  writeBatch,
+} from 'firebase/firestore'
 
 const AuthContext = createContext(null)
 
@@ -32,7 +42,7 @@ export const ROLE_COLORS = {
 }
 
 // ─── Права доступа ─────────────────────────────────────────────────────────
-const PERMISSIONS = {
+export const PERMISSIONS = {
   owner: {
     dashboard: true, branches: true,
     students:  { view: true, add: true, edit: true, delete: true },
@@ -177,18 +187,7 @@ const DEFAULT_EMPLOYEES = [
   { id: 28, login: 'teacher3', password: 'teach123', name: 'Холматова Наргиза',    role: 'teacher', branch: 'fergana',   teacherId: 8, avatar: 'Н', phone: '' },
 ]
 
-const STORAGE_KEY = 'interno_employees'
-
-function loadEmployees() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) : DEFAULT_EMPLOYEES
-  } catch { return DEFAULT_EMPLOYEES }
-}
-
-function saveEmployees(list) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list))
-}
+const employeesRef = collection(db, 'employees')
 
 // ─── Provider ──────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
@@ -196,15 +195,38 @@ export function AuthProvider({ children }) {
     const saved = localStorage.getItem('interno_user')
     return saved ? JSON.parse(saved) : null
   })
-  const [employees, setEmployees] = useState(loadEmployees)
+  const [employees, setEmployees] = useState([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  // Persist user session in localStorage
   useEffect(() => {
     if (user) localStorage.setItem('interno_user', JSON.stringify(user))
     else localStorage.removeItem('interno_user')
   }, [user])
 
-  useEffect(() => { saveEmployees(employees) }, [employees])
+  // Real-time sync with Firestore + seed if empty
+  useEffect(() => {
+    const unsubscribe = onSnapshot(employeesRef, async (snapshot) => {
+      if (snapshot.empty) {
+        // Seed Firestore with DEFAULT_EMPLOYEES
+        const batch = writeBatch(db)
+        DEFAULT_EMPLOYEES.forEach((emp) => {
+          const docRef = doc(employeesRef, String(emp.id))
+          batch.set(docRef, emp)
+        })
+        await batch.commit()
+        // onSnapshot will fire again after seeding, so just return
+        return
+      }
+
+      const list = snapshot.docs.map((d) => d.data())
+      setEmployees(list)
+      setLoading(false)
+    })
+
+    return () => unsubscribe()
+  }, [])
 
   const login = (loginStr, password) => {
     const found = employees.find(u => u.login === loginStr && u.password === password)
@@ -232,32 +254,55 @@ export function AuthProvider({ children }) {
 
   const getRoleLabel = (role) => ROLE_LABELS[role || user?.role] || ''
 
-  // ─── Employee CRUD ─────────────────────────────────────────────────────
-  const addEmployee = (emp) => {
+  // ─── Employee CRUD (Firestore) ──────────────────────────────────────────
+  const addEmployee = async (emp) => {
+    const newId = Date.now()
     const newEmp = {
       ...emp,
-      id: Date.now(),
+      id: newId,
       avatar: emp.name?.charAt(0)?.toUpperCase() || '?',
-      managerId: (emp.role === 'sales' || emp.role === 'rop') ? `mgr_${Date.now()}` : undefined,
+      managerId: (emp.role === 'sales' || emp.role === 'rop') ? `mgr_${newId}` : undefined,
     }
-    setEmployees(prev => [...prev, newEmp])
+    // Remove undefined fields (Firestore does not accept undefined)
+    const cleanEmp = Object.fromEntries(
+      Object.entries(newEmp).filter(([, v]) => v !== undefined)
+    )
+    await setDoc(doc(employeesRef, String(newId)), cleanEmp)
     return newEmp
   }
 
-  const updateEmployee = (id, updates) => {
-    setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e))
+  const updateEmployee = async (id, updates) => {
+    // Remove undefined fields
+    const cleanUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined)
+    )
+    await updateDoc(doc(employeesRef, String(id)), cleanUpdates)
     // Update current session if editing self
     if (user?.id === id) {
-      setUser(prev => ({ ...prev, ...updates, password: undefined }))
+      const updatedUser = { ...user, ...cleanUpdates }
+      delete updatedUser.password
+      setUser(updatedUser)
     }
   }
 
-  const deleteEmployee = (id) => {
-    setEmployees(prev => prev.filter(e => e.id !== id))
+  const deleteEmployee = async (id) => {
+    await deleteDoc(doc(employeesRef, String(id)))
   }
 
-  const resetEmployees = () => {
-    setEmployees(DEFAULT_EMPLOYEES)
+  const resetEmployees = async () => {
+    // Delete all existing employees
+    const batch = writeBatch(db)
+    employees.forEach((emp) => {
+      batch.delete(doc(employeesRef, String(emp.id)))
+    })
+    await batch.commit()
+
+    // Re-seed with defaults
+    const seedBatch = writeBatch(db)
+    DEFAULT_EMPLOYEES.forEach((emp) => {
+      seedBatch.set(doc(employeesRef, String(emp.id)), emp)
+    })
+    await seedBatch.commit()
   }
 
   // Helper: get sales-related staff (for plan tracking)
@@ -272,7 +317,7 @@ export function AuthProvider({ children }) {
       user, login, logout, error, setError,
       hasPermission, getRoleLabel,
       employees, addEmployee, updateEmployee, deleteEmployee, resetEmployees,
-      getSalesStaff,
+      getSalesStaff, loading,
     }}>
       {children}
     </AuthContext.Provider>

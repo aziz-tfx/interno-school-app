@@ -1,4 +1,16 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
+import { db } from '../firebase'
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  getDocs,
+  setDoc,
+  writeBatch,
+} from 'firebase/firestore'
 import {
   branches as defaultBranches,
   students as defaultStudents,
@@ -10,15 +22,6 @@ import {
 const BRANCH_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16']
 
 const DataContext = createContext(null)
-
-function loadFromStorage(key, defaultValue) {
-  const saved = localStorage.getItem(`interno_${key}`)
-  return saved ? JSON.parse(saved) : defaultValue
-}
-
-function saveToStorage(key, value) {
-  localStorage.setItem(`interno_${key}`, JSON.stringify(value))
-}
 
 // Группы по умолчанию
 const DEFAULT_GROUPS = [
@@ -36,28 +39,110 @@ const DEFAULT_GROUPS = [
   { id: 'grp_12', name: 'RUS-A2-01', branch: 'fergana', course: 'Русский язык', teacherId: 10, maxOffline: 16, schedule: 'Пн/Ср/Пт 15:00-16:30', status: 'active' },
 ]
 
-export function DataProvider({ children }) {
-  const [branches, setBranches] = useState(() => loadFromStorage('branches', defaultBranches))
-  const [groups, setGroups] = useState(() => loadFromStorage('groups', DEFAULT_GROUPS))
-  const [students, setStudents] = useState(() => loadFromStorage('students', defaultStudents))
-  const [teachers, setTeachers] = useState(() => loadFromStorage('teachers', defaultTeachers))
-  const [paymentsList, setPaymentsList] = useState(() => loadFromStorage('payments', defaultPayments))
-  const [attendance, setAttendance] = useState(() => loadFromStorage('attendance', []))
-  const [salesPlans, setSalesPlansState] = useState(() => loadFromStorage('salesPlans', {}))
+// Helper: seed a collection with default data array
+async function seedCollection(collectionName, defaultData) {
+  const batch = writeBatch(db)
+  for (const item of defaultData) {
+    const docRef = doc(collection(db, collectionName))
+    batch.set(docRef, { ...item, _originalId: item.id })
+  }
+  await batch.commit()
+}
 
-  useEffect(() => { saveToStorage('branches', branches) }, [branches])
-  useEffect(() => { saveToStorage('groups', groups) }, [groups])
-  useEffect(() => { saveToStorage('students', students) }, [students])
-  useEffect(() => { saveToStorage('teachers', teachers) }, [teachers])
-  useEffect(() => { saveToStorage('payments', paymentsList) }, [paymentsList])
-  useEffect(() => { saveToStorage('attendance', attendance) }, [attendance])
-  useEffect(() => { saveToStorage('salesPlans', salesPlans) }, [salesPlans])
+// Helper: seed a single-doc collection (for objects like salesPlans or arrays like attendance)
+async function seedDocCollection(collectionName, data) {
+  await setDoc(doc(db, collectionName, '_meta'), { data })
+}
+
+// Helper: delete all docs in a collection
+async function clearCollection(collectionName) {
+  const snapshot = await getDocs(collection(db, collectionName))
+  const batch = writeBatch(db)
+  snapshot.docs.forEach(d => batch.delete(d.ref))
+  await batch.commit()
+}
+
+export function DataProvider({ children }) {
+  const [branches, setBranches] = useState([])
+  const [groups, setGroups] = useState([])
+  const [students, setStudents] = useState([])
+  const [teachers, setTeachers] = useState([])
+  const [paymentsList, setPaymentsList] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [salesPlans, setSalesPlansState] = useState({})
+  const [loading, setLoading] = useState(true)
+
+  // Track whether initial load has resolved for each collection
+  const loadedRef = useRef({ branches: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false })
+
+  const checkAllLoaded = () => {
+    const r = loadedRef.current
+    if (r.branches && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans) {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const unsubscribers = []
+
+    // Helper to subscribe to a Firestore collection and map docs to array with id
+    function subscribeCollection(collectionName, setter, defaultData, loadKey) {
+      const unsub = onSnapshot(collection(db, collectionName), async (snapshot) => {
+        if (!loadedRef.current[loadKey] && snapshot.empty) {
+          // First load and collection is empty — seed with defaults
+          await seedCollection(collectionName, defaultData)
+          // onSnapshot will fire again after seeding, so just mark loaded
+          loadedRef.current[loadKey] = true
+          checkAllLoaded()
+          return
+        }
+        const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
+        setter(items)
+        if (!loadedRef.current[loadKey]) {
+          loadedRef.current[loadKey] = true
+          checkAllLoaded()
+        }
+      })
+      unsubscribers.push(unsub)
+    }
+
+    // Helper to subscribe to a single-doc meta collection (attendance, salesPlans)
+    function subscribeMetaDoc(collectionName, setter, defaultValue, loadKey) {
+      const unsub = onSnapshot(doc(db, collectionName, '_meta'), async (snapshot) => {
+        if (!snapshot.exists()) {
+          if (!loadedRef.current[loadKey]) {
+            await seedDocCollection(collectionName, defaultValue)
+            loadedRef.current[loadKey] = true
+            checkAllLoaded()
+          }
+          return
+        }
+        setter(snapshot.data().data)
+        if (!loadedRef.current[loadKey]) {
+          loadedRef.current[loadKey] = true
+          checkAllLoaded()
+        }
+      })
+      unsubscribers.push(unsub)
+    }
+
+    subscribeCollection('branches', setBranches, defaultBranches, 'branches')
+    subscribeCollection('groups', setGroups, DEFAULT_GROUPS, 'groups')
+    subscribeCollection('students', setStudents, defaultStudents, 'students')
+    subscribeCollection('teachers', setTeachers, defaultTeachers, 'teachers')
+    subscribeCollection('payments', setPaymentsList, defaultPayments, 'payments')
+    subscribeMetaDoc('attendance', setAttendance, [], 'attendance')
+    subscribeMetaDoc('salesPlans', setSalesPlansState, {}, 'salesPlans')
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub())
+    }
+  }, [])
 
   // --- Branches CRUD ---
-  const addBranch = (branch) => {
+  const addBranch = async (branch) => {
     const newBranch = {
       ...branch,
-      id: branch.id || `branch_${Date.now()}`,
       status: branch.status || 'active',
       students: branch.students || 0,
       teachers: branch.teachers || 0,
@@ -69,16 +154,16 @@ export function DataProvider({ children }) {
       rating: branch.rating || 0,
       color: branch.color || BRANCH_COLORS[branches.length % BRANCH_COLORS.length],
     }
-    setBranches(prev => [...prev, newBranch])
-    return newBranch
+    const docRef = await addDoc(collection(db, 'branches'), newBranch)
+    return { ...newBranch, id: docRef.id }
   }
 
-  const updateBranch = (id, updates) => {
-    setBranches(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b))
+  const updateBranch = async (id, updates) => {
+    await updateDoc(doc(db, 'branches', id), updates)
   }
 
-  const deleteBranch = (id) => {
-    setBranches(prev => prev.filter(b => b.id !== id))
+  const deleteBranch = async (id) => {
+    await deleteDoc(doc(db, 'branches', id))
   }
 
   // Helper: get branch name by id
@@ -96,58 +181,52 @@ export function DataProvider({ children }) {
   }
 
   // --- Students CRUD ---
-  const addStudent = (student) => {
+  const addStudent = async (student) => {
     const newStudent = {
       ...student,
-      id: Date.now(),
       startDate: new Date().toISOString().split('T')[0],
     }
-    setStudents(prev => [...prev, newStudent])
-    return newStudent
+    const docRef = await addDoc(collection(db, 'students'), newStudent)
+    return { ...newStudent, id: docRef.id }
   }
 
-  const updateStudent = (id, updates) => {
-    setStudents(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
+  const updateStudent = async (id, updates) => {
+    await updateDoc(doc(db, 'students', id), updates)
   }
 
-  const deleteStudent = (id) => {
-    setStudents(prev => prev.filter(s => s.id !== id))
+  const deleteStudent = async (id) => {
+    await deleteDoc(doc(db, 'students', id))
   }
 
   // --- Teachers CRUD ---
-  const addTeacher = (teacher) => {
-    const newTeacher = {
-      ...teacher,
-      id: Date.now(),
-    }
-    setTeachers(prev => [...prev, newTeacher])
-    return newTeacher
+  const addTeacher = async (teacher) => {
+    const newTeacher = { ...teacher }
+    const docRef = await addDoc(collection(db, 'teachers'), newTeacher)
+    return { ...newTeacher, id: docRef.id }
   }
 
-  const updateTeacher = (id, updates) => {
-    setTeachers(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
+  const updateTeacher = async (id, updates) => {
+    await updateDoc(doc(db, 'teachers', id), updates)
   }
 
-  const deleteTeacher = (id) => {
-    setTeachers(prev => prev.filter(t => t.id !== id))
+  const deleteTeacher = async (id) => {
+    await deleteDoc(doc(db, 'teachers', id))
   }
 
   // --- Payments CRUD ---
-  const addPayment = (payment) => {
+  const addPayment = async (payment) => {
     const newPayment = {
       ...payment,
-      id: Date.now(),
       date: payment.date || new Date().toISOString().split('T')[0],
     }
-    setPaymentsList(prev => [newPayment, ...prev])
+    const docRef = await addDoc(collection(db, 'payments'), newPayment)
 
     // Update student balance and debt status if it's a student payment
     if (payment.type === 'income' && payment.studentId) {
-      setStudents(prev => prev.map(s => {
-        if (s.id !== payment.studentId) return s
-
-        const newBalance = s.balance + payment.amount
-        const totalCoursePrice = s.totalCoursePrice || 0
+      const student = students.find(s => s.id === payment.studentId)
+      if (student) {
+        const newBalance = student.balance + payment.amount
+        const totalCoursePrice = student.totalCoursePrice || 0
 
         // Calculate total paid including this new payment
         const previousPaid = paymentsList
@@ -157,38 +236,35 @@ export function DataProvider({ children }) {
         const remainingDebt = totalCoursePrice > 0 ? totalCoursePrice - totalPaidNow : 0
 
         // Determine status: if there's remaining debt, mark as debtor
-        let newStatus = s.status
+        let newStatus = student.status
         if (totalCoursePrice > 0) {
           newStatus = remainingDebt > 0 ? 'debtor' : 'active'
         }
 
-        return {
-          ...s,
+        await updateDoc(doc(db, 'students', payment.studentId), {
           balance: newBalance,
           status: newStatus,
-          // Store last next payment date for tracking
-          nextPaymentDate: payment.nextPaymentDate || s.nextPaymentDate,
-        }
-      }))
+          nextPaymentDate: payment.nextPaymentDate || student.nextPaymentDate || null,
+        })
+      }
     }
 
-    return newPayment
+    return { ...newPayment, id: docRef.id }
   }
 
   // --- Attendance ---
-  const markAttendance = (record) => {
+  const markAttendance = async (record) => {
     // record: { date, groupName, studentId, status: 'present'|'absent'|'late', teacherId }
-    setAttendance(prev => {
-      const existing = prev.findIndex(
-        a => a.date === record.date && a.studentId === record.studentId && a.groupName === record.groupName
-      )
-      if (existing >= 0) {
-        const updated = [...prev]
-        updated[existing] = record
-        return updated
-      }
-      return [...prev, record]
-    })
+    const updated = [...attendance]
+    const existing = updated.findIndex(
+      a => a.date === record.date && a.studentId === record.studentId && a.groupName === record.groupName
+    )
+    if (existing >= 0) {
+      updated[existing] = record
+    } else {
+      updated.push(record)
+    }
+    await setDoc(doc(db, 'attendance', '_meta'), { data: updated })
   }
 
   const getAttendanceByGroup = (groupName, date) => {
@@ -240,12 +316,13 @@ export function DataProvider({ children }) {
   }
 
   // --- Sales Plans ---
-  const setSalesPlan = (managerId, amount, month) => {
+  const setSalesPlan = async (managerId, amount, month) => {
     const key = month || new Date().toISOString().slice(0, 7)
-    setSalesPlansState(prev => ({
-      ...prev,
-      [managerId]: { ...(prev[managerId] || {}), [key]: Number(amount) },
-    }))
+    const updated = {
+      ...salesPlans,
+      [managerId]: { ...(salesPlans[managerId] || {}), [key]: Number(amount) },
+    }
+    await setDoc(doc(db, 'salesPlans', '_meta'), { data: updated })
   }
 
   const getSalesPlan = (managerId, month) => {
@@ -283,22 +360,21 @@ export function DataProvider({ children }) {
   }
 
   // --- Groups CRUD ---
-  const addGroup = (group) => {
+  const addGroup = async (group) => {
     const newGroup = {
       ...group,
-      id: `grp_${Date.now()}`,
       status: group.status || 'active',
     }
-    setGroups(prev => [...prev, newGroup])
-    return newGroup
+    const docRef = await addDoc(collection(db, 'groups'), newGroup)
+    return { ...newGroup, id: docRef.id }
   }
 
-  const updateGroup = (id, updates) => {
-    setGroups(prev => prev.map(g => g.id === id ? { ...g, ...updates } : g))
+  const updateGroup = async (id, updates) => {
+    await updateDoc(doc(db, 'groups', id), updates)
   }
 
-  const deleteGroup = (id) => {
-    setGroups(prev => prev.filter(g => g.id !== id))
+  const deleteGroup = async (id) => {
+    await deleteDoc(doc(db, 'groups', id))
   }
 
   // Count offline students in a group
@@ -316,15 +392,26 @@ export function DataProvider({ children }) {
     return students.filter(s => s.group === groupName)
   }
 
-  // Reset to defaults
-  const resetData = () => {
-    setBranches(defaultBranches)
-    setGroups(DEFAULT_GROUPS)
-    setStudents(defaultStudents)
-    setTeachers(defaultTeachers)
-    setPaymentsList(defaultPayments)
-    setAttendance([])
-    setSalesPlansState({})
+  // Reset to defaults — delete all docs and re-seed
+  const resetData = async () => {
+    setLoading(true)
+    await Promise.all([
+      clearCollection('branches'),
+      clearCollection('groups'),
+      clearCollection('students'),
+      clearCollection('teachers'),
+      clearCollection('payments'),
+    ])
+    await Promise.all([
+      seedCollection('branches', defaultBranches),
+      seedCollection('groups', DEFAULT_GROUPS),
+      seedCollection('students', defaultStudents),
+      seedCollection('teachers', defaultTeachers),
+      seedCollection('payments', defaultPayments),
+      seedDocCollection('attendance', []),
+      seedDocCollection('salesPlans', {}),
+    ])
+    setLoading(false)
   }
 
   return (
@@ -339,6 +426,7 @@ export function DataProvider({ children }) {
       getDebtors, getTotalRevenue, getTotalExpenses,
       salesPlans, setSalesPlan, getSalesPlan, getManagerPerf, getBranchPerf,
       resetData,
+      loading,
     }}>
       {children}
     </DataContext.Provider>
