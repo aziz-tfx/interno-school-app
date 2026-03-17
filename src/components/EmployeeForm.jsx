@@ -6,7 +6,7 @@ const ALL_ROLES = Object.entries(ROLE_LABELS)
 
 export default function EmployeeForm({ employee, onClose }) {
   const { addEmployee, updateEmployee } = useAuth()
-  const { branches } = useData()
+  const { branches, addTeacher, updateTeacher, teachers, deleteTeacher } = useData()
   const BRANCHES = [{ id: 'all', name: 'Все филиалы (центральный)' }, ...branches.map(b => ({ id: b.id, name: b.name }))]
   const isEdit = !!employee
 
@@ -17,10 +17,22 @@ export default function EmployeeForm({ employee, onClose }) {
     role: 'sales',
     branch: 'tashkent',
     phone: '',
+    subject: '',
+    salary: '',
   })
 
   useEffect(() => {
     if (employee) {
+      // If editing a teacher, find linked teacher record for subject/salary
+      let subject = ''
+      let salary = ''
+      if (employee.role === 'teacher') {
+        const linked = teachers.find(t => t.employeeId === employee.id || t.name === employee.name)
+        if (linked) {
+          subject = linked.subject || ''
+          salary = linked.salary != null ? String(linked.salary) : ''
+        }
+      }
       setForm({
         name: employee.name || '',
         login: employee.login || '',
@@ -28,18 +40,55 @@ export default function EmployeeForm({ employee, onClose }) {
         role: employee.role || 'sales',
         branch: employee.branch || 'tashkent',
         phone: employee.phone || '',
+        subject,
+        salary,
       })
     }
   }, [employee])
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    const { subject, salary, ...employeeData } = form
+
     if (isEdit) {
-      updateEmployee(employee.id, form)
+      await updateEmployee(employee.id, employeeData)
+
+      // Sync teacher record
+      const linkedTeacher = teachers.find(t => t.employeeId === employee.id || t.name === employee.name)
+      if (form.role === 'teacher') {
+        const teacherData = {
+          name: form.name,
+          branch: form.branch,
+          subject: subject || '',
+          salary: Number(salary) || 0,
+          employeeId: employee.id,
+        }
+        if (linkedTeacher) {
+          await updateTeacher(linkedTeacher.id, teacherData)
+        } else {
+          await addTeacher({ ...teacherData, groups: 0, students: 0, rating: 0 })
+        }
+      } else if (linkedTeacher && employee.role === 'teacher') {
+        // Role changed from teacher to something else — remove teacher record
+        await deleteTeacher(linkedTeacher.id)
+      }
     } else {
-      addEmployee(form)
+      const newEmp = await addEmployee(employeeData)
+      // If new employee is a teacher, create teacher record
+      if (form.role === 'teacher') {
+        await addTeacher({
+          name: form.name,
+          branch: form.branch,
+          subject: subject || '',
+          salary: Number(salary) || 0,
+          groups: 0,
+          students: 0,
+          rating: 0,
+          employeeId: newEmp.id,
+        })
+      }
     }
     onClose()
   }
@@ -114,6 +163,24 @@ export default function EmployeeForm({ employee, onClose }) {
             placeholder="+998 90 123-45-67"
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
+
+        {/* Teacher-specific fields */}
+        {form.role === 'teacher' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Предмет</label>
+              <input type="text" value={form.subject} onChange={e => set('subject', e.target.value)}
+                placeholder="Английский язык"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Зарплата (сум)</label>
+              <input type="number" value={form.salary} onChange={e => set('salary', e.target.value)}
+                placeholder="5000000" min="0"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Info about role */}

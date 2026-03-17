@@ -8,7 +8,7 @@ import AccessControl from './AccessControl'
 
 export default function Employees() {
   const { user, employees, hasPermission, deleteEmployee } = useAuth()
-  const { getBranchNames } = useData()
+  const { getBranchNames, teachers, deleteTeacher } = useData()
   const BRANCH_LABELS = { all: 'Центральный', ...getBranchNames() }
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -46,8 +46,13 @@ export default function Employees() {
     setModalOpen(true)
   }
 
-  const handleDelete = (id) => {
-    deleteEmployee(id)
+  const handleDelete = async (id) => {
+    const emp = employees.find(e => e.id === id)
+    if (emp?.role === 'teacher') {
+      const linkedTeacher = teachers.find(t => t.employeeId === emp.id || t.name === emp.name)
+      if (linkedTeacher) await deleteTeacher(linkedTeacher.id)
+    }
+    await deleteEmployee(id)
     setConfirmDelete(null)
   }
 
