@@ -12,6 +12,7 @@ import Attendance from './pages/Attendance'
 import Employees from './pages/Employees'
 import Profile from './pages/Profile'
 import AccessControl from './pages/AccessControl'
+import Reports from './pages/Reports'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -61,6 +62,7 @@ export default function App() {
           <ProtectedRoute permission="employees"><Employees /></ProtectedRoute>
         } />
         <Route path="attendance" element={<Attendance />} />
+        <Route path="reports" element={<Reports />} />
         <Route path="access-control" element={
           <ProtectedRoute permission="settings"><AccessControl /></ProtectedRoute>
         } />

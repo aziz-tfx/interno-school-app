@@ -11,6 +11,7 @@ import {
   LogOut,
   Settings,
   Shield,
+  FileBarChart,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -27,6 +28,7 @@ export default function Sidebar() {
     { to: '/courses', icon: BookOpen, label: 'Курсы', permission: 'courses' },
     { to: '/finance', icon: DollarSign, label: 'Продажи', permission: 'finance' },
     { to: '/employees', icon: UserCog, label: 'Сотрудники', permission: 'employees' },
+    { to: '/reports', icon: FileBarChart, label: 'Отчёты', permission: 'finance' },
     { to: '/attendance', icon: ClipboardCheck, label: 'Посещаемость', permission: null },
     { to: '/access-control', icon: Shield, label: 'Доступы', permission: 'settings' },
   ]
