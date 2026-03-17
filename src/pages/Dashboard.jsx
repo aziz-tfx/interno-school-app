@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   GraduationCap, Users, Building2, DollarSign, TrendingUp, TrendingDown,
   BookOpen, UserMinus, Wallet, ArrowUpRight, ArrowDownRight, Activity,
   Target, Percent, CreditCard, PiggyBank, BarChart3, Clock, AlertTriangle,
-  CheckCircle2, XCircle, Pause, UserCheck,
+  CheckCircle2, XCircle, Pause, UserCheck, Calendar, ChevronDown, Filter,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -33,6 +33,72 @@ const TABS = [
   { id: 'branches',  label: 'Филиалы' },
   { id: 'sales',     label: 'Продажи' },
 ]
+
+// ─── Time Periods ─────────────────────────────────────────────────────────────
+const TIME_PERIODS = [
+  { id: 'today',     label: 'Сегодня' },
+  { id: 'yesterday', label: 'Вчера' },
+  { id: 'week',      label: 'Неделя' },
+  { id: 'month',     label: 'Месяц' },
+  { id: 'quarter',   label: 'Квартал' },
+  { id: 'year',      label: 'Год' },
+  { id: 'all',       label: 'Всё время' },
+  { id: 'custom',    label: 'Период' },
+]
+
+function getDateRange(periodId, customFrom, customTo) {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let from, to
+
+  switch (periodId) {
+    case 'today':
+      from = today
+      to = new Date(today.getTime() + 86400000 - 1)
+      break
+    case 'yesterday':
+      from = new Date(today.getTime() - 86400000)
+      to = new Date(today.getTime() - 1)
+      break
+    case 'week': {
+      const dayOfWeek = today.getDay() || 7
+      from = new Date(today.getTime() - (dayOfWeek - 1) * 86400000)
+      to = new Date(today.getTime() + 86400000 - 1)
+      break
+    }
+    case 'month':
+      from = new Date(now.getFullYear(), now.getMonth(), 1)
+      to = new Date(today.getTime() + 86400000 - 1)
+      break
+    case 'quarter': {
+      const qMonth = Math.floor(now.getMonth() / 3) * 3
+      from = new Date(now.getFullYear(), qMonth, 1)
+      to = new Date(today.getTime() + 86400000 - 1)
+      break
+    }
+    case 'year':
+      from = new Date(now.getFullYear(), 0, 1)
+      to = new Date(today.getTime() + 86400000 - 1)
+      break
+    case 'custom':
+      from = customFrom ? new Date(customFrom) : new Date(2020, 0, 1)
+      to = customTo ? new Date(customTo + 'T23:59:59') : new Date(today.getTime() + 86400000 - 1)
+      break
+    case 'all':
+    default:
+      return null // no filter
+  }
+  return { from, to }
+}
+
+function formatPeriodLabel(periodId, customFrom, customTo) {
+  if (periodId === 'custom' && customFrom && customTo) {
+    const f = new Date(customFrom).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+    const t = new Date(customTo).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+    return `${f} — ${t}`
+  }
+  return TIME_PERIODS.find(p => p.id === periodId)?.label || 'Всё время'
+}
 
 // ─── Mini KPI Card ────────────────────────────────────────────────────────────
 function KpiCard({ title, value, subtitle, icon: Icon, color, trend, trendLabel }) {
@@ -146,10 +212,29 @@ export default function Dashboard() {
   const canSeeSales = hasPermission('finance', 'payments')
   const canFullPnL = hasPermission('finance', 'fullPnL')
 
+  // ── Time filter state ──────────────────────────────────────────────
+  const [timePeriod, setTimePeriod] = useState('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [showTimePicker, setShowTimePicker] = useState(false)
+
+  const dateRange = useMemo(() => getDateRange(timePeriod, customFrom, customTo), [timePeriod, customFrom, customTo])
+
+  const filterByDate = useCallback((items, dateField = 'date') => {
+    if (!dateRange) return items
+    return items.filter(item => {
+      const d = item[dateField]
+      if (!d) return false
+      const itemDate = new Date(d)
+      return itemDate >= dateRange.from && itemDate <= dateRange.to
+    })
+  }, [dateRange])
+
   // ── Scoped data ──────────────────────────────────────────────────────
   const scopedStudents  = user.branch === 'all' ? students  : students.filter(s => s.branch === user.branch)
   const scopedTeachers  = user.branch === 'all' ? teachers  : teachers.filter(t => t.branch === user.branch)
-  const scopedPayments  = user.branch === 'all' ? payments  : payments.filter(p => p.branch === user.branch)
+  const allScopedPayments  = user.branch === 'all' ? payments  : payments.filter(p => p.branch === user.branch)
+  const scopedPayments = filterByDate(allScopedPayments)
   const debtors = getDebtors(user.branch)
 
   // ── Computed metrics ─────────────────────────────────────────────────
@@ -236,7 +321,7 @@ export default function Dashboard() {
     // Revenue by branch (for stacked chart)
     const branchRevenue = {}
     if (user.branch === 'all') {
-      payments.forEach(p => {
+      filterByDate(payments).forEach(p => {
         if (p.type !== 'income') return
         const m = (p.date || '').slice(0, 7)
         if (!m) return
@@ -271,7 +356,7 @@ export default function Dashboard() {
       monthlyTrend, branchRevenueData,
       todayIncome, todayCount, totalEmployees,
     }
-  }, [scopedStudents, scopedTeachers, scopedPayments, branches, payments, employees, user.branch])
+  }, [scopedStudents, scopedTeachers, scopedPayments, branches, payments, employees, user.branch, filterByDate])
 
   // ── Visible tabs ─────────────────────────────────────────────────────
   const visibleTabs = TABS.filter(t => {
@@ -300,7 +385,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">
             {user.branch === 'all' ? 'BI Дашборд' : `Дашборд — ${getBranchName(user.branch)}`}
@@ -309,9 +394,101 @@ export default function Dashboard() {
             {user.branch === 'all' ? 'Аналитика всех филиалов INTERNO School' : 'Аналитика вашего филиала'}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-400 bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
-          <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-          Данные в реальном времени
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-slate-400 bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+            Реальное время
+          </div>
+        </div>
+      </div>
+
+      {/* ── Time Filter Bar ── */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-slate-500 mr-1">
+            <Calendar size={16} />
+            <span className="text-xs font-semibold uppercase tracking-wide hidden sm:inline">Период:</span>
+          </div>
+          {TIME_PERIODS.filter(p => p.id !== 'custom').map(period => (
+            <button
+              key={period.id}
+              onClick={() => { setTimePeriod(period.id); setShowTimePicker(false) }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                timePeriod === period.id
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              {period.label}
+            </button>
+          ))}
+          <div className="relative">
+            <button
+              onClick={() => { setShowTimePicker(!showTimePicker); if (timePeriod !== 'custom') setTimePeriod('custom') }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                timePeriod === 'custom'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              <Filter size={12} />
+              {timePeriod === 'custom' && customFrom && customTo
+                ? formatPeriodLabel('custom', customFrom, customTo)
+                : 'Период'}
+              <ChevronDown size={12} className={`transition-transform ${showTimePicker ? 'rotate-180' : ''}`} />
+            </button>
+            {showTimePicker && (
+              <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-slate-200 p-4 z-50 min-w-[280px]">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Произвольный период</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Начало</label>
+                    <input
+                      type="date"
+                      value={customFrom}
+                      onChange={e => { setCustomFrom(e.target.value); setTimePeriod('custom') }}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Конец</label>
+                    <input
+                      type="date"
+                      value={customTo}
+                      onChange={e => { setCustomTo(e.target.value); setTimePeriod('custom') }}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setShowTimePicker(false)}
+                    className="w-full bg-blue-600 text-white text-sm font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Применить
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Active filter indicator */}
+          {timePeriod !== 'all' && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2.5 py-1 rounded-full">
+                {timePeriod === 'custom' && customFrom && customTo
+                  ? formatPeriodLabel('custom', customFrom, customTo)
+                  : `Фильтр: ${TIME_PERIODS.find(p => p.id === timePeriod)?.label}`
+                }
+                {' '}({scopedPayments.length} операций)
+              </span>
+              <button
+                onClick={() => { setTimePeriod('all'); setCustomFrom(''); setCustomTo(''); setShowTimePicker(false) }}
+                className="text-slate-400 hover:text-red-500 transition-colors"
+                title="Сбросить фильтр"
+              >
+                <XCircle size={16} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
