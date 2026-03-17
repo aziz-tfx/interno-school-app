@@ -16,8 +16,6 @@ import {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const MANAGERS = ['Асад', 'Шахло', 'Дурбек', 'Нурзод']
-
 const METRICS = [
   { key: 'leads',       label: 'Кол-во заявок',          editable: true },
   { key: 'conversations', label: 'Кол-во разговоров',    editable: true },
@@ -128,9 +126,15 @@ function distributeSeedData(totals, year, month) {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function Reports() {
-  const { user } = useAuth()
+  const { user, employees } = useAuth()
   const isAdmin = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'rop'
   const isSales = user?.role === 'sales'
+
+  const managers = useMemo(() => {
+    return employees
+      .filter(e => e.role === 'sales' || e.role === 'rop')
+      .map(e => e.name)
+  }, [employees])
 
   // Month selector
   const now = new Date()
@@ -232,11 +236,13 @@ export default function Reports() {
   // Seed functions
   async function seedPlans() {
     const plansRef = collection(db, 'reportPlans')
-    for (const mgr of MANAGERS) {
+    for (const mgr of managers) {
       const plan = SEED_PLANS[mgr]
-      await setDoc(doc(plansRef, `${monthKey}_${mgr}`), {
-        monthKey, manager: mgr, ...plan,
-      })
+      if (plan) {
+        await setDoc(doc(plansRef, `${monthKey}_${mgr}`), {
+          monthKey, manager: mgr, ...plan,
+        })
+      }
     }
     await setDoc(doc(plansRef, `${monthKey}___overall__`), {
       monthKey, manager: '__overall__', revenue: OVERALL_PLAN,
@@ -245,8 +251,9 @@ export default function Reports() {
 
   async function seedDailyData() {
     const dailyRef = collection(db, 'reportDaily')
-    for (const mgr of MANAGERS) {
+    for (const mgr of managers) {
       const totals = SEED_TOTALS[mgr]
+      if (!totals) continue
       const distributed = distributeSeedData(totals, 2026, 3)
       for (const [day, values] of Object.entries(distributed)) {
         await setDoc(doc(dailyRef, `${monthKey}_${mgr}_${day}`), {
@@ -261,12 +268,12 @@ export default function Reports() {
   const visibleManagers = useMemo(() => {
     if (isSales && !isAdmin) {
       // Sales users only see their own name if it matches a manager
-      const match = MANAGERS.find(m => user?.name?.includes(m))
-      return match ? [match] : MANAGERS
+      const match = managers.find(m => m === user?.name)
+      return match ? [match] : managers
     }
     if (managerFilter !== 'all') return [managerFilter]
-    return MANAGERS
-  }, [managerFilter, isAdmin, isSales, user])
+    return managers
+  }, [managerFilter, isAdmin, isSales, user, managers])
 
   // Compute monthly fact for a manager + metric
   const getMonthlyFact = useCallback((manager, metricKey) => {
@@ -435,8 +442,8 @@ export default function Reports() {
   // ─── Overall totals (ИТОГО row) ──────────────────────────────────────────
 
   const overallFact = useMemo(() => {
-    return MANAGERS.reduce((sum, mgr) => sum + getMonthlyFact(mgr, 'revenue'), 0)
-  }, [getMonthlyFact])
+    return managers.reduce((sum, mgr) => sum + getMonthlyFact(mgr, 'revenue'), 0)
+  }, [getMonthlyFact, managers])
 
   const overallDeviation = overallPlan - overallFact
 
@@ -470,7 +477,7 @@ export default function Reports() {
 
   const openPlanModal = () => {
     const form = {}
-    MANAGERS.forEach(mgr => {
+    managers.forEach(mgr => {
       form[mgr] = { ...(plans[mgr] || { leads: 0, conversations: 0, signups: 0, visited: 0, sales: 0, revenue: 0 }) }
     })
     form.__overall__ = overallPlan
@@ -480,7 +487,7 @@ export default function Reports() {
 
   const savePlans = async () => {
     const plansRef = collection(db, 'reportPlans')
-    for (const mgr of MANAGERS) {
+    for (const mgr of managers) {
       await setDoc(doc(plansRef, `${monthKey}_${mgr}`), {
         monthKey, manager: mgr, ...planForm[mgr],
       })
@@ -620,7 +627,7 @@ export default function Reports() {
             className="bg-white border border-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Все менеджеры</option>
-            {MANAGERS.map(m => <option key={m} value={m}>{m}</option>)}
+            {managers.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
 
@@ -904,7 +911,7 @@ export default function Reports() {
 
                   for (let d = week.start; d <= maxDay; d++) {
                     let dayTotal = 0
-                    MANAGERS.forEach(mgr => { dayTotal += getDayValue(mgr, 'revenue', d) })
+                    managers.forEach(mgr => { dayTotal += getDayValue(mgr, 'revenue', d) })
                     cells.push(
                       <td key={`od_${d}`} className="px-1 py-3 text-center text-xs border-r border-slate-600 text-slate-300">
                         {dayTotal > 0 ? formatRevenue(dayTotal) : '—'}
@@ -913,7 +920,7 @@ export default function Reports() {
                   }
 
                   let weekTotalRev = 0
-                  MANAGERS.forEach(mgr => { weekTotalRev += getWeekTotal(mgr, 'revenue', week.start, week.end) })
+                  managers.forEach(mgr => { weekTotalRev += getWeekTotal(mgr, 'revenue', week.start, week.end) })
                   cells.push(
                     <td key={`owt_${wi}`} className="px-1 py-3 text-center text-xs border-r border-slate-600 font-bold text-white">
                       {weekTotalRev > 0 ? formatRevenue(weekTotalRev) : '—'}
@@ -1036,7 +1043,7 @@ export default function Reports() {
               </div>
 
               {/* Per-manager plans */}
-              {MANAGERS.map(mgr => (
+              {managers.map(mgr => (
                 <div key={mgr} className="border border-slate-200 rounded-xl p-4">
                   <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs">

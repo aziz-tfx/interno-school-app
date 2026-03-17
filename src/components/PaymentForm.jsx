@@ -3,6 +3,8 @@ import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
 import { Receipt, Printer, Paperclip, X, FileText, Image } from 'lucide-react'
+import { db } from '../firebase'
+import { doc, setDoc, getDoc } from 'firebase/firestore'
 
 const METHODS = ['Наличные', 'Перевод', 'Карта']
 const COURSES = ['Интерьер Дизайн', 'Английский', 'Подготовка к IELTS', 'Математика', 'IT/Программирование', 'Русский язык', 'Корейский язык', 'Подготовка к SAT', 'Робототехника']
@@ -107,7 +109,7 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
     return <FileText size={14} className="text-orange-500" />
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
     const paymentData = {
@@ -133,6 +135,40 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
     }
 
     const saved = addPayment(paymentData)
+
+    // Auto-update reports if this is an income payment
+    if (form.type === 'income') {
+      try {
+        const paymentDate = new Date(form.paymentDate)
+        const year = paymentDate.getFullYear()
+        const month = paymentDate.getMonth() + 1
+        const day = paymentDate.getDate()
+        const monthKey = `${year}-${String(month).padStart(2, '0')}`
+        const managerName = user?.name || ''
+
+        if (managerName) {
+          const docId = `${monthKey}_${managerName}_${day}`
+          const dailyRef = doc(db, 'reportDaily', docId)
+          const existing = await getDoc(dailyRef)
+          const existingData = existing.exists() ? existing.data() : {}
+
+          await setDoc(dailyRef, {
+            monthKey,
+            manager: managerName,
+            day,
+            leads: existingData.leads || 0,
+            conversations: existingData.conversations || 0,
+            signups: existingData.signups || 0,
+            visited: existingData.visited || 0,
+            sales: (existingData.sales || 0) + 1,
+            revenue: (existingData.revenue || 0) + Number(form.amount),
+          })
+        }
+      } catch (err) {
+        console.error('Failed to update report:', err)
+      }
+    }
+
     setSavedPayment({ ...paymentData, id: saved.id })
     setShowReceipt(true)
   }
