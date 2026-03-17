@@ -47,14 +47,14 @@ export default function Finance() {
         <div className="flex items-center gap-3 flex-wrap">
           {user.branch === 'all' && (
             <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
-              className="bg-white border border-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              className="glass-input text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="all">Все филиалы</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           )}
           {canPayments && (
             <button onClick={() => setModalOpen(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
               <Plus size={16} /> Новая операция
             </button>
           )}
@@ -63,7 +63,7 @@ export default function Finance() {
 
       {/* KPIs */}
       <div className={`grid grid-cols-1 ${canFullPnL ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+        <div className="glass-card rounded-2xl p-4 md:p-6">
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 bg-emerald-50 rounded-lg"><ArrowUpRight size={20} className="text-emerald-600" /></div>
             <span className="text-sm text-slate-500">Поступления</span>
@@ -72,7 +72,7 @@ export default function Finance() {
           <p className="text-sm text-slate-400 mt-1">{incomePayments.length} операций</p>
         </div>
         {canExpenses && (
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <div className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-3">
               <div className="p-2 bg-red-50 rounded-lg"><ArrowDownRight size={20} className="text-red-600" /></div>
               <span className="text-sm text-slate-500">Расходы</span>
@@ -82,7 +82,7 @@ export default function Finance() {
           </div>
         )}
         {canFullPnL && (
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <div className="glass-card rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-3">
               <div className="p-2 bg-blue-50 rounded-lg"><TrendingUp size={20} className="text-blue-600" /></div>
               <span className="text-sm text-slate-500">Чистая прибыль</span>
@@ -98,7 +98,7 @@ export default function Finance() {
       {/* Charts — admin only */}
       {canFullPnL && (
         <>
-          <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+          <div className="glass-card rounded-2xl p-4 md:p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Доходы vs Расходы (млн сум)</h3>
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={profitByMonth}>
@@ -114,12 +114,12 @@ export default function Finance() {
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+          <div className="glass-card rounded-2xl p-4 md:p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">P&L по филиалам</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
+                  <tr className="bg-white/40 border-b border-white/30">
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">Филиал</th>
                     <th className="text-right py-3 px-4 text-slate-500 font-medium">Доход</th>
                     <th className="text-right py-3 px-4 text-slate-500 font-medium">Расходы</th>
@@ -149,7 +149,7 @@ export default function Finance() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+          <div className="glass-card rounded-2xl p-4 md:p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Структура расходов (млн сум)</h3>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={expenseCategories}>
@@ -168,7 +168,7 @@ export default function Finance() {
       )}
 
       {/* Transactions */}
-      <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+      <div className="glass-card rounded-2xl p-4 md:p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-4">Последние транзакции</h3>
         <div className="space-y-6">
           <div>

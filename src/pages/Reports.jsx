@@ -607,7 +607,7 @@ export default function Reports() {
       </div>
 
       {/* ─── Filter Bar ──────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-col md:flex-row items-start md:items-center gap-4">
+      <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
         {/* Month navigation */}
         <div className="flex items-center gap-2">
           <Calendar size={18} className="text-slate-400" />
@@ -624,7 +624,7 @@ export default function Reports() {
           <select
             value={managerFilter}
             onChange={e => setManagerFilter(e.target.value)}
-            className="bg-white border border-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="glass-input text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Все менеджеры</option>
             {managers.map(m => <option key={m} value={m}>{m}</option>)}
@@ -654,7 +654,7 @@ export default function Reports() {
       {/* ─── KPI Cards ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {kpiData.map(kpi => (
-          <div key={kpi.key} className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+          <div key={kpi.key} className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className={`p-1.5 rounded-lg ${kpi.pct >= 100 ? 'bg-emerald-50' : kpi.pct >= 70 ? 'bg-amber-50' : 'bg-red-50'}`}>
                 <kpi.Icon size={16} className={kpi.pct >= 100 ? 'text-emerald-600' : kpi.pct >= 70 ? 'text-amber-600' : 'text-red-600'} />
@@ -681,7 +681,7 @@ export default function Reports() {
       </div>
 
       {/* ─── Overall Summary ─────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+      <div className="glass-card rounded-2xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="text-center p-3 bg-blue-50 rounded-lg">
             <p className="text-xs text-blue-600 font-medium mb-1">Общий план</p>
@@ -701,12 +701,12 @@ export default function Reports() {
       </div>
 
       {/* ─── Main Report Table ───────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="glass-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ minWidth: '1400px' }}>
             <thead>
               {/* Header row 1: Week groups */}
-              <tr className="bg-slate-50 border-b border-slate-200">
+              <tr className="bg-white/40 border-b border-white/30">
                 <th className="sticky left-0 z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 100 }}>
                   Менеджер
                 </th>
@@ -732,7 +732,7 @@ export default function Reports() {
                 })}
               </tr>
               {/* Header row 2: Individual columns */}
-              <tr className="bg-slate-50 border-b border-slate-200">
+              <tr className="bg-white/40 border-b border-white/30">
                 <th className="sticky left-0 z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
                 <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
                 {/* Month columns */}
@@ -937,7 +937,7 @@ export default function Reports() {
       {/* ─── Charts Section ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Sales Funnel */}
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+        <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <TrendingUp size={16} className="text-blue-600" />
             Воронка продаж
@@ -961,7 +961,7 @@ export default function Reports() {
         </div>
 
         {/* Manager Comparison */}
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+        <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <Users size={16} className="text-blue-600" />
             Сравнение менеджеров
@@ -987,7 +987,7 @@ export default function Reports() {
       </div>
 
       {/* Revenue by manager chart */}
-      <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+      <div className="glass-card rounded-2xl p-4 md:p-6">
         <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
           <DollarSign size={16} className="text-blue-600" />
           Выручка по менеджерам

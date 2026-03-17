@@ -13,21 +13,26 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-blue-900 to-violet-950 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Decorative blurred circles */}
+      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-3xl" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-violet-500/20 rounded-full blur-3xl" />
+      <div className="absolute top-[30%] right-[20%] w-[300px] h-[300px] bg-cyan-500/10 rounded-full blur-3xl" />
+
+      <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white tracking-tight">INTERNO</h1>
-          <p className="text-blue-300 mt-2">School Management System</p>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-300 via-violet-300 to-cyan-300 bg-clip-text text-transparent tracking-tight">INTERNO</h1>
+          <p className="text-blue-300/70 mt-2">School Management System</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="glass-strong rounded-3xl shadow-2xl shadow-black/20 p-8 space-y-6">
           <div>
             <h2 className="text-xl font-bold text-slate-900">Вход в систему</h2>
             <p className="text-sm text-slate-500 mt-1">Введите ваши данные для входа</p>
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            <div className="bg-red-500/10 border border-red-200/50 text-red-700 px-4 py-3 rounded-xl text-sm backdrop-blur-sm">
               {error}
             </div>
           )}
@@ -40,7 +45,7 @@ export default function Login() {
                 value={form.login}
                 onChange={(e) => { setForm({ ...form, login: e.target.value }); setError('') }}
                 placeholder="Введите логин"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 glass-input rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 placeholder:text-slate-400"
                 autoFocus
               />
             </div>
@@ -52,7 +57,7 @@ export default function Login() {
                   value={form.password}
                   onChange={(e) => { setForm({ ...form, password: e.target.value }); setError('') }}
                   placeholder="Введите пароль"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-12"
+                  className="w-full px-4 py-3 glass-input rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 pr-12 placeholder:text-slate-400"
                 />
                 <button
                   type="button"
@@ -67,24 +72,24 @@ export default function Login() {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3 rounded-xl font-medium hover:from-blue-700 hover:to-violet-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
           >
             <LogIn size={18} />
             Войти
           </button>
 
-          <div className="border-t border-slate-100 pt-4">
+          <div className="border-t border-slate-200/50 pt-4">
             <p className="text-xs text-slate-400 mb-3">Тестовые аккаунты:</p>
             <div className="grid grid-cols-1 gap-2 text-xs">
-              <div className="flex justify-between bg-slate-50 px-3 py-2 rounded-lg">
+              <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
                 <span className="text-slate-600"><strong className="text-slate-800">Админ:</strong> admin / admin123</span>
                 <span className="text-blue-600 font-medium">Полный доступ</span>
               </div>
-              <div className="flex justify-between bg-slate-50 px-3 py-2 rounded-lg">
+              <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
                 <span className="text-slate-600"><strong className="text-slate-800">Продажи:</strong> sales1 / sales123</span>
                 <span className="text-emerald-600 font-medium">Ученики + оплаты</span>
               </div>
-              <div className="flex justify-between bg-slate-50 px-3 py-2 rounded-lg">
+              <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
                 <span className="text-slate-600"><strong className="text-slate-800">Учитель:</strong> teacher1 / teach123</span>
                 <span className="text-purple-600 font-medium">Группы + посещаемость</span>
               </div>

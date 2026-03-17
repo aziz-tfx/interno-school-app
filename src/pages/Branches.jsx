@@ -70,7 +70,7 @@ export default function Branches() {
         </div>
         {canAdd && (
           <button onClick={handleAdd}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
+            className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
             <Plus size={16} /> Добавить филиал
           </button>
         )}
@@ -87,7 +87,7 @@ export default function Branches() {
           const occupancy = branch.capacity > 0 ? Math.round((actualStudents / branch.capacity) * 100) : 0
 
           return (
-            <div key={branch.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <div key={branch.id} className="glass-card rounded-2xl overflow-hidden">
               <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 md:p-6 text-white relative">
                 <h3 className="text-xl font-bold">{branch.name}</h3>
                 <div className="flex items-center gap-2 mt-2 text-blue-100">
@@ -207,7 +207,7 @@ export default function Branches() {
 
       {/* Expense Comparison */}
       {branches.length > 0 && (
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+        <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-4">Структура расходов по филиалам (млн сум)</h3>
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={dynamicExpenseData}>

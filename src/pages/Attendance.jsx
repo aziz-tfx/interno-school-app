@@ -65,14 +65,14 @@ export default function Attendance() {
       </div>
 
       {/* Controls */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-col md:flex-row flex-wrap gap-4 items-start md:items-center">
+      <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row flex-wrap gap-4 items-start md:items-center">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Дата</label>
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 bg-white/50 border border-white/30 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         <div>
@@ -80,7 +80,7 @@ export default function Attendance() {
           <select
             value={activeGroup}
             onChange={(e) => setSelectedGroup(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 bg-white/50 border border-white/30 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {availableGroups.length === 0 && <option value="">Нет групп</option>}
             {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
@@ -106,11 +106,11 @@ export default function Attendance() {
 
       {/* Student List */}
       {activeGroup && groupStudents.length > 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="glass-card rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
+                <tr className="bg-white/40 border-b border-white/30">
                   <th className="text-left py-3 px-4 text-slate-500 font-medium w-8">#</th>
                   <th className="text-left py-3 px-4 text-slate-500 font-medium">Ученик</th>
                   <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Курс</th>
@@ -168,7 +168,7 @@ export default function Attendance() {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-xl p-12 shadow-sm border border-slate-100 text-center">
+        <div className="glass-card rounded-2xl p-12 text-center">
           <Users size={48} className="text-slate-300 mx-auto mb-4" />
           <p className="text-slate-500">
             {availableGroups.length === 0

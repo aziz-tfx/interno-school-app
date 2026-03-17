@@ -33,7 +33,7 @@ export default function Courses() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Course Distribution */}
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+        <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Доля учеников по курсам</h3>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
@@ -57,7 +57,7 @@ export default function Courses() {
         </div>
 
         {/* Revenue by Course & Branch */}
-        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100 lg:col-span-2">
+        <div className="glass-card rounded-2xl p-4 md:p-6 lg:col-span-2">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Доход по курсам и филиалам (млн сум)</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={revenueByCourseBranch}>
@@ -74,11 +74,11 @@ export default function Courses() {
       </div>
 
       {/* Course List */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="glass-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
+              <tr className="bg-white/40 border-b border-white/30">
                 <th className="text-left py-3 px-4 text-slate-500 font-medium">Курс</th>
                 <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Уровень</th>
                 <th className="text-center py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Длительность</th>

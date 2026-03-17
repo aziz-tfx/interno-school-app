@@ -55,66 +55,66 @@ export default function Sidebar({ open, onClose }) {
     <>
       {/* Mobile backdrop */}
       {open && (
-        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={onClose} />
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 md:hidden" onClick={onClose} />
       )}
 
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col shrink-0
+        fixed inset-y-0 left-0 z-50 w-72 glass-dark text-white flex flex-col shrink-0
         transform transition-transform duration-300 ease-in-out
-        md:relative md:translate-x-0
+        md:relative md:translate-x-0 md:w-64
         ${open ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Mobile close button */}
         <div className="md:hidden flex justify-end p-2">
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white">
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 border-b border-slate-700">
-          <h1 className="text-xl font-bold tracking-tight">INTERNO</h1>
+        <div className="p-6 border-b border-white/10">
+          <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">INTERNO</h1>
           <p className="text-slate-400 text-sm mt-1">School Management</p>
         </div>
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
               onClick={onClose}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-white/15 text-white shadow-lg shadow-blue-500/10 backdrop-blur-sm'
+                    : 'text-slate-400 hover:bg-white/8 hover:text-white'
                 }`
               }
             >
-              <Icon size={20} />
+              <Icon size={18} />
               {label}
             </NavLink>
           ))}
         </nav>
-        <div className="p-4 border-t border-slate-700">
+        <div className="p-3 border-t border-white/10">
           <button
             onClick={() => { navigate('/profile'); onClose(); }}
-            className={`flex items-center gap-3 w-full px-4 py-2 mb-1 rounded-lg transition-colors ${
+            className={`flex items-center gap-3 w-full px-4 py-2.5 mb-1 rounded-xl transition-all ${
               location.pathname === '/profile'
-                ? 'bg-blue-600 text-white'
-                : 'hover:bg-slate-800'
+                ? 'bg-white/15 text-white'
+                : 'hover:bg-white/8'
             }`}
           >
-            <div className={`w-8 h-8 ${roleColors[user?.role] || 'bg-blue-600'} rounded-full flex items-center justify-center text-sm font-bold`}>
+            <div className={`w-9 h-9 ${roleColors[user?.role] || 'bg-blue-600'} rounded-xl flex items-center justify-center text-sm font-bold shadow-lg`}>
               {user?.avatar}
             </div>
             <div className="flex-1 min-w-0 text-left">
               <p className="text-sm font-medium truncate">{user?.name}</p>
               <p className="text-xs text-slate-400">{getRoleLabel()}</p>
             </div>
-            <Settings size={14} className="text-slate-400" />
+            <Settings size={14} className="text-slate-500" />
           </button>
           <button
             onClick={logout}
-            className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:bg-white/8 rounded-xl transition-all"
           >
             <LogOut size={16} />
             Выйти

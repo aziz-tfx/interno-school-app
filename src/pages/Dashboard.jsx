@@ -109,7 +109,7 @@ function KpiCard({ title, value, subtitle, icon: Icon, color, trend, trendLabel 
     teal: 'from-teal-500 to-teal-600', pink: 'from-pink-500 to-pink-600',
   }
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow">
+    <div className="glass-card rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
       <div className="p-5">
         <div className="flex items-start justify-between mb-3">
           <div className={`p-2.5 rounded-xl bg-gradient-to-br ${bg[color] || bg.blue} text-white shadow-lg`}>
@@ -369,7 +369,7 @@ export default function Dashboard() {
   const ChartTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null
     return (
-      <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-3 text-xs">
+      <div className="glass-strong rounded-xl shadow-lg p-3 text-xs">
         <p className="font-semibold text-slate-900 mb-1">{label}</p>
         {payload.map((p, i) => (
           <div key={i} className="flex items-center gap-2">
@@ -395,7 +395,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs text-slate-400 bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-slate-400 glass rounded-full px-3 py-1.5">
             <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
             Реальное время
           </div>
@@ -403,7 +403,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Time Filter Bar ── */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-3">
+      <div className="glass-card rounded-2xl p-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-slate-500 mr-1">
             <Calendar size={16} />
@@ -438,7 +438,7 @@ export default function Dashboard() {
               <ChevronDown size={12} className={`transition-transform ${showTimePicker ? 'rotate-180' : ''}`} />
             </button>
             {showTimePicker && (
-              <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-slate-200 p-4 z-50 min-w-[280px]">
+              <div className="absolute right-0 top-full mt-2 glass-strong rounded-xl shadow-xl p-4 z-50 min-w-[280px]">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Произвольный период</p>
                 <div className="space-y-3">
                   <div>
@@ -493,7 +493,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Tab bar ── */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+      <div className="flex gap-1 glass rounded-xl p-1">
         {visibleTabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${
@@ -542,7 +542,7 @@ export default function Dashboard() {
           {/* Row 2: Key Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Revenue Trend */}
-            <div className="lg:col-span-2 bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+            <div className="lg:col-span-2 glass-card rounded-2xl p-4 md:p-6">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Финансовый поток</h3>
@@ -568,7 +568,7 @@ export default function Dashboard() {
             </div>
 
             {/* Student Status Donut */}
-            <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+            <div className="glass-card rounded-2xl p-4 md:p-6">
               <h3 className="text-base font-semibold text-slate-900 mb-1">Статус учеников</h3>
               <p className="text-xs text-slate-400 mb-3">Распределение по статусам</p>
               <ResponsiveContainer width="100%" height={200}>
@@ -593,7 +593,7 @@ export default function Dashboard() {
 
           {/* Row 3: Operational Metrics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <div className="glass-card rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Users size={16} className="text-purple-500" />
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Учителя</span>
@@ -613,7 +613,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <div className="glass-card rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <UserCheck size={16} className="text-emerald-500" />
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Удержание</span>
@@ -628,7 +628,7 @@ export default function Dashboard() {
             </div>
 
             {canFullPnL && (
-              <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+              <div className="glass-card rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Percent size={16} className="text-cyan-500" />
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Маржа</span>
@@ -645,7 +645,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+            <div className="glass-card rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Building2 size={16} className="text-orange-500" />
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Инфра</span>
@@ -667,7 +667,7 @@ export default function Dashboard() {
           {/* Row 4: Course breakdown + Payment methods */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             {/* Course distribution */}
-            <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+            <div className="glass-card rounded-2xl p-4 md:p-6">
               <h3 className="text-base font-semibold text-slate-900 mb-1">Распределение по курсам</h3>
               <p className="text-xs text-slate-400 mb-4">Количество учеников на каждом курсе</p>
               {metrics.courseData.length > 0 ? (
@@ -696,7 +696,7 @@ export default function Dashboard() {
             {/* Payment methods + Recent activity */}
             <div className="space-y-6">
               {metrics.methodData.length > 0 && (
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+                <div className="glass-card rounded-2xl p-6">
                   <h3 className="text-base font-semibold text-slate-900 mb-1">Методы оплаты</h3>
                   <p className="text-xs text-slate-400 mb-3">По сумме поступлений</p>
                   <div className="flex items-center gap-6">
@@ -730,7 +730,7 @@ export default function Dashboard() {
               )}
 
               {/* Recent payments feed */}
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+              <div className="glass-card rounded-2xl p-6">
                 <h3 className="text-base font-semibold text-slate-900 mb-3">Последние операции</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {scopedPayments.slice(0, 8).map((p) => (
@@ -756,7 +756,7 @@ export default function Dashboard() {
 
           {/* Row 5: Revenue by branch (admin only) */}
           {canFullPnL && user.branch === 'all' && metrics.branchRevenueData.length > 0 && (
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+            <div className="glass-card rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Доход по филиалам</h3>
@@ -793,7 +793,7 @@ export default function Dashboard() {
           </div>
 
           {/* Branch Scoreboard */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="glass-card rounded-2xl overflow-hidden">
             <div className="px-4 md:px-6 py-4 border-b border-slate-100 bg-slate-50">
               <h3 className="text-base font-semibold text-slate-900">Скорборд филиалов</h3>
               <p className="text-xs text-slate-400">Рейтинг филиалов по ключевым метрикам</p>
@@ -826,7 +826,7 @@ export default function Dashboard() {
 
           {/* Branch capacity + Profitability */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+            <div className="glass-card rounded-2xl p-6">
               <h3 className="text-base font-semibold text-slate-900 mb-1">Загруженность филиалов</h3>
               <p className="text-xs text-slate-400 mb-4">Текущее количество учеников vs вместимость</p>
               <div className="space-y-4">
@@ -852,7 +852,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+            <div className="glass-card rounded-2xl p-6">
               <h3 className="text-base font-semibold text-slate-900 mb-1">Рентабельность</h3>
               <p className="text-xs text-slate-400 mb-4">Доход vs Расход по филиалам (млн сум)</p>
               <ResponsiveContainer width="100%" height={250}>
@@ -876,7 +876,7 @@ export default function Dashboard() {
           </div>
 
           {/* Debt analysis by branch */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <div className="glass-card rounded-2xl p-6">
             <h3 className="text-base font-semibold text-slate-900 mb-1">Анализ задолженностей</h3>
             <p className="text-xs text-slate-400 mb-4">Должники и суммы долгов по филиалам</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

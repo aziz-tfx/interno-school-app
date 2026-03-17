@@ -146,13 +146,13 @@ export default function Students() {
         <div className="flex gap-2">
           {canAdd && activeTab === 'groups' && (
             <button onClick={handleAddGroup}
-              className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center gap-2">
+              className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-purple-700 shadow-lg shadow-purple-500/25 transition-colors flex items-center gap-2">
               <Plus size={16} /> Новая группа
             </button>
           )}
           {canAdd && activeTab === 'students' && (
             <button onClick={handleAdd}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
               <Plus size={16} /> Добавить ученика
             </button>
           )}
@@ -160,7 +160,7 @@ export default function Students() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+      <div className="flex gap-1 glass rounded-xl p-1">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${
@@ -177,29 +177,29 @@ export default function Students() {
       {activeTab === 'students' && (
         <>
           {/* Filters */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
+          <div className="glass-card rounded-2xl p-4 flex flex-wrap gap-4 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input type="text" placeholder="Поиск по имени, курсу, группе..." value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full pl-10 pr-4 py-2 bg-white/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-slate-400" />
               {user.branch === 'all' && (
                 <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
-                  className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="all">Все филиалы</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               )}
               <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}
-                className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Все группы</option>
                 {uniqueGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Все статусы</option>
                 <option value="active">Активные</option>
                 <option value="debtor">Должники</option>
@@ -209,11 +209,11 @@ export default function Students() {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
+                  <tr className="bg-white/40 border-b border-white/30">
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">Имя</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Филиал</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">Группа</th>
@@ -231,7 +231,7 @@ export default function Students() {
                     const isOnline = student.learningFormat === 'Онлайн'
                     return (
                       <tr key={student.id}
-                        className="border-b border-slate-50 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                        className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors cursor-pointer"
                         onClick={() => setProfileStudent(student)}>
                         <td className="py-3 px-4">
                           <p className="font-medium text-slate-900">{student.name}</p>
@@ -316,16 +316,16 @@ export default function Students() {
       {activeTab === 'groups' && (
         <>
           {/* Filters */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
+          <div className="glass-card rounded-2xl p-4 flex flex-wrap gap-4 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input type="text" placeholder="Поиск по названию группы или курсу..." value={groupSearch}
                 onChange={(e) => setGroupSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full pl-10 pr-4 py-2 bg-white/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             {user.branch === 'all' && (
               <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
-                className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Все филиалы</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
@@ -343,7 +343,7 @@ export default function Students() {
               const teacher = group.teacherId ? teachers.find(t => t.id === group.teacherId) : null
 
               return (
-                <div key={group.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow">
+                <div key={group.id} className="glass-card rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
                   {/* Header */}
                   <div className={`px-5 py-4 ${isFull ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'} text-white`}>
                     <div className="flex items-center justify-between">
@@ -447,7 +447,7 @@ export default function Students() {
           </div>
 
           {filteredGroups.length === 0 && (
-            <div className="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-100">
+            <div className="text-center py-12 text-slate-400 glass-card rounded-2xl">
               Группы не найдены
             </div>
           )}

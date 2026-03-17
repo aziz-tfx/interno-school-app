@@ -231,7 +231,7 @@ export default function Profile() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 glass rounded-xl p-1 overflow-x-auto">
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-1 md:gap-2 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all whitespace-nowrap ${
@@ -255,7 +255,7 @@ export default function Profile() {
 
       {/* ═══════ PROFILE TAB ═══════ */}
       {activeTab === 'profile' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
+        <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
             <User size={20} className="text-blue-600" />
             Личные данные
@@ -320,7 +320,7 @@ export default function Profile() {
 
       {/* ═══════ SECURITY TAB ═══════ */}
       {activeTab === 'security' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
+        <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
             <Lock size={20} className="text-blue-600" />
             Смена пароля
@@ -455,7 +455,7 @@ export default function Profile() {
                 <StatCard icon={Briefcase} label="Всего сотрудников" value={roleStats.totalEmployees} color="blue" />
               </div>
               {roleStats.roleDistribution && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <div className="glass-card rounded-2xl p-6">
                   <h4 className="text-sm font-bold text-slate-900 mb-4">Распределение по ролям</h4>
                   <div className="space-y-3">
                     {roleStats.roleDistribution.map(([role, count]) => (
@@ -483,7 +483,7 @@ export default function Profile() {
                 <StatCard icon={GraduationCap} label="Мои ученики" value={roleStats.myStudents} color="blue" />
               </div>
               {roleStats.myGroupNames?.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <div className="glass-card rounded-2xl p-6">
                   <h4 className="text-sm font-bold text-slate-900 mb-4">Мои группы</h4>
                   <div className="flex flex-wrap gap-2">
                     {roleStats.myGroupNames.map(name => (
@@ -507,7 +507,7 @@ export default function Profile() {
 
           {/* Student role */}
           {user?.role === 'student' && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center text-slate-500">
+            <div className="glass-card rounded-2xl p-6 text-center text-slate-500">
               <GraduationCap size={48} className="mx-auto mb-3 text-slate-300" />
               <p className="text-sm">Статистика для студентов в разработке</p>
             </div>
@@ -517,7 +517,7 @@ export default function Profile() {
 
       {/* ═══════ ACCESS TAB ═══════ */}
       {activeTab === 'access' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
+        <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
             <Shield size={20} className="text-blue-600" />
             Уровень доступа

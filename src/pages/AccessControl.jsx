@@ -198,7 +198,7 @@ export default function AccessControl({ embedded = false }) {
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={handleReset}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 glass-btn rounded-xl hover:bg-white/80 transition-colors"
         >
           <RotateCcw size={16} />
           Сбросить
@@ -230,8 +230,8 @@ export default function AccessControl({ embedded = false }) {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6">
         {/* ── Roles sidebar ── */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 hidden lg:block">
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 bg-white/40 border-b border-white/30 hidden lg:block">
               <h3 className="text-sm font-semibold text-slate-700">Роли</h3>
             </div>
             <div className="flex lg:flex-col overflow-x-auto lg:overflow-x-visible divide-x lg:divide-x-0 lg:divide-y divide-slate-50">
@@ -267,9 +267,9 @@ export default function AccessControl({ embedded = false }) {
 
         {/* ── Permissions editor ── */}
         <div className="lg:col-span-3">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="glass-card rounded-2xl overflow-hidden">
             {/* Role header */}
-            <div className="px-4 md:px-6 py-4 bg-slate-50 border-b border-slate-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="px-4 md:px-6 py-4 bg-white/40 border-b border-white/30 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl ${ROLE_COLORS[selectedRole]} text-white flex items-center justify-center text-lg font-bold`}>
                   {ROLE_LABELS[selectedRole]?.charAt(0)}
@@ -404,8 +404,8 @@ export default function AccessControl({ embedded = false }) {
           </div>
 
           {/* ── Permission Matrix Overview ── */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 mt-6 overflow-hidden">
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100">
+          <div className="glass-card rounded-2xl mt-6 overflow-hidden">
+            <div className="px-6 py-4 bg-white/40 border-b border-white/30">
               <h3 className="text-sm font-semibold text-slate-700">Матрица доступа — Обзор</h3>
               <p className="text-xs text-slate-400 mt-0.5">Быстрый просмотр прав всех ролей</p>
             </div>

@@ -68,7 +68,7 @@ export default function Employees() {
         <div className="flex items-center gap-3">
           {activeTab === 'employees' && canAdd && (
             <button onClick={handleAdd}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
               <Plus size={16} /> <span className="hidden sm:inline">Добавить сотрудника</span><span className="sm:hidden">Добавить</span>
             </button>
           )}
@@ -77,7 +77,7 @@ export default function Employees() {
 
       {/* Tabs */}
       {tabs.length > 1 && (
-        <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-100 w-fit">
+        <div className="flex gap-1 glass rounded-xl p-1 w-fit">
           {tabs.map(tab => {
             const Icon = tab.icon
             return (
@@ -102,7 +102,7 @@ export default function Employees() {
       {activeTab === 'employees' && (
         <>
           {/* Filters */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
+          <div className="glass-card rounded-2xl p-4 flex flex-wrap gap-4 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input type="text" placeholder="Поиск по имени или логину..." value={search}
@@ -112,13 +112,13 @@ export default function Employees() {
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-slate-400" />
               <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
-                className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Все роли</option>
                 {usedRoles.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
               {user.branch === 'all' && (
                 <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
-                  className="bg-slate-50 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="all">Все филиалы</option>
                   {Object.entries(BRANCH_LABELS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
                 </select>
@@ -127,11 +127,11 @@ export default function Employees() {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
+                  <tr className="bg-white/40 border-b border-white/30">
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">Сотрудник</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">Роль</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Филиал</th>
@@ -142,7 +142,7 @@ export default function Employees() {
                 </thead>
                 <tbody>
                   {filtered.map(emp => (
-                    <tr key={emp.id} className="border-b border-slate-50 hover:bg-blue-50/50 transition-colors">
+                    <tr key={emp.id} className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 ${ROLE_COLORS[emp.role] || 'bg-slate-500'} rounded-full flex items-center justify-center text-white text-xs font-bold`}>
@@ -196,7 +196,7 @@ export default function Employees() {
             {usedRoles.map(role => {
               const count = visibleEmployees.filter(e => e.role === role).length
               return (
-                <div key={role} className="bg-white rounded-lg p-3 shadow-sm border border-slate-100 text-center">
+                <div key={role} className="glass-card rounded-xl p-3 text-center">
                   <p className="text-lg font-bold text-slate-900">{count}</p>
                   <p className="text-xs text-slate-500">{ROLE_LABELS[role]}</p>
                 </div>
