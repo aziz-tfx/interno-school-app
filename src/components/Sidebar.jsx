@@ -25,7 +25,7 @@ export default function Sidebar() {
     { to: '/students', icon: GraduationCap, label: 'Ученики', permission: 'students' },
     { to: '/teachers', icon: Users, label: 'Учителя', permission: 'teachers' },
     { to: '/courses', icon: BookOpen, label: 'Курсы', permission: 'courses' },
-    { to: '/finance', icon: DollarSign, label: 'Финансы', permission: 'finance' },
+    { to: '/finance', icon: DollarSign, label: 'Продажи', permission: 'finance' },
     { to: '/employees', icon: UserCog, label: 'Сотрудники', permission: 'employees' },
     { to: '/attendance', icon: ClipboardCheck, label: 'Посещаемость', permission: null },
     { to: '/access-control', icon: Shield, label: 'Доступы', permission: 'settings' },

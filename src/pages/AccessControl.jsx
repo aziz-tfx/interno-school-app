@@ -14,7 +14,7 @@ const SECTION_META = {
   students:   { label: 'Ученики',     icon: GraduationCap, type: 'object', actions: ['view', 'add', 'edit', 'delete'] },
   teachers:   { label: 'Учителя',     icon: Users,        type: 'object', actions: ['view', 'add', 'edit', 'delete', 'salaries'] },
   courses:    { label: 'Курсы',       icon: BookOpen,     type: 'object', actions: ['view', 'add', 'edit'] },
-  finance:    { label: 'Финансы',     icon: DollarSign,   type: 'object', actions: ['view', 'fullPnL', 'expenses', 'payments'] },
+  finance:    { label: 'Продажи',     icon: DollarSign,   type: 'object', actions: ['view', 'fullPnL', 'expenses', 'payments'] },
   employees:  { label: 'Сотрудники',  icon: UserCog,      type: 'object', actions: ['view', 'add', 'edit', 'delete'] },
   settings:   { label: 'Настройки',   icon: Settings,     type: 'boolean' },
 }
