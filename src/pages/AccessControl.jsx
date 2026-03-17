@@ -59,7 +59,7 @@ function Toggle({ checked, onChange, disabled, size = 'md' }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-export default function AccessControl() {
+export default function AccessControl({ embedded = false }) {
   const { user, getPermissions, updatePermissions, resetPermissions } = useAuth()
 
   const [permissions, setPermissions] = useState({})
@@ -182,39 +182,41 @@ export default function AccessControl() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-3">
-            <Shield className="text-blue-600" size={28} />
-            Управление доступом
-          </h2>
-          <p className="text-slate-500 mt-1 text-sm">
-            Настройте права доступа для каждой роли сотрудников
-          </p>
+      {!embedded && (
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-3">
+              <Shield className="text-blue-600" size={28} />
+              Управление доступом
+            </h2>
+            <p className="text-slate-500 mt-1 text-sm">
+              Настройте права доступа для каждой роли сотрудников
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={handleReset}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            <RotateCcw size={16} />
-            Сбросить
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-            className={`flex items-center gap-2 px-5 py-2 text-sm font-medium rounded-lg transition-all ${
-              saved
-                ? 'bg-emerald-600 text-white'
-                : hasChanges
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-            }`}
-          >
-            {saved ? <CheckCircle2 size={16} /> : <Save size={16} />}
-            {saving ? 'Сохранение...' : saved ? 'Сохранено!' : 'Сохранить'}
-          </button>
-        </div>
+      )}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          onClick={handleReset}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+        >
+          <RotateCcw size={16} />
+          Сбросить
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={!hasChanges || saving}
+          className={`flex items-center gap-2 px-5 py-2 text-sm font-medium rounded-lg transition-all ${
+            saved
+              ? 'bg-emerald-600 text-white'
+              : hasChanges
+                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200'
+                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+          }`}
+        >
+          {saved ? <CheckCircle2 size={16} /> : <Save size={16} />}
+          {saving ? 'Сохранение...' : saved ? 'Сохранено!' : 'Сохранить'}
+        </button>
       </div>
 
       {/* ── Change indicator ── */}

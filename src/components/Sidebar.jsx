@@ -10,7 +10,6 @@ import {
   UserCog,
   LogOut,
   Settings,
-  Shield,
   FileBarChart,
   X,
 } from 'lucide-react'
@@ -31,7 +30,6 @@ export default function Sidebar({ open, onClose }) {
     { to: '/employees', icon: UserCog, label: 'Сотрудники', permission: 'employees' },
     { to: '/reports', icon: FileBarChart, label: 'Отчёты', permission: 'finance' },
     { to: '/attendance', icon: ClipboardCheck, label: 'Посещаемость', permission: null },
-    { to: '/access-control', icon: Shield, label: 'Доступы', permission: 'settings' },
   ]
 
   const navItems = allNavItems.filter(item => {
