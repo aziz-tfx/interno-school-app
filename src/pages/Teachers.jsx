@@ -25,12 +25,12 @@ export default function Teachers() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Учителя</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900">Учителя</h2>
           <p className="text-slate-500 mt-1">Всего {teachers.length} учителей</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {user.branch === 'all' && (
             <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
               className="bg-white border border-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -49,7 +49,7 @@ export default function Teachers() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((teacher) => (
-          <div key={teacher.id} className="bg-white rounded-xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+          <div key={teacher.id} className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="font-semibold text-slate-900">{teacher.name}</h3>
@@ -111,10 +111,10 @@ export default function Teachers() {
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="text-left py-3 px-4 text-slate-500 font-medium">Филиал</th>
                   <th className="text-center py-3 px-4 text-slate-500 font-medium">Учителей</th>
-                  <th className="text-center py-3 px-4 text-slate-500 font-medium">Всего групп</th>
-                  <th className="text-center py-3 px-4 text-slate-500 font-medium">Всего учеников</th>
+                  <th className="text-center py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Всего групп</th>
+                  <th className="text-center py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Всего учеников</th>
                   <th className="text-right py-3 px-4 text-slate-500 font-medium">ФОТ</th>
-                  <th className="text-center py-3 px-4 text-slate-500 font-medium">Ср. рейтинг</th>
+                  <th className="text-center py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Ср. рейтинг</th>
                 </tr>
               </thead>
               <tbody>
@@ -126,10 +126,10 @@ export default function Teachers() {
                     <tr key={branch.id} className="border-b border-slate-50">
                       <td className="py-3 px-4 font-medium">{branch.name}</td>
                       <td className="py-3 px-4 text-center">{bt.length}</td>
-                      <td className="py-3 px-4 text-center">{bt.reduce((s, t) => s + t.groups, 0)}</td>
-                      <td className="py-3 px-4 text-center">{bt.reduce((s, t) => s + t.students, 0)}</td>
+                      <td className="py-3 px-4 text-center hidden md:table-cell">{bt.reduce((s, t) => s + t.groups, 0)}</td>
+                      <td className="py-3 px-4 text-center hidden md:table-cell">{bt.reduce((s, t) => s + t.students, 0)}</td>
                       <td className="py-3 px-4 text-right font-semibold">{formatCurrency(totalSalary)}</td>
-                      <td className="py-3 px-4 text-center"><span className="text-yellow-500">&#9733;</span> {avgRating}</td>
+                      <td className="py-3 px-4 text-center hidden md:table-cell"><span className="text-yellow-500">&#9733;</span> {avgRating}</td>
                     </tr>
                   )
                 })}

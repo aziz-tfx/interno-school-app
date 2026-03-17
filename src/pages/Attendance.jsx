@@ -60,12 +60,12 @@ export default function Attendance() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-slate-900">Посещаемость</h2>
+        <h2 className="text-xl md:text-2xl font-bold text-slate-900">Посещаемость</h2>
         <p className="text-slate-500 mt-1">Отметьте присутствие учеников на занятии</p>
       </div>
 
       {/* Controls */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-col md:flex-row flex-wrap gap-4 items-start md:items-center">
         <div>
           <label className="block text-xs text-slate-500 mb-1">Дата</label>
           <input
@@ -88,7 +88,7 @@ export default function Attendance() {
         </div>
 
         {/* Summary badges */}
-        <div className="flex gap-2 ml-auto">
+        <div className="flex gap-2 flex-wrap md:ml-auto">
           <span className="flex items-center gap-1 bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-sm">
             <Users size={14} /> {summary.total}
           </span>
@@ -113,8 +113,8 @@ export default function Attendance() {
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="text-left py-3 px-4 text-slate-500 font-medium w-8">#</th>
                   <th className="text-left py-3 px-4 text-slate-500 font-medium">Ученик</th>
-                  <th className="text-left py-3 px-4 text-slate-500 font-medium">Курс</th>
-                  <th className="text-center py-3 px-4 text-slate-500 font-medium">Общая посещаемость</th>
+                  <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Курс</th>
+                  <th className="text-center py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Общая посещаемость</th>
                   <th className="text-center py-3 px-4 text-slate-500 font-medium">Отметка</th>
                 </tr>
               </thead>
@@ -129,8 +129,8 @@ export default function Attendance() {
                         <p className="font-medium text-slate-900">{student.name}</p>
                         <p className="text-xs text-slate-400">{student.phone}</p>
                       </td>
-                      <td className="py-3 px-4 text-slate-600">{student.course}</td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3 px-4 text-slate-600 hidden md:table-cell">{student.course}</td>
+                      <td className="py-3 px-4 text-center hidden md:table-cell">
                         {stats.total > 0 ? (
                           <div className="flex items-center justify-center gap-2">
                             <div className="w-16 bg-slate-200 rounded-full h-1.5">
@@ -148,14 +148,14 @@ export default function Attendance() {
                             <button
                               key={status}
                               onClick={() => handleMark(student.id, status)}
-                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                              className={`flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                                 currentStatus === status
                                   ? `${color} border-current shadow-sm scale-105`
                                   : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
                               }`}
                             >
                               <Icon size={14} />
-                              {label}
+                              <span className="hidden md:inline">{label}</span>
                             </button>
                           ))}
                         </div>

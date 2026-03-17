@@ -182,9 +182,9 @@ export default function AccessControl() {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-3">
             <Shield className="text-blue-600" size={28} />
             Управление доступом
           </h2>
@@ -192,7 +192,7 @@ export default function AccessControl() {
             Настройте права доступа для каждой роли сотрудников
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={handleReset}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
@@ -225,14 +225,14 @@ export default function AccessControl() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6">
         {/* ── Roles sidebar ── */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 hidden lg:block">
               <h3 className="text-sm font-semibold text-slate-700">Роли</h3>
             </div>
-            <div className="divide-y divide-slate-50">
+            <div className="flex lg:flex-col overflow-x-auto lg:overflow-x-visible divide-x lg:divide-x-0 lg:divide-y divide-slate-50">
               {ROLES_ORDER.map(role => {
                 const enabled = getEnabledCount(role)
                 const total = Object.keys(SECTION_META).length
@@ -267,7 +267,7 @@ export default function AccessControl() {
         <div className="lg:col-span-3">
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
             {/* Role header */}
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+            <div className="px-4 md:px-6 py-4 bg-slate-50 border-b border-slate-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl ${ROLE_COLORS[selectedRole]} text-white flex items-center justify-center text-lg font-bold`}>
                   {ROLE_LABELS[selectedRole]?.charAt(0)}
@@ -297,7 +297,7 @@ export default function AccessControl() {
                 return (
                   <div key={section} className={`transition-colors ${enabled ? '' : 'bg-slate-50/50'}`}>
                     {/* Section header */}
-                    <div className="px-6 py-4 flex items-center justify-between">
+                    <div className="px-4 md:px-6 py-4 flex items-center justify-between">
                       <div className="flex items-center gap-3 flex-1">
                         {meta.type === 'object' ? (
                           <button
@@ -361,8 +361,8 @@ export default function AccessControl() {
 
                     {/* Expanded actions */}
                     {meta.type === 'object' && expanded && enabled && (
-                      <div className="px-6 pb-4 pl-16">
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="px-4 md:px-6 pb-4 md:pl-16">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                           {meta.actions.map(action => {
                             const actionEnabled = getActionValue(selectedRole, section, action)
                             return (

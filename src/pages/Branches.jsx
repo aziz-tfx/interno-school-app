@@ -63,9 +63,9 @@ export default function Branches() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Филиалы</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900">Филиалы</h2>
           <p className="text-slate-500 mt-1">Всего {branches.length} филиалов</p>
         </div>
         {canAdd && (
@@ -77,7 +77,7 @@ export default function Branches() {
       </div>
 
       {/* Branch Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {branches.map((branch, idx) => {
           const profit = branch.monthlyRevenue - branch.monthlyExpenses
           const margin = branch.monthlyRevenue > 0 ? Math.round((profit / branch.monthlyRevenue) * 100) : 0
@@ -88,7 +88,7 @@ export default function Branches() {
 
           return (
             <div key={branch.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white relative">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 md:p-6 text-white relative">
                 <h3 className="text-xl font-bold">{branch.name}</h3>
                 <div className="flex items-center gap-2 mt-2 text-blue-100">
                   <MapPin size={14} />
@@ -112,7 +112,7 @@ export default function Branches() {
                   </div>
                 )}
               </div>
-              <div className="p-6 space-y-4">
+              <div className="p-4 md:p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-2">
                     <User size={16} className="text-slate-400" />
@@ -207,8 +207,8 @@ export default function Branches() {
 
       {/* Expense Comparison */}
       {branches.length > 0 && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Структура расходов по филиалам (млн сум)</h3>
+        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+          <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-4">Структура расходов по филиалам (млн сум)</h3>
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={dynamicExpenseData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

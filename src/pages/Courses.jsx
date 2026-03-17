@@ -27,13 +27,13 @@ export default function Courses() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-slate-900">Курсы</h2>
+        <h2 className="text-xl md:text-2xl font-bold text-slate-900">Курсы</h2>
         <p className="text-slate-500 mt-1">{coursesDetail.length} курсов в системе</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Course Distribution */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Доля учеников по курсам</h3>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
@@ -57,7 +57,7 @@ export default function Courses() {
         </div>
 
         {/* Revenue by Course & Branch */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100 lg:col-span-2">
+        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100 lg:col-span-2">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Доход по курсам и филиалам (млн сум)</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={revenueByCourseBranch}>
@@ -80,24 +80,24 @@ export default function Courses() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="text-left py-3 px-4 text-slate-500 font-medium">Курс</th>
-                <th className="text-left py-3 px-4 text-slate-500 font-medium">Уровень</th>
-                <th className="text-center py-3 px-4 text-slate-500 font-medium">Длительность</th>
+                <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Уровень</th>
+                <th className="text-center py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Длительность</th>
                 <th className="text-right py-3 px-4 text-slate-500 font-medium">Цена/мес</th>
                 <th className="text-center py-3 px-4 text-slate-500 font-medium">Учеников</th>
-                <th className="text-left py-3 px-4 text-slate-500 font-medium">Филиалы</th>
+                <th className="text-left py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">Филиалы</th>
               </tr>
             </thead>
             <tbody>
               {coursesDetail.map((course, i) => (
                 <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
                   <td className="py-3 px-4 font-medium text-slate-900">{course.name}</td>
-                  <td className="py-3 px-4 text-slate-600">{course.level}</td>
-                  <td className="py-3 px-4 text-center text-slate-600">{course.duration}</td>
+                  <td className="py-3 px-4 text-slate-600 hidden md:table-cell">{course.level}</td>
+                  <td className="py-3 px-4 text-center text-slate-600 hidden md:table-cell">{course.duration}</td>
                   <td className="py-3 px-4 text-right font-semibold">
                     {new Intl.NumberFormat('uz-UZ').format(course.price)} сум
                   </td>
                   <td className="py-3 px-4 text-center font-semibold">{course.studentsTotal}</td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 hidden lg:table-cell">
                     <div className="flex gap-1 flex-wrap">
                       {course.branches.map(bId => (
                         <span key={bId} className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">

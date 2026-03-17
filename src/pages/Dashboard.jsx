@@ -171,28 +171,28 @@ function BranchScoreRow({ branch, students, teachers, payments, rank }) {
         <p className="text-sm font-bold text-slate-800">{actualStudents}</p>
         <p className="text-[10px] text-slate-400">из {branch.capacity}</p>
       </td>
-      <td className="py-4 px-3 text-center">
+      <td className="py-4 px-3 text-center hidden md:table-cell">
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${occColor}`}>{occupancy}%</span>
       </td>
       <td className="py-4 px-3 text-right">
         <p className="text-sm font-bold text-emerald-600">{fmtShort(branch.monthlyRevenue || branchIncome)}</p>
       </td>
-      <td className="py-4 px-3 text-right">
+      <td className="py-4 px-3 text-right hidden md:table-cell">
         <p className={`text-sm font-bold ${marginColor}`}>{margin}%</p>
       </td>
-      <td className="py-4 px-3 text-center">
+      <td className="py-4 px-3 text-center hidden lg:table-cell">
         <p className="text-sm font-semibold text-slate-700">{branchTeachers.length || branch.teachers}</p>
       </td>
-      <td className="py-4 px-3 text-center">
+      <td className="py-4 px-3 text-center hidden lg:table-cell">
         {debtors > 0
           ? <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-50 text-red-600">{debtors}</span>
           : <span className="text-xs text-emerald-500 font-medium">0</span>
         }
       </td>
-      <td className="py-4 px-3 text-right">
+      <td className="py-4 px-3 text-right hidden lg:table-cell">
         <p className="text-xs font-medium text-slate-600">{fmtShort(avgPerStudent)}</p>
       </td>
-      <td className="py-4 px-3">
+      <td className="py-4 px-3 hidden lg:table-cell">
         <div className="flex items-center gap-1">
           <span className="text-yellow-400 text-xs">&#9733;</span>
           <span className="text-xs font-semibold text-slate-700">{branch.rating > 0 ? branch.rating : '—'}</span>
@@ -387,7 +387,7 @@ export default function Dashboard() {
       {/* ── Header ── */}
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900">
             {user.branch === 'all' ? 'BI Дашборд' : `Дашборд — ${getBranchName(user.branch)}`}
           </h2>
           <p className="text-slate-500 mt-1 text-sm">
@@ -542,13 +542,13 @@ export default function Dashboard() {
           {/* Row 2: Key Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Revenue Trend */}
-            <div className="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-slate-100">
-              <div className="flex items-center justify-between mb-4">
+            <div className="lg:col-span-2 bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Финансовый поток</h3>
                   <p className="text-xs text-slate-400">Доходы, расходы и прибыль по месяцам (млн сум)</p>
                 </div>
-                <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-4 text-xs hidden md:flex">
                   <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-emerald-500" /> Доход</span>
                   {canFullPnL && <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-red-400" /> Расход</span>}
                   {canFullPnL && <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-blue-500" /> Прибыль</span>}
@@ -568,7 +568,7 @@ export default function Dashboard() {
             </div>
 
             {/* Student Status Donut */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+            <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
               <h3 className="text-base font-semibold text-slate-900 mb-1">Статус учеников</h3>
               <p className="text-xs text-slate-400 mb-3">Распределение по статусам</p>
               <ResponsiveContainer width="100%" height={200}>
@@ -665,9 +665,9 @@ export default function Dashboard() {
           </div>
 
           {/* Row 4: Course breakdown + Payment methods */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             {/* Course distribution */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+            <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
               <h3 className="text-base font-semibold text-slate-900 mb-1">Распределение по курсам</h3>
               <p className="text-xs text-slate-400 mb-4">Количество учеников на каждом курсе</p>
               {metrics.courseData.length > 0 ? (
@@ -794,7 +794,7 @@ export default function Dashboard() {
 
           {/* Branch Scoreboard */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+            <div className="px-4 md:px-6 py-4 border-b border-slate-100 bg-slate-50">
               <h3 className="text-base font-semibold text-slate-900">Скорборд филиалов</h3>
               <p className="text-xs text-slate-400">Рейтинг филиалов по ключевым метрикам</p>
             </div>
@@ -804,13 +804,13 @@ export default function Dashboard() {
                   <tr className="border-b border-slate-100">
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">Филиал</th>
                     <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Ученики</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Загрузка</th>
+                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Загрузка</th>
                     <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Доход</th>
-                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Маржа</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Учителя</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Долги</th>
-                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">ARPU</th>
-                    <th className="py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Рейтинг</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Маржа</th>
+                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Учителя</th>
+                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Долги</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">ARPU</th>
+                    <th className="py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Рейтинг</th>
                   </tr>
                 </thead>
                 <tbody>

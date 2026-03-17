@@ -138,9 +138,9 @@ export default function Students() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Ученики и группы</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900">Ученики и группы</h2>
           <p className="text-slate-500 mt-1">{allStudents.length} учеников · {allGroups.length} групп</p>
         </div>
         <div className="flex gap-2">
@@ -215,12 +215,12 @@ export default function Students() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">Имя</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Филиал</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Филиал</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">Группа</th>
-                    <th className="text-center py-3 px-4 text-slate-500 font-medium">Формат</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Телефон</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-medium">Оплачено</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-medium">Дебиторка</th>
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">Формат</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">Телефон</th>
+                    <th className="text-right py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Оплачено</th>
+                    <th className="text-right py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Дебиторка</th>
                     <th className="text-center py-3 px-4 text-slate-500 font-medium">Статус</th>
                     <th className="text-center py-3 px-4 text-slate-500 font-medium">Действия</th>
                   </tr>
@@ -240,11 +240,11 @@ export default function Students() {
                             {info.trancheCount > 0 && <span className="ml-1 text-emerald-500">· {info.trancheCount} транш(ей)</span>}
                           </p>
                         </td>
-                        <td className="py-3 px-4 text-slate-600">{getBranchName(student.branch)}</td>
+                        <td className="py-3 px-4 text-slate-600 hidden md:table-cell">{getBranchName(student.branch)}</td>
                         <td className="py-3 px-4">
                           <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-mono">{student.group || '—'}</span>
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-4 text-center hidden lg:table-cell">
                           {isOnline ? (
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
                               <Wifi size={10} /> Онлайн
@@ -255,11 +255,11 @@ export default function Students() {
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-slate-500">{student.phone}</td>
-                        <td className={`py-3 px-4 text-right font-semibold ${info.totalPaid > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        <td className="py-3 px-4 text-slate-500 hidden lg:table-cell">{student.phone}</td>
+                        <td className={`py-3 px-4 text-right font-semibold hidden md:table-cell ${info.totalPaid > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                           {info.totalPaid > 0 ? formatCurrency(info.totalPaid) : '—'}
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3 px-4 text-right hidden md:table-cell">
                           {info.debt > 0 ? (
                             <div>
                               <span className="font-semibold text-red-500">{formatCurrency(info.debt)}</span>

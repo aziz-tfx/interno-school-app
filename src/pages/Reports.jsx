@@ -588,7 +588,7 @@ export default function Reports() {
       {/* ─── Header ──────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
             <FileBarChart size={24} className="text-blue-600" />
             Отчёт по продажам
           </h2>
@@ -935,9 +935,9 @@ export default function Reports() {
       </div>
 
       {/* ─── Charts Section ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Sales Funnel */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <TrendingUp size={16} className="text-blue-600" />
             Воронка продаж
@@ -961,7 +961,7 @@ export default function Reports() {
         </div>
 
         {/* Manager Comparison */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <Users size={16} className="text-blue-600" />
             Сравнение менеджеров
@@ -987,7 +987,7 @@ export default function Reports() {
       </div>
 
       {/* Revenue by manager chart */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+      <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-slate-100">
         <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
           <DollarSign size={16} className="text-blue-600" />
           Выручка по менеджерам
@@ -1018,8 +1018,8 @@ export default function Reports() {
       {/* ─── Plan Setup Modal ────────────────────────────────────────────── */}
       {planModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[95vw] md:max-w-3xl max-h-[90vh] overflow-y-auto m-4">
+            <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Settings size={20} className="text-blue-600" />
                 Настройка планов — {MONTH_NAMES[selectedMonth - 1]} {selectedYear}

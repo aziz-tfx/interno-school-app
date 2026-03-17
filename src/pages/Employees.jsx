@@ -53,9 +53,9 @@ export default function Employees() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Сотрудники</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900">Сотрудники</h2>
           <p className="text-slate-500 mt-1">Всего {visibleEmployees.length} сотрудников</p>
         </div>
         {canAdd && (
@@ -99,9 +99,9 @@ export default function Employees() {
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="text-left py-3 px-4 text-slate-500 font-medium">Сотрудник</th>
                 <th className="text-left py-3 px-4 text-slate-500 font-medium">Роль</th>
-                <th className="text-left py-3 px-4 text-slate-500 font-medium">Филиал</th>
-                <th className="text-left py-3 px-4 text-slate-500 font-medium">Логин</th>
-                <th className="text-left py-3 px-4 text-slate-500 font-medium">Телефон</th>
+                <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Филиал</th>
+                <th className="text-left py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">Логин</th>
+                <th className="text-left py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">Телефон</th>
                 <th className="text-center py-3 px-4 text-slate-500 font-medium">Действия</th>
               </tr>
             </thead>
@@ -125,11 +125,11 @@ export default function Employees() {
                       {ROLE_LABELS[emp.role] || emp.role}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-slate-600">{BRANCH_LABELS[emp.branch] || emp.branch}</td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 text-slate-600 hidden md:table-cell">{BRANCH_LABELS[emp.branch] || emp.branch}</td>
+                  <td className="py-3 px-4 hidden lg:table-cell">
                     <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-mono">{emp.login}</span>
                   </td>
-                  <td className="py-3 px-4 text-slate-500">{emp.phone || '—'}</td>
+                  <td className="py-3 px-4 text-slate-500 hidden lg:table-cell">{emp.phone || '—'}</td>
                   <td className="py-3 px-4 text-center">
                     <div className="flex items-center justify-center gap-1">
                       {canEdit && (

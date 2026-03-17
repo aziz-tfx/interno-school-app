@@ -206,14 +206,14 @@ export default function Profile() {
   return (
     <div className="space-y-6">
       {/* Header card */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-8 text-white relative overflow-hidden">
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-4 md:p-8 text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23ffffff%22%20fill-opacity%3D%220.03%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E')] opacity-50" />
-        <div className="relative flex items-center gap-6">
-          <div className={`w-20 h-20 ${roleColor} rounded-2xl flex items-center justify-center text-3xl font-bold shadow-lg ring-4 ring-white/10`}>
+        <div className="relative flex items-center gap-4 md:gap-6">
+          <div className={`w-14 h-14 md:w-20 md:h-20 ${roleColor} rounded-2xl flex items-center justify-center text-2xl md:text-3xl font-bold shadow-lg ring-4 ring-white/10`}>
             {user?.avatar}
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">{user?.name}</h1>
+            <h1 className="text-xl md:text-2xl font-bold">{user?.name}</h1>
             <div className="flex items-center gap-3 mt-2">
               <span className={`px-3 py-1 ${roleColor} rounded-full text-xs font-semibold`}>
                 {getRoleLabel()}
@@ -231,16 +231,16 @@ export default function Profile() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto">
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1 md:gap-2 py-2.5 rounded-lg text-xs md:text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-white text-slate-900 shadow-sm'
                 : 'text-slate-500 hover:text-slate-700'
             }`}>
             <tab.icon size={16} />
-            {tab.label}
+            <span className="hidden sm:inline">{tab.label}</span>
           </button>
         ))}
       </div>
@@ -255,13 +255,13 @@ export default function Profile() {
 
       {/* ═══════ PROFILE TAB ═══════ */}
       {activeTab === 'profile' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
             <User size={20} className="text-blue-600" />
             Личные данные
           </h3>
-          <div className="grid grid-cols-2 gap-6">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1">ФИО</label>
               <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -293,7 +293,7 @@ export default function Profile() {
             </div>
 
             {/* Avatar color picker */}
-            <div className="col-span-2">
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-2">Цвет аватара</label>
               <div className="flex gap-2 flex-wrap">
                 {AVATAR_COLORS.map(color => (
@@ -320,7 +320,7 @@ export default function Profile() {
 
       {/* ═══════ SECURITY TAB ═══════ */}
       {activeTab === 'security' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
             <Lock size={20} className="text-blue-600" />
             Смена пароля
@@ -517,7 +517,7 @@ export default function Profile() {
 
       {/* ═══════ ACCESS TAB ═══════ */}
       {activeTab === 'access' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
             <Shield size={20} className="text-blue-600" />
             Уровень доступа
