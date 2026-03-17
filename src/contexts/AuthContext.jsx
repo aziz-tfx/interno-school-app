@@ -41,8 +41,8 @@ export const ROLE_COLORS = {
   student:          'bg-slate-500',
 }
 
-// ─── Права доступа ─────────────────────────────────────────────────────────
-export const PERMISSIONS = {
+// ─── Права доступа (дефолтные) ─────────────────────────────────────────────
+export const DEFAULT_PERMISSIONS = {
   owner: {
     dashboard: true, branches: true,
     students:  { view: true, add: true, edit: true, delete: true },
@@ -144,6 +144,9 @@ export const PERMISSIONS = {
   },
 }
 
+// Mutable reference – starts with defaults, gets overwritten from Firestore
+export let PERMISSIONS = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
+
 // ─── Сотрудники по умолчанию ───────────────────────────────────────────────
 const DEFAULT_EMPLOYEES = [
   // Владелец
@@ -188,6 +191,7 @@ const DEFAULT_EMPLOYEES = [
 ]
 
 const employeesRef = collection(db, 'employees')
+const permissionsDocRef = doc(db, 'settings', 'permissions')
 
 // ─── Provider ──────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
@@ -196,6 +200,7 @@ export function AuthProvider({ children }) {
     return saved ? JSON.parse(saved) : null
   })
   const [employees, setEmployees] = useState([])
+  const [customPermissions, setCustomPermissions] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -205,18 +210,40 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem('interno_user')
   }, [user])
 
+  // Real-time sync for permissions from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(permissionsDocRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data()
+        // Merge with defaults: Firestore overrides, defaults fill gaps
+        const merged = { ...JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS)) }
+        Object.keys(data).forEach(role => {
+          if (role === '_id') return
+          if (merged[role]) {
+            merged[role] = data[role]
+          }
+        })
+        PERMISSIONS = merged
+        setCustomPermissions(merged)
+      } else {
+        // No custom permissions saved yet, use defaults
+        PERMISSIONS = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
+        setCustomPermissions(null)
+      }
+    })
+    return () => unsubscribe()
+  }, [])
+
   // Real-time sync with Firestore + seed if empty
   useEffect(() => {
     const unsubscribe = onSnapshot(employeesRef, async (snapshot) => {
       if (snapshot.empty) {
-        // Seed Firestore with DEFAULT_EMPLOYEES
         const batch = writeBatch(db)
         DEFAULT_EMPLOYEES.forEach((emp) => {
           const docRef = doc(employeesRef, String(emp.id))
           batch.set(docRef, emp)
         })
         await batch.commit()
-        // onSnapshot will fire again after seeding, so just return
         return
       }
 
@@ -312,12 +339,26 @@ export function AuthProvider({ children }) {
     return list.filter(e => e.branch === branchId)
   }
 
+  // ─── Permissions management ──────────────────────────────────────────
+  const getPermissions = () => {
+    return customPermissions || JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
+  }
+
+  const updatePermissions = async (newPermissions) => {
+    await setDoc(permissionsDocRef, newPermissions)
+  }
+
+  const resetPermissions = async () => {
+    await deleteDoc(permissionsDocRef)
+  }
+
   return (
     <AuthContext.Provider value={{
       user, login, logout, error, setError,
       hasPermission, getRoleLabel,
       employees, addEmployee, updateEmployee, deleteEmployee, resetEmployees,
       getSalesStaff, loading,
+      getPermissions, updatePermissions, resetPermissions,
     }}>
       {children}
     </AuthContext.Provider>

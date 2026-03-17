@@ -10,6 +10,7 @@ import {
   UserCog,
   LogOut,
   Settings,
+  Shield,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -27,6 +28,7 @@ export default function Sidebar() {
     { to: '/finance', icon: DollarSign, label: 'Финансы', permission: 'finance' },
     { to: '/employees', icon: UserCog, label: 'Сотрудники', permission: 'employees' },
     { to: '/attendance', icon: ClipboardCheck, label: 'Посещаемость', permission: null },
+    { to: '/access-control', icon: Shield, label: 'Доступы', permission: 'settings' },
   ]
 
   const navItems = allNavItems.filter(item => {
