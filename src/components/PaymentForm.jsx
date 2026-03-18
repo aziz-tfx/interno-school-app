@@ -10,11 +10,30 @@ import { doc, setDoc, getDoc } from 'firebase/firestore'
 import Logo from './Logo'
 
 const METHODS = ['Наличные', 'Payme', 'Click', 'Uzum']
-const TARIFFS = ['Стандарт Тариф', 'Премиум Тариф', 'VIP Тариф', 'Онлайн', 'Оффлайн']
+const TARIFF_OPTIONS = [
+  { label: 'Стандарт', value: 'standard' },
+  { label: 'VIP', value: 'vip' },
+  { label: 'Премиум', value: 'premium' },
+  { label: 'Индивидуальный', value: 'individual' },
+]
+const DISCOUNT_OPTIONS = [
+  { label: 'Без скидки', value: 'full' },
+  { label: 'Скидка 10%', value: 'd10' },
+  { label: 'Скидка 15%', value: 'd15' },
+  { label: 'Скидка 20%', value: 'd20' },
+]
+const BRANCH_TO_REGION = {
+  tashkent: 'tashkent',
+  samarkand: 'fergana',
+  fergana: 'fergana',
+  bukhara: 'fergana',
+  online: 'online',
+}
+const FORMAT_OPTIONS = ['Оффлайн', 'Онлайн']
 
 export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new' }) {
   const isDoplata = mode === 'doplata'
-  const { branches, students, payments, addPayment, addStudent, updateStudent, groups } = useData()
+  const { branches, students, payments, addPayment, addStudent, updateStudent, groups, courses } = useData()
   const { user, hasPermission } = useAuth()
 
   const canExpenses = hasPermission('finance', 'expenses')
@@ -32,7 +51,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     method: 'Наличные',
     amount: '',
     contractNumber: '',
-    tariff: 'Стандарт Тариф',
+    tariff: 'standard',
+    discount: 'full',
     learningFormat: 'Оффлайн',
     comment: '',
     branch: user?.branch !== 'all' ? user.branch : 'tashkent',
@@ -58,14 +78,28 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     ? payments.filter(p => p.type === 'income' && String(p.studentId) === String(form.studentId))
     : []
   const totalPaid = studentPayments.reduce((sum, p) => sum + p.amount, 0)
-  const totalCoursePrice = selectedStudent?.totalCoursePrice || 0
   const currentAmount = Number(form.amount) || 0
-  const autoDebt = totalCoursePrice > 0 ? Math.max(0, totalCoursePrice - totalPaid - currentAmount) : 0
 
   // Filter groups by branch
   const branchGroups = groups.filter(g =>
     g.status !== 'archived' && (user?.branch !== 'all' ? g.branch === user.branch : g.branch === form.branch)
   )
+
+  // ─── Auto-calculate course price from course + tariff + discount + region ───
+  const selectedCourse = courses.find(c => c.name === form.course)
+  const region = form.learningFormat === 'Онлайн' ? 'online' : (BRANCH_TO_REGION[form.branch] || 'tashkent')
+  const coursePricing = selectedCourse?.pricing?.[region]?.[form.tariff]
+  const courseFullPrice = coursePricing?.[form.discount] || coursePricing?.full || 0
+  const availableTariffs = selectedCourse?.pricing?.[region]
+    ? TARIFF_OPTIONS.filter(t => selectedCourse.pricing[region][t.value])
+    : TARIFF_OPTIONS
+  const availableDiscounts = coursePricing
+    ? DISCOUNT_OPTIONS.filter(d => coursePricing[d.value] !== undefined)
+    : DISCOUNT_OPTIONS
+
+  // Use course price from selection, or fallback to student's saved totalCoursePrice
+  const totalCoursePrice = courseFullPrice || selectedStudent?.totalCoursePrice || 0
+  const autoDebt = totalCoursePrice > 0 ? Math.max(0, totalCoursePrice - totalPaid - currentAmount) : 0
 
   // Auto-fill from selected student
   useEffect(() => {
@@ -149,6 +183,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     // ─── Auto-create student if new client (no studentId selected) ───
     if (form.type === 'income' && !studentId && form.clientName) {
       try {
+        const tariffLabel = TARIFF_OPTIONS.find(t => t.value === form.tariff)?.label || form.tariff
         const newStudent = await addStudent({
           name: form.clientName,
           phone: form.phone || '',
@@ -158,9 +193,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           groupId: selectedGroup?.id || '',
           status: 'active',
           balance: 0,
-          totalCoursePrice: 0,
+          totalCoursePrice: courseFullPrice || 0,
           learningFormat: form.learningFormat || 'Оффлайн',
-          tariff: form.tariff || 'Стандарт Тариф',
+          tariff: tariffLabel,
+          discount: form.discount || 'full',
           contractNumber: form.contractNumber || '',
         })
         studentId = newStudent.id
@@ -188,6 +224,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       }
     }
 
+    const tariffLbl = TARIFF_OPTIONS.find(t => t.value === form.tariff)?.label || form.tariff
+    const discountLbl = DISCOUNT_OPTIONS.find(d => d.value === form.discount)?.label || ''
     const paymentData = {
       type: form.type,
       student: form.type === 'income' ? form.clientName : form.expenseDescription,
@@ -200,8 +238,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       group: selectedGroup?.name || '',
       courseStartDate: form.courseStartDate,
       debt: autoDebt,
+      totalCoursePrice: totalCoursePrice || 0,
       contractNumber: form.contractNumber,
-      tariff: form.tariff,
+      tariff: tariffLbl,
+      discount: discountLbl,
       learningFormat: form.learningFormat,
       comment: form.comment,
       phone: form.phone,
@@ -395,6 +435,27 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               <>
                 <div className="text-slate-500">Формат:</div>
                 <div className="font-medium">{savedPayment.learningFormat} ({savedPayment.tariff})</div>
+              </>
+            )}
+
+            {savedPayment.discount && savedPayment.discount !== 'Без скидки' && (
+              <>
+                <div className="text-slate-500">Скидка:</div>
+                <div className="font-medium text-emerald-600">{savedPayment.discount}</div>
+              </>
+            )}
+
+            {savedPayment.totalCoursePrice > 0 && (
+              <>
+                <div className="text-slate-500">Стоимость курса:</div>
+                <div className="font-bold text-blue-600">{formatCurrency(savedPayment.totalCoursePrice)}</div>
+              </>
+            )}
+
+            {savedPayment.debt > 0 && (
+              <>
+                <div className="text-slate-500">Остаток долга:</div>
+                <div className="font-bold text-red-500">{formatCurrency(savedPayment.debt)}</div>
               </>
             )}
 
@@ -609,20 +670,80 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                 </div>
               </div>
 
-              {/* Section: Group & Course */}
+              {/* Section: Course & Group */}
               <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Группа</h4>
+                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Курс и группа</h4>
                 <div className="grid grid-cols-2 gap-3">
+                  {/* Course selection */}
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Выбрать группу *</label>
-                    <select value={form.groupId} onChange={(e) => set('groupId', e.target.value)} required
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Курс *</label>
+                    <select value={form.course} onChange={(e) => {
+                      set('course', e.target.value)
+                      // Reset tariff if not available for this course
+                      const c = courses.find(cr => cr.name === e.target.value)
+                      const r = form.learningFormat === 'Онлайн' ? 'online' : (BRANCH_TO_REGION[form.branch] || 'tashkent')
+                      if (c?.pricing?.[r] && !c.pricing[r][form.tariff]) {
+                        const firstTariff = Object.keys(c.pricing[r])[0]
+                        if (firstTariff) set('tariff', firstTariff)
+                      }
+                    }} required
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">— Выберите группу —</option>
-                      {branchGroups.map(g => (
-                        <option key={g.id} value={g.id}>{g.name} — {g.course} ({g.schedule || 'без расписания'})</option>
+                      <option value="">— Выберите курс —</option>
+                      {courses.map(c => (
+                        <option key={c.id || c.name} value={c.name}>{c.icon || '📚'} {c.name} ({c.duration || '—'})</option>
                       ))}
                     </select>
                   </div>
+
+                  {/* Format */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Формат обучения</label>
+                    <select value={form.learningFormat} onChange={(e) => set('learningFormat', e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {FORMAT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Tariff */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Тариф</label>
+                    <select value={form.tariff} onChange={(e) => set('tariff', e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {availableTariffs.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Discount */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Скидка</label>
+                    <select value={form.discount} onChange={(e) => set('discount', e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {availableDiscounts.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Auto-calculated price display */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Стоимость курса</label>
+                    <div className={`w-full px-3 py-2 rounded-lg text-sm font-bold ${courseFullPrice > 0 ? 'bg-blue-50 border border-blue-200 text-blue-700' : 'bg-slate-100 border border-slate-200 text-slate-400'}`}>
+                      {courseFullPrice > 0 ? formatCurrency(courseFullPrice) : 'Выберите курс и тариф'}
+                    </div>
+                  </div>
+
+                  {/* Group selection */}
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Группа *</label>
+                    <select value={form.groupId} onChange={(e) => set('groupId', e.target.value)} required
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">— Выберите группу —</option>
+                      {branchGroups
+                        .filter(g => !form.course || g.course === form.course)
+                        .map(g => (
+                          <option key={g.id} value={g.id}>{g.name} — {g.course} ({g.schedule || 'без расписания'})</option>
+                        ))}
+                    </select>
+                  </div>
+
                   {form.groupId && (() => {
                     const selectedGroup = groups.find(g => g.id === form.groupId)
                     return selectedGroup ? (
@@ -633,13 +754,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                       </div>
                     ) : null
                   })()}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Тариф</label>
-                    <select value={form.tariff} onChange={(e) => set('tariff', e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {TARIFFS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Номер договора</label>
                     <input type="text" value={form.contractNumber} onChange={(e) => set('contractNumber', e.target.value)}
@@ -718,7 +833,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Остаток долга (авто)</label>
                 <div className={`w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-semibold ${autoDebt > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                  {totalCoursePrice > 0 ? formatCurrency(autoDebt) : 'Укажите стоимость курса в профиле ученика'}
+                  {totalCoursePrice > 0 ? formatCurrency(autoDebt) : 'Выберите курс и тариф'}
                 </div>
               </div>
               <div>
