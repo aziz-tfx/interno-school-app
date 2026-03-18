@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
-import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown } from 'lucide-react'
+import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor } from 'lucide-react'
 import { generateContract } from '../utils/generateContract'
 import { pushSaleToAmo } from '../utils/amocrm'
 import { db } from '../firebase'
@@ -168,7 +168,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       managerId: user?.managerId || null,
     }
 
-    const saved = addPayment(paymentData)
+    const saved = await addPayment(paymentData)
 
     // Auto-update reports if this is an income payment
     if (form.type === 'income') {
@@ -203,7 +203,27 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       }
     }
 
-    setSavedPayment({ ...paymentData, id: saved.id })
+    // Check if LMS account was created (first payment)
+    const isFirstPayment = studentPayments.length === 0 && form.type === 'income'
+    let lmsCredentials = null
+    if (isFirstPayment && form.phone) {
+      // Wait briefly for Firestore to update, then read credentials
+      await new Promise(r => setTimeout(r, 500))
+      try {
+        const studentDocRef = doc(db, 'students', String(Number(form.studentId)))
+        const snap = await getDoc(studentDocRef)
+        if (snap.exists()) {
+          const data = snap.data()
+          if (data.lmsLogin && data.lmsPassword) {
+            lmsCredentials = { login: data.lmsLogin, password: data.lmsPassword }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to read LMS credentials:', err)
+      }
+    }
+
+    setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials })
     setShowReceipt(true)
 
     // Push to amoCRM (non-blocking — doesn't prevent the sale)
@@ -368,6 +388,24 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                   <span key={f.id} className="text-xs bg-slate-100 px-2 py-1 rounded">{f.name}</span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* LMS Account Credentials — shown on first payment */}
+          {savedPayment.lmsCredentials && (
+            <div className="border-t border-blue-200 bg-blue-50 rounded-xl p-4 mt-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Monitor size={16} className="text-blue-600" />
+                <p className="text-sm font-bold text-blue-800">Данные для входа в LMS</p>
+              </div>
+              <p className="text-xs text-blue-600 mb-3">Передайте эти данные студенту для доступа к личному кабинету</p>
+              <div className="grid grid-cols-2 gap-2 bg-white rounded-lg p-3 border border-blue-200">
+                <div className="text-slate-500 text-sm">Логин:</div>
+                <div className="font-bold text-slate-900 text-sm font-mono">{savedPayment.lmsCredentials.login}</div>
+                <div className="text-slate-500 text-sm">Пароль:</div>
+                <div className="font-bold text-slate-900 text-sm font-mono">{savedPayment.lmsCredentials.password}</div>
+              </div>
+              <p className="text-[10px] text-blue-400 mt-2">Студент может войти на сайт используя эти данные</p>
             </div>
           )}
 

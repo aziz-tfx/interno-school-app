@@ -572,11 +572,61 @@ export function DataProvider({ children }) {
           newStatus = remainingDebt > 0 ? 'debtor' : 'active'
         }
 
+        // Grant LMS access on first payment
+        const isFirstPayment = previousPaid === 0 && payment.amount > 0
+        const lmsUpdate = {}
+        if (isFirstPayment) {
+          lmsUpdate.lmsAccess = true
+          lmsUpdate.lmsAccessGrantedAt = new Date().toISOString()
+        }
+        // If status becomes active after payment (was debtor), restore LMS access
+        if (newStatus === 'active' && student.status === 'debtor') {
+          lmsUpdate.lmsAccess = true
+        }
+
         await updateDoc(doc(db, 'students', payment.studentId), {
           balance: newBalance,
           status: newStatus,
           nextPaymentDate: payment.nextPaymentDate || student.nextPaymentDate || null,
+          ...lmsUpdate,
         })
+
+        // Auto-create student LMS account on first payment
+        if (isFirstPayment && student.phone) {
+          try {
+            const employeesRef = collection(db, 'employees')
+            const empSnap = await getDocs(employeesRef)
+            const allEmps = empSnap.docs.map(d => d.data())
+            // Check if account already exists (by phone)
+            const existing = allEmps.find(e => e.phone === student.phone && e.role === 'student')
+            if (!existing) {
+              // Generate 6-digit password
+              const password = String(100000 + Math.floor(Math.random() * 900000))
+              // Login = phone (cleaned: digits only)
+              const login = student.phone.replace(/[^0-9]/g, '')
+              const newId = Date.now()
+              const studentAccount = {
+                id: newId,
+                login,
+                password,
+                name: student.name,
+                role: 'student',
+                branch: student.branch || 'tashkent',
+                avatar: student.name?.charAt(0)?.toUpperCase() || '?',
+                phone: student.phone,
+                studentId: student.id,
+              }
+              await setDoc(doc(employeesRef, String(newId)), studentAccount)
+              // Save credentials on student record for receipt display
+              await updateDoc(doc(db, 'students', payment.studentId), {
+                lmsLogin: login,
+                lmsPassword: password,
+              })
+            }
+          } catch (err) {
+            console.error('Failed to create student LMS account:', err)
+          }
+        }
       }
     }
 

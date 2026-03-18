@@ -5,7 +5,7 @@ import { formatCurrency } from '../data/mockData'
 import {
   User, Phone, BookOpen, Calendar, CreditCard, FileText,
   Image, Download, AlertTriangle, CheckCircle, Clock, Plus,
-  ChevronDown, ChevronUp, Paperclip, Eye,
+  ChevronDown, ChevronUp, Paperclip, Eye, Monitor, ToggleLeft, ToggleRight,
 } from 'lucide-react'
 import Modal from './Modal'
 import PaymentForm from './PaymentForm'
@@ -78,6 +78,52 @@ export default function StudentProfile({ student, onClose }) {
           </div>
         </div>
       </div>
+
+      {/* LMS Access Toggle */}
+      <div className={`flex items-center justify-between rounded-xl p-4 ${student.lmsAccess ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${student.lmsAccess ? 'bg-emerald-100' : 'bg-red-100'}`}>
+            <Monitor size={18} className={student.lmsAccess ? 'text-emerald-600' : 'text-red-500'} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Доступ к LMS</p>
+            <p className="text-xs text-slate-500">
+              {student.lmsAccess
+                ? student.status === 'active' ? 'Активен — студент имеет доступ к курсу' : 'Выдан, но заблокирован из-за статуса'
+                : 'Не активирован — выдаётся после первой оплаты'}
+            </p>
+          </div>
+        </div>
+        {canPayments && (
+          <button
+            onClick={() => updateStudent(student.id, { lmsAccess: !student.lmsAccess })}
+            className="flex-shrink-0"
+            title={student.lmsAccess ? 'Отключить доступ' : 'Включить доступ'}
+          >
+            {student.lmsAccess ? (
+              <ToggleRight size={36} className="text-emerald-500 hover:text-emerald-600 transition-colors" />
+            ) : (
+              <ToggleLeft size={36} className="text-slate-300 hover:text-blue-500 transition-colors" />
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* LMS Credentials (if account exists) */}
+      {student.lmsLogin && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Monitor size={16} className="text-blue-600" />
+            <p className="text-sm font-semibold text-blue-800">Данные для входа в LMS</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <span className="text-slate-500">Логин:</span>
+            <span className="font-mono font-bold text-slate-900">{student.lmsLogin}</span>
+            <span className="text-slate-500">Пароль:</span>
+            <span className="font-mono font-bold text-slate-900">{student.lmsPassword}</span>
+          </div>
+        </div>
+      )}
 
       {/* Financial Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -93,6 +93,10 @@ export default function Login() {
                 <span className="text-slate-600"><strong className="text-slate-800">Учитель:</strong> teacher1 / teach123</span>
                 <span className="text-purple-600 font-medium">Группы + посещаемость</span>
               </div>
+              <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
+                <span className="text-slate-600"><strong className="text-slate-800">Студент:</strong> номер телефона</span>
+                <span className="text-slate-500 font-medium">LMS кабинет</span>
+              </div>
             </div>
           </div>
         </form>

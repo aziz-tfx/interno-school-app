@@ -5,7 +5,7 @@ import { useData } from '../../contexts/DataContext'
 import {
   ArrowLeft, BookOpen, FileText, CheckCircle2, Bell, Plus, Pencil, Trash2, X,
   Clock, Calendar, Upload, Download, Users, ChevronDown, ChevronUp, Send, Award,
-  Video, Link2, File, Image as ImageIcon, ExternalLink
+  Video, Link2, File, Image as ImageIcon, ExternalLink, Settings2, Save, Info, CheckCircle
 } from 'lucide-react'
 
 // ─── Lesson Form ─────────────────────────────────────────────────────
@@ -356,6 +356,236 @@ function GradeCard({ submission, maxScore, onGrade }) {
   )
 }
 
+// ─── Course & Group Settings Tab ─────────────────────────────────────
+function CourseSettingsTab({ group, course, canEdit, canManage }) {
+  const { updateGroup, updateCourse, teachers, branches } = useData()
+  const [groupForm, setGroupForm] = useState({
+    name: group?.name || '',
+    schedule: group?.schedule || '',
+    maxOffline: group?.maxOffline || 15,
+    teacherId: group?.teacherId || '',
+    status: group?.status || 'active',
+  })
+  const [courseForm, setCourseForm] = useState({
+    description: course?.description || '',
+    featuresText: (course?.features || []).join('\n'),
+    duration: course?.duration || '3 мес',
+  })
+  const [savingGroup, setSavingGroup] = useState(false)
+  const [savingCourse, setSavingCourse] = useState(false)
+  const [savedGroup, setSavedGroup] = useState(false)
+  const [savedCourse, setSavedCourse] = useState(false)
+
+  const branchTeachers = teachers.filter(t => t.branch === group?.branch)
+
+  const handleSaveGroup = async () => {
+    setSavingGroup(true)
+    try {
+      await updateGroup(group.id, {
+        ...groupForm,
+        teacherId: groupForm.teacherId ? Number(groupForm.teacherId) : null,
+        maxOffline: Number(groupForm.maxOffline),
+      })
+      setSavedGroup(true)
+      setTimeout(() => setSavedGroup(false), 2000)
+    } catch (err) { console.error(err) }
+    setSavingGroup(false)
+  }
+
+  const handleSaveCourse = async () => {
+    if (!course) return
+    setSavingCourse(true)
+    try {
+      const features = courseForm.featuresText
+        ? courseForm.featuresText.split('\n').map(f => f.trim()).filter(Boolean)
+        : []
+      await updateCourse(course.id, {
+        description: courseForm.description,
+        features,
+        duration: courseForm.duration,
+      })
+      setSavedCourse(true)
+      setTimeout(() => setSavedCourse(false), 2000)
+    } catch (err) { console.error(err) }
+    setSavingCourse(false)
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Group Settings */}
+      <div className="glass-card rounded-2xl p-5">
+        <h4 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <Settings2 size={18} className="text-blue-500" />
+          Настройки группы
+        </h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Название группы</label>
+            <input type="text" value={groupForm.name}
+              onChange={e => setGroupForm(prev => ({ ...prev, name: e.target.value }))}
+              disabled={!canManage}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Расписание</label>
+            <input type="text" value={groupForm.schedule}
+              onChange={e => setGroupForm(prev => ({ ...prev, schedule: e.target.value }))}
+              disabled={!canEdit}
+              placeholder="Пн/Ср/Пт 09:00-10:30"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Учитель</label>
+            <select value={groupForm.teacherId}
+              onChange={e => setGroupForm(prev => ({ ...prev, teacherId: e.target.value }))}
+              disabled={!canManage}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50">
+              <option value="">— Не назначен —</option>
+              {branchTeachers.map(t => (
+                <option key={t.id} value={t.id}>{t.name} ({t.subject})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Макс. оффлайн учеников</label>
+            <input type="number" min="1" max="100" value={groupForm.maxOffline}
+              onChange={e => setGroupForm(prev => ({ ...prev, maxOffline: e.target.value }))}
+              disabled={!canManage}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Статус</label>
+            <select value={groupForm.status}
+              onChange={e => setGroupForm(prev => ({ ...prev, status: e.target.value }))}
+              disabled={!canManage}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50">
+              <option value="active">Активная</option>
+              <option value="full">Набор закрыт</option>
+              <option value="archived">Архивная</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            {(canEdit || canManage) && (
+              <button onClick={handleSaveGroup} disabled={savingGroup}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  savedGroup ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}>
+                {savedGroup ? <CheckCircle size={14} /> : <Save size={14} />}
+                {savingGroup ? 'Сохранение...' : savedGroup ? 'Сохранено!' : 'Сохранить группу'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Course Settings */}
+      {course && (
+        <div className="glass-card rounded-2xl p-5">
+          <h4 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <span className="text-xl">{course.icon || '📚'}</span>
+            Настройки курса: {course.name}
+          </h4>
+
+          {/* Course info (read-only) */}
+          <div className="bg-blue-50/50 rounded-xl p-3 mb-4 flex items-start gap-2">
+            <Info size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-slate-500">
+              Изменения курса применяются ко всем группам, использующим этот курс.
+              Для изменения тарифов и цен перейдите в раздел «Курсы».
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Длительность курса</label>
+              <select value={courseForm.duration}
+                onChange={e => setCourseForm(prev => ({ ...prev, duration: e.target.value }))}
+                disabled={!canManage}
+                className="w-full sm:w-48 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50">
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                  <option key={m} value={`${m} мес`}>{m} мес</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Описание курса</label>
+              <textarea value={courseForm.description}
+                onChange={e => setCourseForm(prev => ({ ...prev, description: e.target.value }))}
+                disabled={!canEdit}
+                rows={3}
+                placeholder="Краткое описание курса..."
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50 resize-none" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Программа курса <span className="text-slate-400 font-normal">(каждый пункт с новой строки)</span>
+              </label>
+              <textarea value={courseForm.featuresText}
+                onChange={e => setCourseForm(prev => ({ ...prev, featuresText: e.target.value }))}
+                disabled={!canEdit}
+                rows={5}
+                placeholder={"Планировка и зонирование\n3D-визуализация\nРабота с заказчиком"}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50 resize-none font-mono" />
+            </div>
+
+            {/* Preview features */}
+            {courseForm.featuresText && (
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Предпросмотр</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {courseForm.featuresText.split('\n').filter(f => f.trim()).map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
+                      <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
+                      {f.trim()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(canEdit || canManage) && (
+              <button onClick={handleSaveCourse} disabled={savingCourse}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  savedCourse ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}>
+                {savedCourse ? <CheckCircle size={14} /> : <Save size={14} />}
+                {savingCourse ? 'Сохранение...' : savedCourse ? 'Сохранено!' : 'Сохранить курс'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pricing preview (read-only) */}
+      {course?.pricing && (
+        <div className="glass-card rounded-2xl p-5">
+          <h4 className="text-base font-bold text-slate-900 mb-3">Тарифы и цены</h4>
+          <p className="text-xs text-slate-400 mb-3">Для изменения цен перейдите в Курсы → {course.name} → Редактировать</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {Object.entries(course.pricing).map(([region, tariffs]) => (
+              <div key={region} className="bg-slate-50 rounded-xl p-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
+                  {region === 'tashkent' ? 'Ташкент' : region === 'fergana' ? 'Фергана / Самарканд' : 'Онлайн'}
+                </p>
+                {Object.entries(tariffs).map(([tariff, prices]) => (
+                  <div key={tariff} className="flex justify-between text-sm py-0.5">
+                    <span className="text-slate-600 capitalize">{tariff === 'standard' ? 'Стандарт' : tariff === 'vip' ? 'VIP' : tariff === 'premium' ? 'Премиум' : 'Индивидуальный'}</span>
+                    <span className="font-semibold text-slate-900">
+                      {new Intl.NumberFormat('ru-RU').format(prices.full)}{prices.monthly ? '/мес' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Group View ─────────────────────────────────────────────────
 export default function LMSGroupView() {
   const { groupId } = useParams()
@@ -363,7 +593,8 @@ export default function LMSGroupView() {
   const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const {
-    groups, courses, students,
+    groups, courses, students, teachers, branches,
+    updateGroup, updateCourse,
     lmsLessons, lmsAssignments, lmsAnnouncements,
     addLmsLesson, updateLmsLesson, deleteLmsLesson,
     addLmsAssignment, updateLmsAssignment, deleteLmsAssignment,
@@ -377,8 +608,14 @@ export default function LMSGroupView() {
   const canGrade = hasPermission('lms', 'grade')
   const canManage = hasPermission('lms', 'manage')
 
+  const isStudent = user?.role === 'student'
+
   const group = groups.find(g => g.id === groupId)
   const course = courses.find(c => c.name === group?.course)
+
+  // Check student LMS access
+  const myStudent = isStudent ? students.find(s => s.name === user?.name || s.phone === user?.phone) : null
+  const studentBlocked = isStudent && (!myStudent || myStudent.lmsAccess !== true || myStudent.status !== 'active')
 
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'lessons')
   const [showModal, setShowModal] = useState(searchParams.get('action') || null)
@@ -408,6 +645,26 @@ export default function LMSGroupView() {
       <div className="text-center py-20">
         <p className="text-slate-400">Группа не найдена</p>
         <button onClick={() => navigate('/lms')} className="text-blue-600 text-sm mt-2 hover:underline">Вернуться</button>
+      </div>
+    )
+  }
+
+  // Block student from accessing group content if debtor/frozen/no access
+  if (studentBlocked) {
+    return (
+      <div className="text-center py-20">
+        <div className="w-16 h-16 rounded-2xl bg-red-100 mx-auto mb-4 flex items-center justify-center">
+          <X size={28} className="text-red-500" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Доступ ограничен</h3>
+        <p className="text-slate-500 text-sm max-w-sm mx-auto">
+          {myStudent?.status === 'debtor'
+            ? 'Доступ к курсу приостановлен из-за задолженности. Оплатите для возобновления.'
+            : myStudent?.status === 'frozen'
+              ? 'Ваше обучение заморожено. Свяжитесь с администрацией.'
+              : 'Для доступа к курсу необходимо произвести оплату.'}
+        </p>
+        <button onClick={() => navigate('/lms')} className="text-blue-600 text-sm mt-4 hover:underline">← Назад</button>
       </div>
     )
   }
@@ -442,6 +699,7 @@ export default function LMSGroupView() {
     { id: 'assignments', label: 'Задания', icon: CheckCircle2, count: assignments.length },
     { id: 'announcements', label: 'Объявления', icon: Bell, count: announcements.length },
     ...(canEdit ? [{ id: 'students', label: 'Ученики', icon: Users, count: groupStudents.length }] : []),
+    ...(canEdit ? [{ id: 'settings', label: 'Настройки', icon: Settings2 }] : []),
   ]
 
   return (
@@ -700,6 +958,11 @@ export default function LMSGroupView() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Settings Tab */}
+      {activeTab === 'settings' && canEdit && (
+        <CourseSettingsTab group={group} course={course} canEdit={canEdit} canManage={canManage} />
       )}
 
       {/* Modals */}

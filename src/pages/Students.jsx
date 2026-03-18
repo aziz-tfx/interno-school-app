@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User } from 'lucide-react'
+import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { formatCurrency } from '../data/mockData'
@@ -275,9 +275,16 @@ export default function Students() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[student.status]}`}>
-                            {statusLabels[student.status]}
-                          </span>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[student.status]}`}>
+                              {statusLabels[student.status]}
+                            </span>
+                            {student.lmsAccess && (
+                              <span title="LMS доступ активен" className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                <Monitor size={10} className="text-blue-600" />
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1">
