@@ -62,6 +62,41 @@ async function clearCollection(collectionName) {
   await batch.commit()
 }
 
+// Migrate courses: update existing Firestore docs with new fields from DEFAULT_COURSES
+async function migrateCourses() {
+  try {
+    const snapshot = await getDocs(collection(db, 'courses'))
+    if (snapshot.empty) return
+
+    const batch = writeBatch(db)
+    let hasChanges = false
+
+    snapshot.docs.forEach(docSnap => {
+      const data = docSnap.data()
+      const defaultCourse = DEFAULT_COURSES.find(c => c.name === data.name)
+      if (!defaultCourse) return
+
+      const updates = {}
+      // Add missing fields from default
+      if (!data.description && defaultCourse.description) updates.description = defaultCourse.description
+      if ((!data.features || data.features.length === 0) && defaultCourse.features) updates.features = defaultCourse.features
+      if (!data.tariffFeatures && defaultCourse.tariffFeatures) updates.tariffFeatures = defaultCourse.tariffFeatures
+
+      if (Object.keys(updates).length > 0) {
+        batch.update(docSnap.ref, updates)
+        hasChanges = true
+      }
+    })
+
+    if (hasChanges) {
+      await batch.commit()
+      console.log('Courses migrated with descriptions and features')
+    }
+  } catch (err) {
+    console.error('Course migration error:', err)
+  }
+}
+
 // Default courses with pricing data
 const DEFAULT_COURSES = [
   {
@@ -349,6 +384,8 @@ export function DataProvider({ children }) {
 
     subscribeCollection('branches', setBranches, defaultBranches, 'branches')
     subscribeCollection('courses', setCourses, DEFAULT_COURSES, 'courses')
+    // Migrate existing courses with new fields (description, features, tariffFeatures)
+    migrateCourses()
     subscribeCollection('groups', setGroups, DEFAULT_GROUPS, 'groups')
     subscribeCollection('students', setStudents, defaultStudents, 'students')
     subscribeCollection('teachers', setTeachers, defaultTeachers, 'teachers')
