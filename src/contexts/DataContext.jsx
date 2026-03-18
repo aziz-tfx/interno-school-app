@@ -554,7 +554,19 @@ export function DataProvider({ children }) {
 
     // Update student balance and debt status if it's a student payment
     if (payment.type === 'income' && payment.studentId) {
-      const student = students.find(s => String(s.id) === String(payment.studentId))
+      let student = students.find(s => String(s.id) === String(payment.studentId))
+      // If student not yet in local state (just created), read from Firestore directly
+      if (!student) {
+        try {
+          const snap = await getDocs(collection(db, 'students'))
+          const freshStudent = snap.docs.find(d => d.id === String(payment.studentId))
+          if (freshStudent) {
+            student = { id: freshStudent.id, ...freshStudent.data() }
+          }
+        } catch (e) {
+          console.error('Failed to fetch student from Firestore:', e)
+        }
+      }
       if (student) {
         const newBalance = student.balance + payment.amount
         const totalCoursePrice = student.totalCoursePrice || 0
@@ -584,11 +596,18 @@ export function DataProvider({ children }) {
           lmsUpdate.lmsAccess = true
         }
 
+        // Also update totalCoursePrice if provided and student doesn't have one
+        const priceUpdate = {}
+        if (payment.totalCoursePrice && !student.totalCoursePrice) {
+          priceUpdate.totalCoursePrice = payment.totalCoursePrice
+        }
+
         await updateDoc(doc(db, 'students', payment.studentId), {
           balance: newBalance,
           status: newStatus,
           nextPaymentDate: payment.nextPaymentDate || student.nextPaymentDate || null,
           ...lmsUpdate,
+          ...priceUpdate,
         })
 
         // Auto-create student LMS account if not exists yet
