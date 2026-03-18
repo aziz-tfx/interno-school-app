@@ -344,12 +344,21 @@ export function DataProvider({ children }) {
     // Helper to subscribe to a Firestore collection and map docs to array with id
     function subscribeCollection(collectionName, setter, defaultData, loadKey) {
       const unsub = onSnapshot(collection(db, collectionName), async (snapshot) => {
-        if (!loadedRef.current[loadKey] && snapshot.empty) {
-          // First load and collection is empty — seed with defaults
-          await seedCollection(collectionName, defaultData)
-          // onSnapshot will fire again after seeding, so just mark loaded
-          loadedRef.current[loadKey] = true
-          checkAllLoaded()
+        if (snapshot.empty && defaultData?.length > 0) {
+          // Collection is empty — seed with defaults (works on first load AND after deletion)
+          if (!loadedRef.current[`${loadKey}_seeding`]) {
+            loadedRef.current[`${loadKey}_seeding`] = true
+            try {
+              await seedCollection(collectionName, defaultData)
+            } catch (err) {
+              console.error(`Failed to seed ${collectionName}:`, err)
+            }
+            loadedRef.current[`${loadKey}_seeding`] = false
+          }
+          if (!loadedRef.current[loadKey]) {
+            loadedRef.current[loadKey] = true
+            checkAllLoaded()
+          }
           return
         }
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
@@ -383,9 +392,23 @@ export function DataProvider({ children }) {
     }
 
     subscribeCollection('branches', setBranches, defaultBranches, 'branches')
+    // Courses: force-seed if empty, then subscribe
+    ;(async () => {
+      try {
+        const coursesSnap = await getDocs(collection(db, 'courses'))
+        if (coursesSnap.empty) {
+          console.log('Courses collection empty — seeding with defaults...')
+          await seedCollection('courses', DEFAULT_COURSES)
+          console.log('Courses seeded:', DEFAULT_COURSES.length, 'courses')
+        } else {
+          // Migrate existing courses with new fields
+          await migrateCourses()
+        }
+      } catch (err) {
+        console.error('Courses seed/migrate error:', err)
+      }
+    })()
     subscribeCollection('courses', setCourses, DEFAULT_COURSES, 'courses')
-    // Migrate existing courses with new fields (description, features, tariffFeatures)
-    migrateCourses()
     subscribeCollection('groups', setGroups, DEFAULT_GROUPS, 'groups')
     subscribeCollection('students', setStudents, defaultStudents, 'students')
     subscribeCollection('teachers', setTeachers, defaultTeachers, 'teachers')
