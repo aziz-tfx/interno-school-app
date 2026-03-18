@@ -12,6 +12,7 @@ import {
   Settings,
   FileBarChart,
   X,
+  Monitor,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import Logo from './Logo'
@@ -30,6 +31,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/finance', icon: DollarSign, label: 'Продажи', permission: 'finance' },
     { to: '/employees', icon: UserCog, label: 'Сотрудники', permission: 'employees' },
     { to: '/reports', icon: FileBarChart, label: 'Отчёты', permission: 'finance' },
+    { to: '/lms', icon: Monitor, label: 'LMS', permission: null },
     { to: '/attendance', icon: ClipboardCheck, label: 'Посещаемость', permission: null },
   ]
 

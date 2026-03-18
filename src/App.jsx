@@ -12,6 +12,8 @@ import Attendance from './pages/Attendance'
 import Employees from './pages/Employees'
 import Profile from './pages/Profile'
 import Reports from './pages/Reports'
+import LMSDashboard from './pages/lms/LMSDashboard'
+import LMSGroupView from './pages/lms/LMSGroupView'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -62,6 +64,8 @@ export default function App() {
         } />
         <Route path="attendance" element={<Attendance />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="lms" element={<LMSDashboard />} />
+        <Route path="lms/group/:groupId" element={<LMSGroupView />} />
         <Route path="profile" element={<Profile />} />
       </Route>
     </Routes>

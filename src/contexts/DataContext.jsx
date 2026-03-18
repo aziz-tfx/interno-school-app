@@ -333,12 +333,18 @@ export function DataProvider({ children }) {
   const [salesPlans, setSalesPlansState] = useState({})
   const [loading, setLoading] = useState(true)
 
+  // LMS collections
+  const [lmsLessons, setLmsLessons] = useState([])
+  const [lmsAssignments, setLmsAssignments] = useState([])
+  const [lmsSubmissions, setLmsSubmissions] = useState([])
+  const [lmsAnnouncements, setLmsAnnouncements] = useState([])
+
   // Track whether initial load has resolved for each collection
-  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false })
+  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false })
 
   const checkAllLoaded = () => {
     const r = loadedRef.current
-    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans) {
+    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements) {
       setLoading(false)
     }
   }
@@ -420,6 +426,30 @@ export function DataProvider({ children }) {
     subscribeCollection('payments', setPaymentsList, defaultPayments, 'payments')
     subscribeMetaDoc('attendance', setAttendance, [], 'attendance')
     subscribeMetaDoc('salesPlans', setSalesPlansState, {}, 'salesPlans')
+
+    // LMS collections (no default data — starts empty)
+    function subscribeLmsCollection(collectionName, setter, loadKey) {
+      const unsub = onSnapshot(collection(db, collectionName), (snapshot) => {
+        const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
+        setter(items)
+        if (!loadedRef.current[loadKey]) {
+          loadedRef.current[loadKey] = true
+          checkAllLoaded()
+        }
+      }, (err) => {
+        console.error(`LMS collection ${collectionName} error:`, err)
+        if (!loadedRef.current[loadKey]) {
+          loadedRef.current[loadKey] = true
+          checkAllLoaded()
+        }
+      })
+      unsubscribers.push(unsub)
+    }
+
+    subscribeLmsCollection('lmsLessons', setLmsLessons, 'lmsLessons')
+    subscribeLmsCollection('lmsAssignments', setLmsAssignments, 'lmsAssignments')
+    subscribeLmsCollection('lmsSubmissions', setLmsSubmissions, 'lmsSubmissions')
+    subscribeLmsCollection('lmsAnnouncements', setLmsAnnouncements, 'lmsAnnouncements')
 
     return () => {
       unsubscribers.forEach(unsub => unsub())
@@ -616,6 +646,45 @@ export function DataProvider({ children }) {
     return list.reduce((sum, p) => sum + p.amount, 0)
   }
 
+  // --- LMS CRUD ---
+  const addLmsLesson = async (lesson) => {
+    const docRef = await addDoc(collection(db, 'lmsLessons'), lesson)
+    return { ...lesson, id: docRef.id }
+  }
+  const updateLmsLesson = async (id, updates) => {
+    await updateDoc(doc(db, 'lmsLessons', id), updates)
+  }
+  const deleteLmsLesson = async (id) => {
+    await deleteDoc(doc(db, 'lmsLessons', id))
+  }
+
+  const addLmsAssignment = async (assignment) => {
+    const docRef = await addDoc(collection(db, 'lmsAssignments'), assignment)
+    return { ...assignment, id: docRef.id }
+  }
+  const updateLmsAssignment = async (id, updates) => {
+    await updateDoc(doc(db, 'lmsAssignments', id), updates)
+  }
+  const deleteLmsAssignment = async (id) => {
+    await deleteDoc(doc(db, 'lmsAssignments', id))
+  }
+
+  const addLmsSubmission = async (submission) => {
+    const docRef = await addDoc(collection(db, 'lmsSubmissions'), submission)
+    return { ...submission, id: docRef.id }
+  }
+  const updateLmsSubmission = async (id, updates) => {
+    await updateDoc(doc(db, 'lmsSubmissions', id), updates)
+  }
+
+  const addLmsAnnouncement = async (announcement) => {
+    const docRef = await addDoc(collection(db, 'lmsAnnouncements'), announcement)
+    return { ...announcement, id: docRef.id }
+  }
+  const deleteLmsAnnouncement = async (id) => {
+    await deleteDoc(doc(db, 'lmsAnnouncements', id))
+  }
+
   // --- Sales Plans ---
   const setSalesPlan = async (managerId, amount, month) => {
     const key = month || new Date().toISOString().slice(0, 7)
@@ -729,6 +798,11 @@ export function DataProvider({ children }) {
       getStudentsByBranch, getTeachersByBranch, getPaymentsByBranch,
       getDebtors, getTotalRevenue, getTotalExpenses,
       salesPlans, setSalesPlan, getSalesPlan, getManagerPerf, getBranchPerf,
+      // LMS
+      lmsLessons, addLmsLesson, updateLmsLesson, deleteLmsLesson,
+      lmsAssignments, addLmsAssignment, updateLmsAssignment, deleteLmsAssignment,
+      lmsSubmissions, addLmsSubmission, updateLmsSubmission,
+      lmsAnnouncements, addLmsAnnouncement, deleteLmsAnnouncement,
       resetData,
       loading,
     }}>
