@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 
-const COURSES = ['Интерьер Дизайн', 'Английский', 'Подготовка к IELTS', 'Математика', 'IT/Программирование', 'Русский язык', 'Корейский язык', 'Подготовка к SAT', 'Робототехника']
+const COURSES = ['Интерьер Дизайн', 'Английский', 'Подготовка к IELTS', 'Математика', 'IT/Программирование', 'Русский язык', 'Корейский язык', 'Подготовка к SAT', 'Робототехника', 'Дата Аналитика']
 
 export default function GroupForm({ group, onClose }) {
   const { branches, teachers, addGroup, updateGroup } = useData()
