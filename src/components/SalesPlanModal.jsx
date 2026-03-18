@@ -3,6 +3,8 @@ import { Target, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
+import { db } from '../firebase'
+import { doc, setDoc, getDoc, collection } from 'firebase/firestore'
 
 export default function SalesPlanModal({ onClose }) {
   const { getSalesPlan, setSalesPlan, branches } = useData()
@@ -26,11 +28,45 @@ export default function SalesPlanModal({ onClose }) {
 
   const setDraft = (id, val) => setDrafts(prev => ({ ...prev, [id]: val }))
 
-  const handleSave = () => {
-    managers.forEach(m => {
+  const handleSave = async () => {
+    let overallRevenue = 0
+    for (const m of managers) {
       const num = Number(drafts[m.managerId])
-      setSalesPlan(m.managerId, num >= 0 ? num : 0, month)
-    })
+      const amount = num >= 0 ? num : 0
+      setSalesPlan(m.managerId, amount, month)
+      overallRevenue += amount
+
+      // Sync to reportPlans (used by Reports page)
+      const reportPlanDocId = `${month}_${m.name}`
+      const reportPlanRef = doc(db, 'reportPlans', reportPlanDocId)
+      try {
+        const existing = await getDoc(reportPlanRef)
+        const existingData = existing.exists() ? existing.data() : {}
+        await setDoc(reportPlanRef, {
+          ...existingData,
+          monthKey: month,
+          manager: m.name,
+          revenue: amount,
+          leads: existingData.leads || 0,
+          conversations: existingData.conversations || 0,
+          signups: existingData.signups || 0,
+          visited: existingData.visited || 0,
+          sales: existingData.sales || 0,
+        })
+      } catch (err) {
+        console.error('Failed to sync report plan:', err)
+      }
+    }
+
+    // Update overall plan in reportPlans
+    try {
+      await setDoc(doc(db, 'reportPlans', `${month}___overall__`), {
+        monthKey: month, manager: '__overall__', revenue: overallRevenue,
+      })
+    } catch (err) {
+      console.error('Failed to sync overall plan:', err)
+    }
+
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }

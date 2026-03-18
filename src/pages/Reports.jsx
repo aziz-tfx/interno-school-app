@@ -127,14 +127,17 @@ function distributeSeedData(totals, year, month) {
 
 export default function Reports() {
   const { user, employees } = useAuth()
+  const { setSalesPlan } = useData()
   const isAdmin = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'rop'
   const isSales = user?.role === 'sales'
 
-  const managers = useMemo(() => {
-    return employees
-      .filter(e => e.role === 'sales' || e.role === 'rop')
-      .map(e => e.name)
+  const salesStaff = useMemo(() => {
+    return employees.filter(e => e.role === 'sales' || e.role === 'rop')
   }, [employees])
+
+  const managers = useMemo(() => {
+    return salesStaff.map(e => e.name)
+  }, [salesStaff])
 
   // Month selector
   const now = new Date()
@@ -491,6 +494,12 @@ export default function Reports() {
       await setDoc(doc(plansRef, `${monthKey}_${mgr}`), {
         monthKey, manager: mgr, ...planForm[mgr],
       })
+
+      // Sync revenue to salesPlans (used by Dashboard Sales tab)
+      const emp = salesStaff.find(e => e.name === mgr)
+      if (emp?.managerId && planForm[mgr]?.revenue != null) {
+        setSalesPlan(emp.managerId, planForm[mgr].revenue, monthKey)
+      }
     }
     await setDoc(doc(plansRef, `${monthKey}___overall__`), {
       monthKey, manager: '__overall__', revenue: planForm.__overall__ || 0,

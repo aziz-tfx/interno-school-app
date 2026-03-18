@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
-import { Receipt, Printer, Paperclip, X, FileText, Image } from 'lucide-react'
+import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown } from 'lucide-react'
+import { generateContract } from '../utils/generateContract'
 import { db } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 
@@ -34,11 +35,15 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
     branch: user?.branch !== 'all' ? user.branch : 'tashkent',
     nextPaymentDate: '',
     expenseDescription: '',
+    passport: '',
+    durationMonths: '3',
+    schedule: '',
   })
 
   const [files, setFiles] = useState([])
   const [showReceipt, setShowReceipt] = useState(false)
   const [savedPayment, setSavedPayment] = useState(null)
+  const [generatingContract, setGeneratingContract] = useState(false)
 
   const branchStudents = students.filter(s =>
     user?.branch !== 'all' ? s.branch === user.branch : s.branch === form.branch
@@ -177,6 +182,32 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
     window.print()
   }
 
+  const handleGenerateContract = async () => {
+    setGeneratingContract(true)
+    try {
+      const payment = savedPayment || {}
+      await generateContract({
+        clientName: payment.student || form.clientName,
+        passport: form.passport || '',
+        phone: payment.phone || form.phone,
+        course: payment.course || form.course,
+        courseDetails: '',
+        amount: payment.amount || Number(form.amount) || 0,
+        tariff: payment.tariff || form.tariff,
+        contractNumber: payment.contractNumber || form.contractNumber,
+        contractDate: payment.date || form.paymentDate,
+        courseStartDate: payment.courseStartDate || form.courseStartDate,
+        durationMonths: Number(form.durationMonths) || 3,
+        schedule: form.schedule || '',
+        learningFormat: payment.learningFormat || form.learningFormat,
+      })
+    } catch (err) {
+      console.error('Contract generation failed:', err)
+      alert('Ошибка при генерации договора')
+    }
+    setGeneratingContract(false)
+  }
+
   // ========== Receipt View ==========
   if (showReceipt && savedPayment) {
     return (
@@ -287,7 +318,12 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-2">
+        <div className="flex justify-end gap-3 pt-2 flex-wrap">
+          <button onClick={handleGenerateContract} disabled={generatingContract}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50">
+            <FileDown size={16} />
+            {generatingContract ? 'Генерация...' : 'Скачать договор'}
+          </button>
           <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
             <Printer size={16} />
             Печать
@@ -397,6 +433,31 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Contract / Shartnoma Info */}
+          <div className="bg-purple-50 rounded-lg p-4 space-y-3">
+            <h4 className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Данные для договора (Шартнома)</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Паспорт клиента</label>
+                <input type="text" value={form.passport} onChange={(e) => set('passport', e.target.value)}
+                  placeholder="AD 1234567"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Срок обучения (мес.)</label>
+                <input type="number" min="1" max="24" value={form.durationMonths} onChange={(e) => set('durationMonths', e.target.value)}
+                  placeholder="3"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Расписание</label>
+                <input type="text" value={form.schedule} onChange={(e) => set('schedule', e.target.value)}
+                  placeholder="16:00 - 18:00, Пн/Ср/Пт"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
               </div>
             </div>
           </div>
@@ -538,14 +599,24 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
         </div>
       )}
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
-          Отмена
-        </button>
-        <button type="submit" className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
-          <Receipt size={16} />
-          {form.type === 'income' ? 'Принять оплату' : 'Записать расход'}
-        </button>
+      <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+        {form.type === 'income' && (
+          <button type="button" onClick={handleGenerateContract} disabled={generatingContract || !form.clientName}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-40">
+            <FileDown size={16} />
+            {generatingContract ? 'Генерация...' : 'Договор'}
+          </button>
+        )}
+        {form.type !== 'income' && <div />}
+        <div className="flex gap-3">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+            Отмена
+          </button>
+          <button type="submit" className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
+            <Receipt size={16} />
+            {form.type === 'income' ? 'Принять оплату' : 'Записать расход'}
+          </button>
+        </div>
       </div>
     </form>
   )
