@@ -2,17 +2,18 @@ import { useState, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 
-const COURSES = ['Интерьер Дизайн', 'Английский', 'Подготовка к IELTS', 'Математика', 'IT/Программирование', 'Русский язык', 'Корейский язык', 'Подготовка к SAT', 'Робототехника', 'Дата Аналитика']
-
 export default function GroupForm({ group, onClose }) {
-  const { branches, teachers, addGroup, updateGroup } = useData()
+  const { branches, teachers, courses, addGroup, updateGroup } = useData()
   const { user } = useAuth()
   const isEdit = !!group
+
+  // Get course names from Firestore courses collection
+  const courseNames = courses.map(c => c.name)
 
   const [form, setForm] = useState({
     name: '',
     branch: user?.branch !== 'all' ? user.branch : branches[0]?.id || '',
-    course: 'Интерьер Дизайн',
+    course: courseNames[0] || '',
     teacherId: '',
     maxOffline: 15,
     schedule: '',
@@ -76,7 +77,7 @@ export default function GroupForm({ group, onClose }) {
           <label className="block text-sm font-medium text-slate-700 mb-1">Курс *</label>
           <select value={form.course} onChange={e => set('course', e.target.value)}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+            {courseNames.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 

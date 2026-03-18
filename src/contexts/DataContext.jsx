@@ -62,8 +62,215 @@ async function clearCollection(collectionName) {
   await batch.commit()
 }
 
+// Default courses with pricing data
+const DEFAULT_COURSES = [
+  {
+    name: 'Интерьер Дизайн', icon: '🎨', duration: '6 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'Английский', icon: '🇬🇧', duration: '6 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'Подготовка к IELTS', icon: '📝', duration: '4 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'Математика', icon: '📐', duration: '9 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'IT/Программирование', icon: '💻', duration: '8 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'Русский язык', icon: '🇷🇺', duration: '6 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'Корейский язык', icon: '🇰🇷', duration: '6 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'Подготовка к SAT', icon: '🎓', duration: '5 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'Робототехника', icon: '🤖', duration: '9 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
+        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
+        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
+        individual: { full: 6000000, d10: 5400000, monthly: true },
+      },
+      fergana: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
+        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
+        individual: { full: 4000000, d10: 3600000, monthly: true },
+      },
+      online: {
+        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
+        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+      },
+    },
+  },
+  {
+    name: 'Дата Аналитика', icon: '📊', duration: '6 мес',
+    pricing: {
+      tashkent: {
+        standard: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
+        vip: { full: 9200000, d10: 8280000, d15: 7820000, d20: 7360000 },
+      },
+      online: {
+        standard: { full: 1000000, monthly: true },
+        vip: { full: 1500000, monthly: true },
+      },
+    },
+  },
+]
+
 export function DataProvider({ children }) {
   const [branches, setBranches] = useState([])
+  const [courses, setCourses] = useState([])
   const [groups, setGroups] = useState([])
   const [students, setStudents] = useState([])
   const [teachers, setTeachers] = useState([])
@@ -73,11 +280,11 @@ export function DataProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   // Track whether initial load has resolved for each collection
-  const loadedRef = useRef({ branches: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false })
+  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false })
 
   const checkAllLoaded = () => {
     const r = loadedRef.current
-    if (r.branches && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans) {
+    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans) {
       setLoading(false)
     }
   }
@@ -127,6 +334,7 @@ export function DataProvider({ children }) {
     }
 
     subscribeCollection('branches', setBranches, defaultBranches, 'branches')
+    subscribeCollection('courses', setCourses, DEFAULT_COURSES, 'courses')
     subscribeCollection('groups', setGroups, DEFAULT_GROUPS, 'groups')
     subscribeCollection('students', setStudents, defaultStudents, 'students')
     subscribeCollection('teachers', setTeachers, defaultTeachers, 'teachers')
@@ -178,6 +386,20 @@ export function DataProvider({ children }) {
     const map = {}
     branches.forEach(b => { map[b.id] = b.name })
     return map
+  }
+
+  // --- Courses CRUD ---
+  const addCourse = async (course) => {
+    const docRef = await addDoc(collection(db, 'courses'), course)
+    return { ...course, id: docRef.id }
+  }
+
+  const updateCourse = async (id, updates) => {
+    await updateDoc(doc(db, 'courses', id), updates)
+  }
+
+  const deleteCourse = async (id) => {
+    await deleteDoc(doc(db, 'courses', id))
   }
 
   // --- Students CRUD ---
@@ -397,6 +619,7 @@ export function DataProvider({ children }) {
     setLoading(true)
     await Promise.all([
       clearCollection('branches'),
+      clearCollection('courses'),
       clearCollection('groups'),
       clearCollection('students'),
       clearCollection('teachers'),
@@ -404,6 +627,7 @@ export function DataProvider({ children }) {
     ])
     await Promise.all([
       seedCollection('branches', defaultBranches),
+      seedCollection('courses', DEFAULT_COURSES),
       seedCollection('groups', DEFAULT_GROUPS),
       seedCollection('students', defaultStudents),
       seedCollection('teachers', defaultTeachers),
@@ -417,6 +641,7 @@ export function DataProvider({ children }) {
   return (
     <DataContext.Provider value={{
       branches, addBranch, updateBranch, deleteBranch, getBranchName, getBranchNames,
+      courses, addCourse, updateCourse, deleteCourse,
       groups, addGroup, updateGroup, deleteGroup, getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
       students, addStudent, updateStudent, deleteStudent,
       teachers, addTeacher, updateTeacher, deleteTeacher,
