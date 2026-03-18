@@ -540,7 +540,7 @@ export default function Finance() {
       {/* ─── Payment Modal ──────────────────────────────────────────────── */}
       <Modal isOpen={paymentModal} onClose={() => setPaymentModal(false)}
         title={paymentType === 'doplata' ? 'Доплата' : 'Новая продажа'} size="lg">
-        <PaymentForm onClose={() => setPaymentModal(false)} />
+        <PaymentForm onClose={() => setPaymentModal(false)} mode={paymentType} />
       </Modal>
     </div>
   )
