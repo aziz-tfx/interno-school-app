@@ -34,7 +34,7 @@ export default function App() {
     )
   }
 
-  const homePage = user.role === 'teacher' ? <Attendance /> : <Dashboard />
+  const homePage = user.role === 'student' ? <LMSDashboard /> : user.role === 'teacher' ? <Attendance /> : <Dashboard />
 
   return (
     <Routes>
@@ -64,8 +64,12 @@ export default function App() {
         } />
         <Route path="attendance" element={<Attendance />} />
         <Route path="reports" element={<Reports />} />
-        <Route path="lms" element={<LMSDashboard />} />
-        <Route path="lms/group/:groupId" element={<LMSGroupView />} />
+        <Route path="lms" element={
+          <ProtectedRoute permission="lms"><LMSDashboard /></ProtectedRoute>
+        } />
+        <Route path="lms/group/:groupId" element={
+          <ProtectedRoute permission="lms"><LMSGroupView /></ProtectedRoute>
+        } />
         <Route path="profile" element={<Profile />} />
       </Route>
     </Routes>

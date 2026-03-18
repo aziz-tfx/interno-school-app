@@ -370,9 +370,12 @@ export default function LMSGroupView() {
     addLmsAnnouncement, deleteLmsAnnouncement,
   } = useData()
 
+  const { hasPermission } = useAuth()
   const isTeacher = user?.role === 'teacher'
   const isAdmin = user?.role === 'owner' || user?.role === 'admin'
-  const canEdit = isTeacher || isAdmin
+  const canEdit = hasPermission('lms', 'create_content')
+  const canGrade = hasPermission('lms', 'grade')
+  const canManage = hasPermission('lms', 'manage')
 
   const group = groups.find(g => g.id === groupId)
   const course = courses.find(c => c.name === group?.course)

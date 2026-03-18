@@ -50,6 +50,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: true, edit: true },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: { view: true, add: true, edit: true, delete: true },
+    lms:       { view: true, create_content: true, grade: true, manage: true },
     settings: true,
   },
   admin: {
@@ -59,6 +60,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: true, edit: true },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: { view: true, add: true, edit: true, delete: true },
+    lms:       { view: true, create_content: true, grade: true, manage: true },
     settings: true,
   },
   branch_director: {
@@ -68,6 +70,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: true, edit: true },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: { view: true, add: true, edit: true, delete: false },
+    lms:       { view: true, create_content: true, grade: true, manage: true },
     settings: false,
   },
   rop: {
@@ -77,6 +80,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   { view: true, fullPnL: false, expenses: false, payments: true },
     employees: { view: true, add: false, edit: false, delete: false },
+    lms:       { view: true, create_content: false, grade: false, manage: false },
     settings: false,
   },
   sales: {
@@ -86,6 +90,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   { view: true, fullPnL: false, expenses: false, payments: true },
     employees: false,
+    lms:       false,
     settings: false,
   },
   accountant: {
@@ -95,6 +100,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: false,
+    lms:       false,
     settings: false,
   },
   financier: {
@@ -104,6 +110,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: false,
+    lms:       false,
     settings: false,
   },
   hr: {
@@ -113,6 +120,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   false,
     employees: { view: true, add: true, edit: true, delete: false },
+    lms:       false,
     settings: false,
   },
   smm: {
@@ -122,6 +130,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   false,
     employees: false,
+    lms:       false,
     settings: false,
   },
   teacher: {
@@ -131,15 +140,17 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   false,
     employees: false,
+    lms:       { view: true, create_content: true, grade: true, manage: false },
     settings: false,
   },
   student: {
     dashboard: false, branches: false,
     students:  false,
     teachers:  false,
-    courses:   { view: true, add: false, edit: false },
+    courses:   false,
     finance:   false,
     employees: false,
+    lms:       { view: true, create_content: false, grade: false, manage: false },
     settings: false,
   },
 }

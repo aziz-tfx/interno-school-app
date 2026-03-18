@@ -16,6 +16,7 @@ const SECTION_META = {
   courses:    { label: 'Курсы',       icon: BookOpen,     type: 'object', actions: ['view', 'add', 'edit'] },
   finance:    { label: 'Продажи',     icon: DollarSign,   type: 'object', actions: ['view', 'fullPnL', 'expenses', 'payments'] },
   employees:  { label: 'Сотрудники',  icon: UserCog,      type: 'object', actions: ['view', 'add', 'edit', 'delete'] },
+  lms:        { label: 'LMS',         icon: BookOpen,     type: 'object', actions: ['view', 'create_content', 'grade', 'manage'] },
   settings:   { label: 'Настройки',   icon: Settings,     type: 'boolean' },
 }
 
@@ -28,6 +29,9 @@ const ACTION_LABELS = {
   fullPnL: 'Полный P&L',
   expenses: 'Расходы',
   payments: 'Платежи',
+  create_content: 'Создание контента',
+  grade: 'Оценивание',
+  manage: 'Управление',
 }
 
 const ROLES_ORDER = [

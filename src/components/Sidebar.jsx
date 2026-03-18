@@ -31,7 +31,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/finance', icon: DollarSign, label: 'Продажи', permission: 'finance' },
     { to: '/employees', icon: UserCog, label: 'Сотрудники', permission: 'employees' },
     { to: '/reports', icon: FileBarChart, label: 'Отчёты', permission: 'finance' },
-    { to: '/lms', icon: Monitor, label: 'LMS', permission: null },
+    { to: '/lms', icon: Monitor, label: 'LMS', permission: 'lms' },
     { to: '/attendance', icon: ClipboardCheck, label: 'Посещаемость', permission: null },
   ]
 
