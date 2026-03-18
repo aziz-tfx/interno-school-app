@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
+import Logo from '../components/Logo'
 
 export default function Login() {
   const { login, error, setError } = useAuth()
@@ -21,8 +22,7 @@ export default function Login() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-300 via-violet-300 to-cyan-300 bg-clip-text text-transparent tracking-tight">INTERNO</h1>
-          <p className="text-blue-300/70 mt-2">School Management System</p>
+          <Logo size="xl" variant="light" />
         </div>
 
         <form onSubmit={handleSubmit} className="glass-strong rounded-3xl shadow-2xl shadow-black/20 p-8 space-y-6">

@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import Logo from './Logo'
 
 export default function Sidebar({ open, onClose }) {
   const { user, hasPermission, getRoleLabel, logout } = useAuth()
@@ -72,8 +73,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         <div className="p-6 border-b border-white/10">
-          <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">INTERNO</h1>
-          <p className="text-slate-400 text-sm mt-1">School Management</p>
+          <Logo size="md" variant="light" />
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map(({ to, icon: Icon, label }) => (

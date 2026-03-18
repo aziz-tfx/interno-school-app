@@ -7,6 +7,7 @@ import { generateContract } from '../utils/generateContract'
 import { pushSaleToAmo } from '../utils/amocrm'
 import { db } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
+import Logo from './Logo'
 
 const METHODS = ['Наличные', 'Payme', 'Click', 'Uzum']
 const TARIFFS = ['Стандарт Тариф', 'Премиум Тариф', 'VIP Тариф', 'Онлайн', 'Оффлайн']
@@ -273,8 +274,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
         <div id="payment-receipt" className="border border-slate-200 rounded-xl p-6 bg-white space-y-3 text-sm">
           <div className="text-center border-b border-slate-200 pb-3 mb-3">
-            <h4 className="text-lg font-bold text-slate-900">INTERNO School</h4>
-            <p className="text-slate-500 text-xs">{branches.find(b => b.id === savedPayment.branch)?.name} — Квитанция об оплате</p>
+            <Logo size="md" variant="dark" />
+            <p className="text-slate-500 text-xs mt-1">{branches.find(b => b.id === savedPayment.branch)?.name} — Квитанция об оплате</p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
