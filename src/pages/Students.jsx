@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor } from 'lucide-react'
+import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { formatCurrency } from '../data/mockData'
@@ -17,7 +17,7 @@ export default function Students() {
   const { user, hasPermission } = useAuth()
   const {
     students, branches, payments, groups, teachers,
-    deleteStudent, deleteGroup,
+    addStudent, deleteStudent, deleteGroup,
     getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
     getBranchName,
   } = useData()
@@ -123,7 +123,7 @@ export default function Students() {
   }
 
   const getStudentDebtInfo = (student) => {
-    const studentPays = payments.filter(p => p.type === 'income' && p.studentId === student.id)
+    const studentPays = payments.filter(p => p.type === 'income' && String(p.studentId) === String(student.id))
     const totalPaid = studentPays.reduce((sum, p) => sum + p.amount, 0)
     const totalCoursePrice = student.totalCoursePrice || 0
     const debt = totalCoursePrice > 0 ? Math.max(0, totalCoursePrice - totalPaid) : 0
@@ -135,6 +135,59 @@ export default function Students() {
 
   // Unique groups for dropdown
   const uniqueGroups = [...new Set(allStudents.map(s => s.group).filter(Boolean))]
+
+  // ─── Sync orphan payments → create missing student records ───
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
+
+  const orphanPayments = payments.filter(p => {
+    if (p.type !== 'income' || !p.student) return false
+    // No studentId at all, or studentId doesn't match any student
+    if (!p.studentId) return true
+    return !students.find(s => String(s.id) === String(p.studentId))
+  })
+
+  const handleSync = async () => {
+    setSyncing(true)
+    setSyncResult(null)
+    let created = 0
+    // Group orphan payments by student name + phone to avoid duplicates
+    const clientMap = new Map()
+    for (const p of orphanPayments) {
+      const key = `${p.student}__${p.phone || ''}`
+      if (!clientMap.has(key)) {
+        clientMap.set(key, p)
+      }
+    }
+    for (const [, p] of clientMap) {
+      // Check if student already exists by name + phone
+      const existing = students.find(s =>
+        s.name === p.student && (s.phone === p.phone || (!s.phone && !p.phone))
+      )
+      if (!existing) {
+        try {
+          await addStudent({
+            name: p.student,
+            phone: p.phone || '',
+            course: p.course || '',
+            branch: p.branch || 'tashkent',
+            group: p.group || '',
+            status: 'active',
+            balance: 0,
+            totalCoursePrice: 0,
+            learningFormat: p.learningFormat || 'Оффлайн',
+            tariff: p.tariff || '',
+            contractNumber: p.contractNumber || '',
+          })
+          created++
+        } catch (err) {
+          console.error('Sync error:', err)
+        }
+      }
+    }
+    setSyncResult(`Создано ${created} учеников из ${clientMap.size} уникальных клиентов`)
+    setSyncing(false)
+  }
 
   return (
     <div className="space-y-6">
@@ -151,13 +204,31 @@ export default function Students() {
             </button>
           )}
           {canAdd && activeTab === 'students' && (
-            <button onClick={handleAdd}
-              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
-              <Plus size={16} /> Добавить ученика
-            </button>
+            <>
+              {orphanPayments.length > 0 && (
+                <button onClick={handleSync} disabled={syncing}
+                  className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors flex items-center gap-2 disabled:opacity-50">
+                  <Users size={16} /> {syncing ? 'Синхронизация...' : `Синхронизировать (${orphanPayments.length})`}
+                </button>
+              )}
+              <button onClick={handleAdd}
+                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
+                <Plus size={16} /> Добавить ученика
+              </button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Sync Result */}
+      {syncResult && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+          <p className="text-sm text-emerald-700">{syncResult}</p>
+          <button onClick={() => setSyncResult(null)} className="text-emerald-400 hover:text-emerald-600">
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 glass rounded-xl p-1">
