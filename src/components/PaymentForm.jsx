@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
 import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown } from 'lucide-react'
 import { generateContract } from '../utils/generateContract'
+import { pushSaleToAmo } from '../utils/amocrm'
 import { db } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 
@@ -203,6 +204,32 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
     setSavedPayment({ ...paymentData, id: saved.id })
     setShowReceipt(true)
+
+    // Push to amoCRM (non-blocking — doesn't prevent the sale)
+    if (form.type === 'income') {
+      pushSaleToAmo({
+        clientName: form.clientName,
+        phone: form.phone,
+        course: form.course,
+        group: selectedGroup?.name || '',
+        amount: Number(form.amount),
+        method: form.method,
+        date: form.paymentDate,
+        branch: form.branch,
+        tariff: form.tariff,
+        contractNumber: form.contractNumber,
+        debt: autoDebt,
+        trancheNumber: studentPayments.length + 1,
+        managerName: user?.name || '',
+        comment: form.comment,
+      }).then(result => {
+        if (result.success) {
+          console.log('Sale pushed to amoCRM:', result.leadId)
+        } else {
+          console.warn('amoCRM sync skipped:', result.error)
+        }
+      })
+    }
   }
 
   const handlePrint = () => {
