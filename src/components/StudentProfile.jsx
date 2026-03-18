@@ -23,7 +23,7 @@ export default function StudentProfile({ student, onClose }) {
 
   // Get all payments for this student
   const studentPayments = payments
-    .filter(p => p.type === 'income' && p.studentId === student.id)
+    .filter(p => p.type === 'income' && String(p.studentId) === String(student.id))
     .sort((a, b) => new Date(b.date) - new Date(a.date))
 
   const totalPaid = studentPayments.reduce((sum, p) => sum + p.amount, 0)

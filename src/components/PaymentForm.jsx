@@ -14,7 +14,7 @@ const TARIFFS = ['Стандарт Тариф', 'Премиум Тариф', 'VI
 
 export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new' }) {
   const isDoplata = mode === 'doplata'
-  const { branches, students, payments, addPayment, groups } = useData()
+  const { branches, students, payments, addPayment, addStudent, updateStudent, groups } = useData()
   const { user, hasPermission } = useAuth()
 
   const canExpenses = hasPermission('finance', 'expenses')
@@ -144,11 +144,54 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     e.preventDefault()
 
     const selectedGroup = groups.find(g => g.id === form.groupId)
+    let studentId = form.type === 'income' ? form.studentId || null : null
+
+    // ─── Auto-create student if new client (no studentId selected) ───
+    if (form.type === 'income' && !studentId && form.clientName) {
+      try {
+        const newStudent = await addStudent({
+          name: form.clientName,
+          phone: form.phone || '',
+          course: form.course || '',
+          branch: form.branch || 'tashkent',
+          group: selectedGroup?.name || '',
+          groupId: selectedGroup?.id || '',
+          status: 'active',
+          balance: 0,
+          totalCoursePrice: 0,
+          learningFormat: form.learningFormat || 'Оффлайн',
+          tariff: form.tariff || 'Стандарт Тариф',
+          contractNumber: form.contractNumber || '',
+        })
+        studentId = newStudent.id
+      } catch (err) {
+        console.error('Failed to auto-create student:', err)
+      }
+    }
+
+    // ─── Update existing student's group if changed ───
+    if (form.type === 'income' && studentId && selectedGroup) {
+      try {
+        const existingStudent = students.find(s => String(s.id) === String(studentId))
+        if (existingStudent && existingStudent.group !== selectedGroup.name) {
+          await updateStudent(studentId, {
+            group: selectedGroup.name,
+            groupId: selectedGroup.id,
+            course: form.course || existingStudent.course,
+            branch: form.branch || existingStudent.branch,
+            learningFormat: form.learningFormat || existingStudent.learningFormat || 'Оффлайн',
+            tariff: form.tariff || existingStudent.tariff || '',
+          })
+        }
+      } catch (err) {
+        console.error('Failed to update student group:', err)
+      }
+    }
 
     const paymentData = {
       type: form.type,
       student: form.type === 'income' ? form.clientName : form.expenseDescription,
-      studentId: form.type === 'income' ? form.studentId || null : null,
+      studentId,
       branch: form.branch,
       amount: Number(form.amount),
       method: form.method,
