@@ -591,9 +591,9 @@ export function DataProvider({ children }) {
           ...lmsUpdate,
         })
 
-        // Auto-create student LMS account on first payment
+        // Auto-create student LMS account if not exists yet
         const studentPhone = student.phone || payment.phone
-        if (isFirstPayment && studentPhone) {
+        if (studentPhone && !student.lmsLogin) {
           try {
             const employeesRef = collection(db, 'employees')
             const empSnap = await getDocs(employeesRef)
@@ -619,15 +619,24 @@ export function DataProvider({ children }) {
               }
               await setDoc(doc(employeesRef, String(newId)), studentAccount)
               // Save credentials on student record for receipt display
-              await updateDoc(doc(db, 'students', payment.studentId), {
+              await updateDoc(doc(db, 'students', String(payment.studentId)), {
                 lmsLogin: login,
                 lmsPassword: password,
+                lmsAccess: true,
+                lmsAccessGrantedAt: new Date().toISOString(),
               })
               return { ...newPayment, id: docRef.id, lmsCredentials: { login, password } }
+            } else {
+              // Account exists — return existing credentials
+              return { ...newPayment, id: docRef.id, lmsCredentials: { login: existing.login, password: existing.password } }
             }
           } catch (err) {
             console.error('Failed to create student LMS account:', err)
           }
+        }
+        // If student already has lmsLogin, return it
+        if (student.lmsLogin) {
+          return { ...newPayment, id: docRef.id, lmsCredentials: { login: student.lmsLogin, password: student.lmsPassword } }
         }
       }
     }
