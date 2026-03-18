@@ -7,12 +7,11 @@ import { generateContract } from '../utils/generateContract'
 import { db } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 
-const METHODS = ['Наличные', 'Перевод', 'Карта']
-const COURSES = ['Интерьер Дизайн', 'Английский', 'Подготовка к IELTS', 'Математика', 'IT/Программирование', 'Русский язык', 'Корейский язык', 'Подготовка к SAT', 'Робототехника']
+const METHODS = ['Наличные', 'Payme', 'Click', 'Uzum']
 const TARIFFS = ['Стандарт Тариф', 'Премиум Тариф', 'VIP Тариф', 'Онлайн', 'Оффлайн']
 
 export default function PaymentForm({ onClose, preselectedStudentId }) {
-  const { branches, students, payments, addPayment } = useData()
+  const { branches, students, payments, addPayment, groups } = useData()
   const { user, hasPermission } = useAuth()
 
   const canExpenses = hasPermission('finance', 'expenses')
@@ -23,7 +22,8 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
     studentId: preselectedStudentId ? String(preselectedStudentId) : '',
     clientName: '',
     phone: '',
-    course: 'Интерьер Дизайн',
+    groupId: '',
+    course: '',
     paymentDate: new Date().toISOString().split('T')[0],
     courseStartDate: '',
     method: 'Наличные',
@@ -59,21 +59,44 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
   const currentAmount = Number(form.amount) || 0
   const autoDebt = totalCoursePrice > 0 ? Math.max(0, totalCoursePrice - totalPaid - currentAmount) : 0
 
+  // Filter groups by branch
+  const branchGroups = groups.filter(g =>
+    g.status !== 'archived' && (user?.branch !== 'all' ? g.branch === user.branch : g.branch === form.branch)
+  )
+
   // Auto-fill from selected student
   useEffect(() => {
     if (form.studentId) {
       const student = students.find(s => s.id === Number(form.studentId))
       if (student) {
+        const studentGroup = groups.find(g => g.name === student.group)
         setForm(prev => ({
           ...prev,
           clientName: student.name,
           phone: student.phone,
           course: student.course,
           contractNumber: student.contractNumber || prev.contractNumber,
+          groupId: studentGroup?.id || prev.groupId,
+          schedule: studentGroup?.schedule || prev.schedule,
         }))
       }
     }
-  }, [form.studentId, students])
+  }, [form.studentId, students, groups])
+
+  // Auto-fill from selected group
+  useEffect(() => {
+    if (form.groupId) {
+      const group = groups.find(g => g.id === form.groupId)
+      if (group) {
+        setForm(prev => ({
+          ...prev,
+          course: group.course,
+          schedule: group.schedule || prev.schedule,
+          branch: group.branch || prev.branch,
+        }))
+      }
+    }
+  }, [form.groupId, groups])
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
@@ -117,6 +140,8 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
+    const selectedGroup = groups.find(g => g.id === form.groupId)
+
     const paymentData = {
       type: form.type,
       student: form.type === 'income' ? form.clientName : form.expenseDescription,
@@ -126,6 +151,7 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
       method: form.method,
       date: form.paymentDate,
       course: form.course,
+      group: selectedGroup?.name || '',
       courseStartDate: form.courseStartDate,
       debt: autoDebt,
       contractNumber: form.contractNumber,
@@ -236,6 +262,9 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
 
             <div className="text-slate-500">Имя клиента:</div>
             <div className="font-medium">{savedPayment.student}</div>
+
+            <div className="text-slate-500">Группа:</div>
+            <div className="font-medium">{savedPayment.group || '—'}</div>
 
             <div className="text-slate-500">Курс:</div>
             <div className="font-medium">{savedPayment.course}</div>
@@ -388,31 +417,30 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
             </div>
           </div>
 
-          {/* Section: Course Info */}
+          {/* Section: Group & Course */}
           <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Информация о курсе</h4>
+            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Группа</h4>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Курс *</label>
-                <select value={form.course} onChange={(e) => set('course', e.target.value)}
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Выбрать группу *</label>
+                <select value={form.groupId} onChange={(e) => set('groupId', e.target.value)} required
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="">— Выберите группу —</option>
+                  {branchGroups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name} — {g.course} ({g.schedule || 'без расписания'})</option>
+                  ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Старт курса</label>
-                <input type="date" value={form.courseStartDate} onChange={(e) => set('courseStartDate', e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Формат обучения</label>
-                <select value={form.learningFormat} onChange={(e) => set('learningFormat', e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="Оффлайн">Оффлайн</option>
-                  <option value="Онлайн">Онлайн</option>
-                  <option value="Гибрид">Гибрид</option>
-                </select>
-              </div>
+              {form.groupId && (() => {
+                const selectedGroup = groups.find(g => g.id === form.groupId)
+                return selectedGroup ? (
+                  <div className="col-span-2 bg-white rounded-lg p-3 border border-blue-100 text-sm space-y-1">
+                    <div className="flex justify-between"><span className="text-slate-500">Курс:</span><span className="font-medium">{selectedGroup.course}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Расписание:</span><span className="font-medium">{selectedGroup.schedule || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Филиал:</span><span className="font-medium">{branches.find(b => b.id === selectedGroup.branch)?.name || selectedGroup.branch}</span></div>
+                  </div>
+                ) : null
+              })()}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Тариф</label>
                 <select value={form.tariff} onChange={(e) => set('tariff', e.target.value)}
@@ -425,14 +453,6 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
                 <input type="text" value={form.contractNumber} onChange={(e) => set('contractNumber', e.target.value)}
                   placeholder="25/03"
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Филиал</label>
-                <select value={form.branch} onChange={(e) => set('branch', e.target.value)}
-                  disabled={user?.branch !== 'all'}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
               </div>
             </div>
           </div>
@@ -521,10 +541,12 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
             </div>
           </div>
 
-          {/* Section: File Attachments */}
-          <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Прикрепить файлы</h4>
-            <p className="text-xs text-slate-400">Договор, чек, фото оплаты или другие документы (макс. 10MB каждый)</p>
+          {/* Section: File Attachments — MANDATORY */}
+          <div className={`rounded-lg p-4 space-y-3 ${files.length === 0 ? 'bg-red-50 border border-red-200' : 'bg-slate-50'}`}>
+            <h4 className={`text-xs font-semibold uppercase tracking-wide ${files.length === 0 ? 'text-red-600' : 'text-slate-500'}`}>
+              Чек об оплате * (обязательно)
+            </h4>
+            <p className="text-xs text-slate-400">Приложите скриншот или фото чека: Payme, Click, Uzum или наличные (макс. 10MB)</p>
 
             <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx" onChange={handleFileAdd}
               className="hidden" />
@@ -612,9 +634,10 @@ export default function PaymentForm({ onClose, preselectedStudentId }) {
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
             Отмена
           </button>
-          <button type="submit" className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
+          <button type="submit" disabled={form.type === 'income' && files.length === 0}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
             <Receipt size={16} />
-            {form.type === 'income' ? 'Принять оплату' : 'Записать расход'}
+            {form.type === 'income' ? (files.length === 0 ? 'Приложите чек' : 'Принять оплату') : 'Записать расход'}
           </button>
         </div>
       </div>
