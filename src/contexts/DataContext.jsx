@@ -554,14 +554,14 @@ export function DataProvider({ children }) {
 
     // Update student balance and debt status if it's a student payment
     if (payment.type === 'income' && payment.studentId) {
-      const student = students.find(s => s.id === payment.studentId)
+      const student = students.find(s => String(s.id) === String(payment.studentId))
       if (student) {
         const newBalance = student.balance + payment.amount
         const totalCoursePrice = student.totalCoursePrice || 0
 
         // Calculate total paid including this new payment
         const previousPaid = paymentsList
-          .filter(p => p.type === 'income' && p.studentId === payment.studentId)
+          .filter(p => p.type === 'income' && String(p.studentId) === String(payment.studentId))
           .reduce((sum, p) => sum + p.amount, 0)
         const totalPaidNow = previousPaid + payment.amount
         const remainingDebt = totalCoursePrice > 0 ? totalCoursePrice - totalPaidNow : 0
@@ -592,18 +592,19 @@ export function DataProvider({ children }) {
         })
 
         // Auto-create student LMS account on first payment
-        if (isFirstPayment && student.phone) {
+        const studentPhone = student.phone || payment.phone
+        if (isFirstPayment && studentPhone) {
           try {
             const employeesRef = collection(db, 'employees')
             const empSnap = await getDocs(employeesRef)
             const allEmps = empSnap.docs.map(d => d.data())
             // Check if account already exists (by phone)
-            const existing = allEmps.find(e => e.phone === student.phone && e.role === 'student')
+            const existing = allEmps.find(e => e.phone === studentPhone && e.role === 'student')
             if (!existing) {
               // Generate 6-digit password
               const password = String(100000 + Math.floor(Math.random() * 900000))
               // Login = phone (cleaned: digits only)
-              const login = student.phone.replace(/[^0-9]/g, '')
+              const login = studentPhone.replace(/[^0-9]/g, '')
               const newId = Date.now()
               const studentAccount = {
                 id: newId,
@@ -613,7 +614,7 @@ export function DataProvider({ children }) {
                 role: 'student',
                 branch: student.branch || 'tashkent',
                 avatar: student.name?.charAt(0)?.toUpperCase() || '?',
-                phone: student.phone,
+                phone: studentPhone,
                 studentId: student.id,
               }
               await setDoc(doc(employeesRef, String(newId)), studentAccount)
@@ -622,6 +623,7 @@ export function DataProvider({ children }) {
                 lmsLogin: login,
                 lmsPassword: password,
               })
+              return { ...newPayment, id: docRef.id, lmsCredentials: { login, password } }
             }
           } catch (err) {
             console.error('Failed to create student LMS account:', err)

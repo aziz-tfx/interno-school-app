@@ -53,9 +53,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   )
 
   // Calculate student's previous payments and remaining debt
-  const selectedStudent = form.studentId ? students.find(s => s.id === Number(form.studentId)) : null
+  const selectedStudent = form.studentId ? students.find(s => String(s.id) === String(form.studentId)) : null
   const studentPayments = form.studentId
-    ? payments.filter(p => p.type === 'income' && p.studentId === Number(form.studentId))
+    ? payments.filter(p => p.type === 'income' && String(p.studentId) === String(form.studentId))
     : []
   const totalPaid = studentPayments.reduce((sum, p) => sum + p.amount, 0)
   const totalCoursePrice = selectedStudent?.totalCoursePrice || 0
@@ -70,7 +70,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   // Auto-fill from selected student
   useEffect(() => {
     if (form.studentId) {
-      const student = students.find(s => s.id === Number(form.studentId))
+      const student = students.find(s => String(s.id) === String(form.studentId))
       if (student) {
         const studentGroup = groups.find(g => g.name === student.group)
         setForm(prev => ({
@@ -148,7 +148,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     const paymentData = {
       type: form.type,
       student: form.type === 'income' ? form.clientName : form.expenseDescription,
-      studentId: form.type === 'income' ? Number(form.studentId) || null : null,
+      studentId: form.type === 'income' ? form.studentId || null : null,
       branch: form.branch,
       amount: Number(form.amount),
       method: form.method,
@@ -203,25 +203,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       }
     }
 
-    // Check if LMS account was created (first payment)
-    const isFirstPayment = studentPayments.length === 0 && form.type === 'income'
-    let lmsCredentials = null
-    if (isFirstPayment && form.phone) {
-      // Wait briefly for Firestore to update, then read credentials
-      await new Promise(r => setTimeout(r, 500))
-      try {
-        const studentDocRef = doc(db, 'students', String(Number(form.studentId)))
-        const snap = await getDoc(studentDocRef)
-        if (snap.exists()) {
-          const data = snap.data()
-          if (data.lmsLogin && data.lmsPassword) {
-            lmsCredentials = { login: data.lmsLogin, password: data.lmsPassword }
-          }
-        }
-      } catch (err) {
-        console.error('Failed to read LMS credentials:', err)
-      }
-    }
+    // LMS credentials returned directly from addPayment if account was created
+    const lmsCredentials = saved?.lmsCredentials || null
 
     setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials })
     setShowReceipt(true)
