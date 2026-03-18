@@ -44,7 +44,12 @@ async function seedCollection(collectionName, defaultData) {
   const batch = writeBatch(db)
   for (const item of defaultData) {
     const docRef = doc(collection(db, collectionName))
-    batch.set(docRef, { ...item, _originalId: item.id })
+    // Filter out undefined values — Firestore rejects them
+    const cleanItem = Object.fromEntries(
+      Object.entries(item).filter(([, v]) => v !== undefined)
+    )
+    if (item.id) cleanItem._originalId = item.id
+    batch.set(docRef, cleanItem)
   }
   await batch.commit()
 }
