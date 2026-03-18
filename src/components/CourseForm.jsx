@@ -31,6 +31,8 @@ export default function CourseForm({ course, onClose, onSave }) {
     name: '',
     icon: '📚',
     duration: '3 мес',
+    description: '',
+    featuresText: '',
   })
   const [pricing, setPricing] = useState(buildDefaultPricing())
 
@@ -40,6 +42,8 @@ export default function CourseForm({ course, onClose, onSave }) {
         name: course.name || '',
         icon: course.icon || '📚',
         duration: course.duration || '3 мес',
+        description: course.description || '',
+        featuresText: (course.features || []).join('\n'),
       })
       // Deep clone pricing
       if (course.pricing) {
@@ -131,10 +135,16 @@ export default function CourseForm({ course, onClose, onSave }) {
       }
     }
 
+    const features = form.featuresText
+      ? form.featuresText.split('\n').map(f => f.trim()).filter(Boolean)
+      : []
+
     onSave({
       name: form.name,
       icon: form.icon,
       duration: form.duration,
+      description: form.description || '',
+      features,
       pricing: cleanedPricing,
     })
   }
@@ -189,6 +199,28 @@ export default function CourseForm({ course, onClose, onSave }) {
               <option key={m} value={`${m} мес`}>{m} мес</option>
             ))}
           </select>
+        </div>
+
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Описание курса</label>
+          <textarea
+            value={form.description}
+            onChange={e => set('description', e.target.value)}
+            placeholder="Краткое описание курса, для кого он предназначен и что изучается..."
+            rows={2}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          />
+        </div>
+
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Программа курса <span className="text-slate-400 font-normal">(каждый пункт с новой строки)</span></label>
+          <textarea
+            value={form.featuresText}
+            onChange={e => set('featuresText', e.target.value)}
+            placeholder={"Планировка и зонирование\n3D-визуализация\nРабота с заказчиком"}
+            rows={4}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
+          />
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
-import { BookOpen, MapPin, Users, ChevronDown, ChevronUp, Tag, Monitor, GraduationCap, Plus, Pencil, Trash2, X } from 'lucide-react'
+import { BookOpen, MapPin, Users, ChevronDown, ChevronUp, Tag, Monitor, GraduationCap, Plus, Pencil, Trash2, X, CheckCircle2, Info } from 'lucide-react'
 import CourseForm from '../components/CourseForm'
 
 const REGION_LABELS = {
@@ -36,7 +36,7 @@ function formatPrice(val) {
   return new Intl.NumberFormat('ru-RU').format(val)
 }
 
-function PricingTable({ pricing, region }) {
+function PricingTable({ pricing, region, tariffFeatures }) {
   const regionData = pricing?.[region]
   if (!regionData) return <p className="text-sm text-slate-400 py-3">Нет данных для этого региона</p>
 
@@ -46,6 +46,7 @@ function PricingTable({ pricing, region }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       {tariffs.map(tariff => {
         const t = regionData[tariff]
+        const features = tariffFeatures?.[tariff] || []
         return (
           <div key={tariff} className="rounded-xl border border-slate-200 overflow-hidden bg-white/60">
             <div className={`bg-gradient-to-r ${TARIFF_HEADER_COLORS[tariff] || 'from-slate-500 to-slate-600'} px-4 py-2.5`}>
@@ -74,6 +75,16 @@ function PricingTable({ pricing, region }) {
                 <div className="flex justify-between items-baseline">
                   <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">-20%</span>
                   <span className="text-sm text-slate-700">{formatPrice(t.d20)}</span>
+                </div>
+              )}
+              {features.length > 0 && (
+                <div className="pt-2 mt-2 border-t border-slate-100 space-y-1.5">
+                  {features.map((f, i) => (
+                    <div key={i} className="flex items-start gap-1.5">
+                      <CheckCircle2 size={12} className="text-green-500 mt-0.5 flex-shrink-0" />
+                      <span className="text-[11px] text-slate-600">{f}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -158,29 +169,56 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
         </div>
       </div>
 
-      {/* Expanded pricing */}
-      {expanded && availableRegions.length > 0 && (
+      {/* Expanded content */}
+      {expanded && (
         <div className="px-4 md:px-5 pb-4 md:pb-5 border-t border-slate-100">
-          {/* Region tabs */}
-          <div className="flex gap-2 mt-4 mb-4 flex-wrap">
-            {availableRegions.map(r => (
-              <button
-                key={r}
-                onClick={() => setActiveRegion(r)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  activeRegion === r
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {r === 'online' ? <Monitor size={14} /> : <MapPin size={14} />}
-                {REGION_LABELS[r] || r}
-              </button>
-            ))}
-          </div>
+          {/* Description */}
+          {course.description && (
+            <div className="mt-4 mb-4 flex items-start gap-2 bg-blue-50/50 rounded-xl p-3">
+              <Info size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-slate-600 leading-relaxed">{course.description}</p>
+            </div>
+          )}
 
-          {/* Pricing table */}
-          <PricingTable pricing={pricing} region={activeRegion} />
+          {/* Course features */}
+          {course.features?.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Программа курса</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5">
+                {course.features.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
+                    <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
+                    {f}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Region tabs */}
+          {availableRegions.length > 0 && (
+            <>
+              <div className="flex gap-2 mt-2 mb-4 flex-wrap">
+                {availableRegions.map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setActiveRegion(r)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      activeRegion === r
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {r === 'online' ? <Monitor size={14} /> : <MapPin size={14} />}
+                    {REGION_LABELS[r] || r}
+                  </button>
+                ))}
+              </div>
+
+              {/* Pricing table with tariff features */}
+              <PricingTable pricing={pricing} region={activeRegion} tariffFeatures={course.tariffFeatures} />
+            </>
+          )}
         </div>
       )}
     </div>
