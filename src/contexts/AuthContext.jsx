@@ -274,7 +274,7 @@ export function AuthProvider({ children }) {
       setError('')
       return true
     }
-    setError('Неверный логин или пароль')
+    setError('login.error')
     return false
   }
 
@@ -290,7 +290,11 @@ export function AuthProvider({ children }) {
     return false
   }
 
-  const getRoleLabel = (role) => ROLE_LABELS[role || user?.role] || ''
+  const getRoleLabel = (role, tFn) => {
+    const r = role || user?.role
+    if (tFn) return tFn('roles.' + r)
+    return ROLE_LABELS[r] || ''
+  }
 
   // ─── Employee CRUD (Firestore) ──────────────────────────────────────────
   const addEmployee = async (emp) => {

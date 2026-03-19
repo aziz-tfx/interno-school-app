@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useData } from '../../contexts/DataContext'
+import { useLanguage } from '../../contexts/LanguageContext'
 import {
   ArrowLeft, BookOpen, FileText, CheckCircle2, Bell, Plus, Pencil, Trash2, X,
   Clock, Calendar, Upload, Download, Users, ChevronDown, ChevronUp, Send, Award,
@@ -10,6 +11,7 @@ import {
 
 // ─── Lesson Form ─────────────────────────────────────────────────────
 function LessonForm({ lesson, groupId, onSave, onClose }) {
+  const { t } = useLanguage()
   const [form, setForm] = useState({
     title: lesson?.title || '',
     description: lesson?.description || '',
@@ -47,41 +49,41 @@ function LessonForm({ lesson, groupId, onSave, onClose }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Название урока *</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.lessonTitle')} *</label>
         <input type="text" value={form.title} onChange={e => set('title', e.target.value)} required
-          placeholder="Урок 1: Введение в курс"
+          placeholder={t('lms.lessonTitlePlaceholder')}
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Дата</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.lessonDate')}</label>
           <input type="date" value={form.date} onChange={e => set('date', e.target.value)}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Порядковый №</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.lessonOrder')}</label>
           <input type="number" min="1" value={form.order} onChange={e => set('order', e.target.value)}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Краткое описание</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.lessonDescription')}</label>
         <textarea value={form.description} onChange={e => set('description', e.target.value)}
-          rows={2} placeholder="О чём этот урок..."
+          rows={2} placeholder={t('lms.lessonDescPlaceholder')}
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Содержание урока</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.lessonContent')}</label>
         <textarea value={form.content} onChange={e => set('content', e.target.value)}
-          rows={6} placeholder="Полный текст урока, теория, примеры..."
+          rows={6} placeholder={t('lms.lessonContentPlaceholder')}
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Ссылка на видео</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.videoLink')}</label>
         <input type="url" value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)}
           placeholder="https://youtube.com/watch?v=..."
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -89,7 +91,7 @@ function LessonForm({ lesson, groupId, onSave, onClose }) {
 
       {/* Materials */}
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Материалы</label>
+        <label className="block text-sm font-medium text-slate-700 mb-2">{t('lms.materials')}</label>
         {form.materials.length > 0 && (
           <div className="space-y-1 mb-2">
             {form.materials.map(m => (
@@ -105,7 +107,7 @@ function LessonForm({ lesson, groupId, onSave, onClose }) {
         )}
         <div className="flex gap-2">
           <input type="text" value={newMaterial.name} onChange={e => setNewMaterial(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Название" className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+            placeholder={t('lms.materialName')} className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
           <input type="url" value={newMaterial.url} onChange={e => setNewMaterial(prev => ({ ...prev, url: e.target.value }))}
             placeholder="URL" className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
           <button type="button" onClick={addMaterial}
@@ -117,10 +119,10 @@ function LessonForm({ lesson, groupId, onSave, onClose }) {
 
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
-          Отмена
+          {t('common.cancel')}
         </button>
         <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
-          {lesson ? 'Сохранить' : 'Создать урок'}
+          {lesson ? t('common.save') : t('lms.createLesson')}
         </button>
       </div>
     </form>
@@ -129,6 +131,7 @@ function LessonForm({ lesson, groupId, onSave, onClose }) {
 
 // ─── Assignment Form ─────────────────────────────────────────────────
 function AssignmentForm({ assignment, groupId, onSave, onClose }) {
+  const { t } = useLanguage()
   const [form, setForm] = useState({
     title: assignment?.title || '',
     description: assignment?.description || '',
@@ -152,35 +155,35 @@ function AssignmentForm({ assignment, groupId, onSave, onClose }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Название задания *</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.assignmentTitle')} *</label>
         <input type="text" value={form.title} onChange={e => set('title', e.target.value)} required
-          placeholder="Домашнее задание №1"
+          placeholder={t('lms.assignmentTitlePlaceholder')}
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Описание задания</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.assignmentDescription')}</label>
         <textarea value={form.description} onChange={e => set('description', e.target.value)}
-          rows={4} placeholder="Подробное описание задания, требования, критерии оценки..."
+          rows={4} placeholder={t('lms.assignmentDescPlaceholder')}
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Срок сдачи</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.deadline')}</label>
           <input type="date" value={form.deadline} onChange={e => set('deadline', e.target.value)}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Макс. балл</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.maxScore')}</label>
           <input type="number" min="1" value={form.maxScore} onChange={e => set('maxScore', e.target.value)}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
-          Отмена
+          {t('common.cancel')}
         </button>
         <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700">
-          {assignment ? 'Сохранить' : 'Создать задание'}
+          {assignment ? t('common.save') : t('lms.createAssignment')}
         </button>
       </div>
     </form>
@@ -189,6 +192,7 @@ function AssignmentForm({ assignment, groupId, onSave, onClose }) {
 
 // ─── Announcement Form ───────────────────────────────────────────────
 function AnnouncementForm({ groupId, onSave, onClose }) {
+  const { t } = useLanguage()
   const [form, setForm] = useState({ title: '', content: '' })
 
   const handleSubmit = (e) => {
@@ -199,18 +203,18 @@ function AnnouncementForm({ groupId, onSave, onClose }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Заголовок *</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.announcementTitleLabel')} *</label>
         <input type="text" value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} required
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Текст</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.announcementText')}</label>
         <textarea value={form.content} onChange={e => setForm(prev => ({ ...prev, content: e.target.value }))}
           rows={3} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
       </div>
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">Отмена</button>
-        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700">Опубликовать</button>
+        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('common.cancel')}</button>
+        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700">{t('lms.publish')}</button>
       </div>
     </form>
   )
@@ -220,6 +224,7 @@ function AnnouncementForm({ groupId, onSave, onClose }) {
 function SubmissionView({ assignment, groupId }) {
   const { user } = useAuth()
   const { students, lmsSubmissions, addLmsSubmission, updateLmsSubmission } = useData()
+  const { t } = useLanguage()
   const isTeacher = user?.role === 'teacher'
   const isStudent = user?.role === 'student'
 
@@ -268,7 +273,7 @@ function SubmissionView({ assignment, groupId }) {
     return (
       <div className="mt-4 p-4 bg-slate-50 rounded-xl">
         <h5 className="text-sm font-semibold text-slate-700 mb-2">
-          {mySubmission ? 'Ваш ответ' : 'Сдать работу'}
+          {mySubmission ? t('lms.yourAnswer') : t('lms.submitWork')}
         </h5>
         {mySubmission?.grade !== undefined && mySubmission?.grade !== null ? (
           <div className="space-y-2">
@@ -279,16 +284,16 @@ function SubmissionView({ assignment, groupId }) {
             {mySubmission.feedback && (
               <p className="text-sm text-slate-600 bg-white rounded-lg p-3">{mySubmission.feedback}</p>
             )}
-            <p className="text-xs text-slate-400">Ваш ответ: {mySubmission.answer}</p>
+            <p className="text-xs text-slate-400">{t('lms.yourAnswerLabel')}: {mySubmission.answer}</p>
           </div>
         ) : (
           <>
             <textarea value={answer} onChange={e => setAnswer(e.target.value)}
-              rows={3} placeholder="Ваш ответ, ссылка на работу..."
+              rows={3} placeholder={t('lms.answerPlaceholder')}
               className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-2" />
             <button onClick={handleSubmit} disabled={submitting || !answer.trim()}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-              <Send size={14} /> {mySubmission ? 'Обновить' : 'Отправить'}
+              <Send size={14} /> {mySubmission ? t('lms.update') : t('lms.send')}
             </button>
           </>
         )}
@@ -300,9 +305,9 @@ function SubmissionView({ assignment, groupId }) {
   if (isTeacher) {
     return (
       <div className="mt-4">
-        <h5 className="text-sm font-semibold text-slate-700 mb-2">Ответы студентов ({submissions.length})</h5>
+        <h5 className="text-sm font-semibold text-slate-700 mb-2">{t('lms.studentAnswers')} ({submissions.length})</h5>
         {submissions.length === 0 ? (
-          <p className="text-sm text-slate-400">Пока нет ответов</p>
+          <p className="text-sm text-slate-400">{t('lms.noAnswersYet')}</p>
         ) : (
           <div className="space-y-2">
             {submissions.map(sub => (
@@ -318,6 +323,7 @@ function SubmissionView({ assignment, groupId }) {
 }
 
 function GradeCard({ submission, maxScore, onGrade }) {
+  const { t } = useLanguage()
   const [editing, setEditing] = useState(false)
   const [grade, setGrade] = useState(submission.grade ?? '')
   const [feedback, setFeedback] = useState(submission.feedback || '')
@@ -329,7 +335,7 @@ function GradeCard({ submission, maxScore, onGrade }) {
         {submission.grade !== undefined && submission.grade !== null ? (
           <span className="text-sm font-bold text-emerald-600">{submission.grade}/{maxScore}</span>
         ) : (
-          <span className="text-xs text-amber-500">Не оценено</span>
+          <span className="text-xs text-amber-500">{t('lms.notGraded')}</span>
         )}
       </div>
       <p className="text-xs text-slate-600 mb-2">{submission.answer}</p>
@@ -337,19 +343,19 @@ function GradeCard({ submission, maxScore, onGrade }) {
         <div className="space-y-2">
           <div className="flex gap-2">
             <input type="number" min="0" max={maxScore} value={grade} onChange={e => setGrade(e.target.value)}
-              placeholder="Балл" className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm" />
+              placeholder={t('lms.score')} className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm" />
             <input type="text" value={feedback} onChange={e => setFeedback(e.target.value)}
-              placeholder="Комментарий" className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm" />
+              placeholder={t('lms.comment')} className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm" />
           </div>
           <div className="flex gap-2">
             <button onClick={() => { onGrade(submission.id, grade, feedback); setEditing(false) }}
-              className="px-3 py-1 text-xs bg-emerald-600 text-white rounded-lg">Сохранить</button>
-            <button onClick={() => setEditing(false)} className="px-3 py-1 text-xs bg-slate-200 rounded-lg">Отмена</button>
+              className="px-3 py-1 text-xs bg-emerald-600 text-white rounded-lg">{t('common.save')}</button>
+            <button onClick={() => setEditing(false)} className="px-3 py-1 text-xs bg-slate-200 rounded-lg">{t('common.cancel')}</button>
           </div>
         </div>
       ) : (
         <button onClick={() => setEditing(true)} className="text-xs text-blue-600 hover:underline">
-          {submission.grade !== undefined ? 'Изменить оценку' : 'Оценить'}
+          {submission.grade !== undefined ? t('lms.changeGrade') : t('lms.grade')}
         </button>
       )}
     </div>
@@ -359,6 +365,7 @@ function GradeCard({ submission, maxScore, onGrade }) {
 // ─── Course & Group Settings Tab ─────────────────────────────────────
 function CourseSettingsTab({ group, course, canEdit, canManage }) {
   const { updateGroup, updateCourse, teachers, branches } = useData()
+  const { t } = useLanguage()
   const [groupForm, setGroupForm] = useState({
     name: group?.name || '',
     schedule: group?.schedule || '',
@@ -376,7 +383,7 @@ function CourseSettingsTab({ group, course, canEdit, canManage }) {
   const [savedGroup, setSavedGroup] = useState(false)
   const [savedCourse, setSavedCourse] = useState(false)
 
-  const branchTeachers = teachers.filter(t => t.branch === group?.branch)
+  const branchTeachers = teachers.filter(tc => tc.branch === group?.branch)
 
   const handleSaveGroup = async () => {
     setSavingGroup(true)
@@ -416,52 +423,52 @@ function CourseSettingsTab({ group, course, canEdit, canManage }) {
       <div className="glass-card rounded-2xl p-5">
         <h4 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
           <Settings2 size={18} className="text-blue-500" />
-          Настройки группы
+          {t('lms.groupSettings')}
         </h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Название группы</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.groupName')}</label>
             <input type="text" value={groupForm.name}
               onChange={e => setGroupForm(prev => ({ ...prev, name: e.target.value }))}
               disabled={!canManage}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Расписание</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.schedule')}</label>
             <input type="text" value={groupForm.schedule}
               onChange={e => setGroupForm(prev => ({ ...prev, schedule: e.target.value }))}
               disabled={!canEdit}
-              placeholder="Пн/Ср/Пт 09:00-10:30"
+              placeholder={t('lms.schedulePlaceholder')}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Учитель</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.teacher')}</label>
             <select value={groupForm.teacherId}
               onChange={e => setGroupForm(prev => ({ ...prev, teacherId: e.target.value }))}
               disabled={!canManage}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50">
-              <option value="">— Не назначен —</option>
-              {branchTeachers.map(t => (
-                <option key={t.id} value={t.id}>{t.name} ({t.subject})</option>
+              <option value="">{t('lms.notAssigned')}</option>
+              {branchTeachers.map(tc => (
+                <option key={tc.id} value={tc.id}>{tc.name} ({tc.subject})</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Макс. оффлайн учеников</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.maxOfflineStudents')}</label>
             <input type="number" min="1" max="100" value={groupForm.maxOffline}
               onChange={e => setGroupForm(prev => ({ ...prev, maxOffline: e.target.value }))}
               disabled={!canManage}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Статус</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.status')}</label>
             <select value={groupForm.status}
               onChange={e => setGroupForm(prev => ({ ...prev, status: e.target.value }))}
               disabled={!canManage}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50">
-              <option value="active">Активная</option>
-              <option value="full">Набор закрыт</option>
-              <option value="archived">Архивная</option>
+              <option value="active">{t('students.groupStatus.active')}</option>
+              <option value="full">{t('students.groupStatus.full')}</option>
+              <option value="archived">{t('students.groupStatus.archived')}</option>
             </select>
           </div>
           <div className="flex items-end">
@@ -471,7 +478,7 @@ function CourseSettingsTab({ group, course, canEdit, canManage }) {
                   savedGroup ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}>
                 {savedGroup ? <CheckCircle size={14} /> : <Save size={14} />}
-                {savingGroup ? 'Сохранение...' : savedGroup ? 'Сохранено!' : 'Сохранить группу'}
+                {savingGroup ? t('access.saving') : savedGroup ? t('access.saved') : t('lms.saveGroup')}
               </button>
             )}
           </div>
@@ -483,57 +490,56 @@ function CourseSettingsTab({ group, course, canEdit, canManage }) {
         <div className="glass-card rounded-2xl p-5">
           <h4 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
             <span className="text-xl">{course.icon || '📚'}</span>
-            Настройки курса: {course.name}
+            {t('lms.courseSettings')}: {course.name}
           </h4>
 
           {/* Course info (read-only) */}
           <div className="bg-blue-50/50 rounded-xl p-3 mb-4 flex items-start gap-2">
             <Info size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
             <p className="text-xs text-slate-500">
-              Изменения курса применяются ко всем группам, использующим этот курс.
-              Для изменения тарифов и цен перейдите в раздел «Курсы».
+              {t('lms.courseSettingsNote')}
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Длительность курса</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.duration')}</label>
               <select value={courseForm.duration}
                 onChange={e => setCourseForm(prev => ({ ...prev, duration: e.target.value }))}
                 disabled={!canManage}
                 className="w-full sm:w-48 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50">
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                  <option key={m} value={`${m} мес`}>{m} мес</option>
+                  <option key={m} value={`${m} мес`}>{t('courseForm.months', { m })}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Описание курса</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.description')}</label>
               <textarea value={courseForm.description}
                 onChange={e => setCourseForm(prev => ({ ...prev, description: e.target.value }))}
                 disabled={!canEdit}
                 rows={3}
-                placeholder="Краткое описание курса..."
+                placeholder={t('courseForm.descPlaceholder')}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50 resize-none" />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Программа курса <span className="text-slate-400 font-normal">(каждый пункт с новой строки)</span>
+                {t('courseForm.program')} <span className="text-slate-400 font-normal">({t('lms.eachLineNewItem')})</span>
               </label>
               <textarea value={courseForm.featuresText}
                 onChange={e => setCourseForm(prev => ({ ...prev, featuresText: e.target.value }))}
                 disabled={!canEdit}
                 rows={5}
-                placeholder={"Планировка и зонирование\n3D-визуализация\nРабота с заказчиком"}
+                placeholder={t('courseForm.programPlaceholder')}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50 resize-none font-mono" />
             </div>
 
             {/* Preview features */}
             {courseForm.featuresText && (
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Предпросмотр</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase mb-2">{t('lms.preview')}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                   {courseForm.featuresText.split('\n').filter(f => f.trim()).map((f, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
@@ -551,7 +557,7 @@ function CourseSettingsTab({ group, course, canEdit, canManage }) {
                   savedCourse ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}>
                 {savedCourse ? <CheckCircle size={14} /> : <Save size={14} />}
-                {savingCourse ? 'Сохранение...' : savedCourse ? 'Сохранено!' : 'Сохранить курс'}
+                {savingCourse ? t('access.saving') : savedCourse ? t('access.saved') : t('lms.saveCourse')}
               </button>
             )}
           </div>
@@ -561,19 +567,19 @@ function CourseSettingsTab({ group, course, canEdit, canManage }) {
       {/* Pricing preview (read-only) */}
       {course?.pricing && (
         <div className="glass-card rounded-2xl p-5">
-          <h4 className="text-base font-bold text-slate-900 mb-3">Тарифы и цены</h4>
-          <p className="text-xs text-slate-400 mb-3">Для изменения цен перейдите в Курсы → {course.name} → Редактировать</p>
+          <h4 className="text-base font-bold text-slate-900 mb-3">{t('lms.tariffsAndPrices')}</h4>
+          <p className="text-xs text-slate-400 mb-3">{t('lms.tariffsEditNote')} {course.name}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {Object.entries(course.pricing).map(([region, tariffs]) => (
               <div key={region} className="bg-slate-50 rounded-xl p-3">
                 <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
-                  {region === 'tashkent' ? 'Ташкент' : region === 'fergana' ? 'Фергана / Самарканд' : 'Онлайн'}
+                  {t('courses.region.' + region)}
                 </p>
                 {Object.entries(tariffs).map(([tariff, prices]) => (
                   <div key={tariff} className="flex justify-between text-sm py-0.5">
-                    <span className="text-slate-600 capitalize">{tariff === 'standard' ? 'Стандарт' : tariff === 'vip' ? 'VIP' : tariff === 'premium' ? 'Премиум' : 'Индивидуальный'}</span>
+                    <span className="text-slate-600 capitalize">{t('courses.tariffName.' + tariff)}</span>
                     <span className="font-semibold text-slate-900">
-                      {new Intl.NumberFormat('ru-RU').format(prices.full)}{prices.monthly ? '/мес' : ''}
+                      {new Intl.NumberFormat('ru-RU').format(prices.full)}{prices.monthly ? '/'+t('lms.perMonth') : ''}
                     </span>
                   </div>
                 ))}
@@ -600,6 +606,7 @@ export default function LMSGroupView() {
     addLmsAssignment, updateLmsAssignment, deleteLmsAssignment,
     addLmsAnnouncement, deleteLmsAnnouncement,
   } = useData()
+  const { t } = useLanguage()
 
   const { hasPermission } = useAuth()
   const isTeacher = user?.role === 'teacher'
@@ -643,8 +650,8 @@ export default function LMSGroupView() {
   if (!group) {
     return (
       <div className="text-center py-20">
-        <p className="text-slate-400">Группа не найдена</p>
-        <button onClick={() => navigate('/lms')} className="text-blue-600 text-sm mt-2 hover:underline">Вернуться</button>
+        <p className="text-slate-400">{t('lms.groupNotFound')}</p>
+        <button onClick={() => navigate('/lms')} className="text-blue-600 text-sm mt-2 hover:underline">{t('lms.goBack')}</button>
       </div>
     )
   }
@@ -656,15 +663,15 @@ export default function LMSGroupView() {
         <div className="w-16 h-16 rounded-2xl bg-red-100 mx-auto mb-4 flex items-center justify-center">
           <X size={28} className="text-red-500" />
         </div>
-        <h3 className="text-lg font-bold text-slate-900 mb-2">Доступ ограничен</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-2">{t('lms.accessRestricted')}</h3>
         <p className="text-slate-500 text-sm max-w-sm mx-auto">
           {myStudent?.status === 'debtor'
-            ? 'Доступ к курсу приостановлен из-за задолженности. Оплатите для возобновления.'
+            ? t('lms.debtorAccessMsg')
             : myStudent?.status === 'frozen'
-              ? 'Ваше обучение заморожено. Свяжитесь с администрацией.'
-              : 'Для доступа к курсу необходимо произвести оплату.'}
+              ? t('lms.frozenAccessMsg')
+              : t('lms.paymentRequiredMsg')}
         </p>
-        <button onClick={() => navigate('/lms')} className="text-blue-600 text-sm mt-4 hover:underline">← Назад</button>
+        <button onClick={() => navigate('/lms')} className="text-blue-600 text-sm mt-4 hover:underline">{t('lms.backBtn')}</button>
       </div>
     )
   }
@@ -695,11 +702,11 @@ export default function LMSGroupView() {
   }
 
   const tabs = [
-    { id: 'lessons', label: 'Уроки', icon: BookOpen, count: lessons.length },
-    { id: 'assignments', label: 'Задания', icon: CheckCircle2, count: assignments.length },
-    { id: 'announcements', label: 'Объявления', icon: Bell, count: announcements.length },
-    ...(canEdit ? [{ id: 'students', label: 'Ученики', icon: Users, count: groupStudents.length }] : []),
-    ...(canEdit ? [{ id: 'settings', label: 'Настройки', icon: Settings2 }] : []),
+    { id: 'lessons', label: t('lms.lessonsTab'), icon: BookOpen, count: lessons.length },
+    { id: 'assignments', label: t('lms.assignmentsTab'), icon: CheckCircle2, count: assignments.length },
+    { id: 'announcements', label: t('lms.announcementsTab'), icon: Bell, count: announcements.length },
+    ...(canEdit ? [{ id: 'students', label: t('lms.studentsTab'), icon: Users, count: groupStudents.length }] : []),
+    ...(canEdit ? [{ id: 'settings', label: t('lms.settingsTab'), icon: Settings2 }] : []),
   ]
 
   return (
@@ -714,17 +721,17 @@ export default function LMSGroupView() {
             <span className="text-2xl">{course?.icon || '📚'}</span>
             <h2 className="text-xl md:text-2xl font-bold text-slate-900">{group.course}</h2>
           </div>
-          <p className="text-slate-500 mt-1">{group.name} · {group.schedule || 'Нет расписания'}</p>
+          <p className="text-slate-500 mt-1">{group.name} · {group.schedule || t('lms.noSchedule')}</p>
         </div>
         {canEdit && (
           <div className="flex gap-2">
             <button onClick={() => { setEditingItem(null); setShowModal('newLesson') }}
               className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700">
-              <Plus size={14} /> Урок
+              <Plus size={14} /> {t('lms.lessonBtn')}
             </button>
             <button onClick={() => { setEditingItem(null); setShowModal('newAssignment') }}
               className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white text-sm rounded-xl hover:bg-purple-700">
-              <Plus size={14} /> Задание
+              <Plus size={14} /> {t('lms.assignmentBtn')}
             </button>
           </div>
         )}
@@ -753,8 +760,8 @@ export default function LMSGroupView() {
           {lessons.length === 0 ? (
             <div className="glass-card rounded-2xl p-8 text-center text-slate-400">
               <BookOpen size={32} className="mx-auto mb-2 opacity-50" />
-              <p>Уроков пока нет</p>
-              {canEdit && <p className="text-xs mt-1">Нажмите «+ Урок» чтобы добавить первый урок</p>}
+              <p>{t('lms.noLessonsYet')}</p>
+              {canEdit && <p className="text-xs mt-1">{t('lms.addFirstLesson')}</p>}
             </div>
           ) : (
             lessons.map((lesson, i) => (
@@ -789,14 +796,14 @@ export default function LMSGroupView() {
                     {lesson.videoUrl && (
                       <a href={lesson.videoUrl} target="_blank" rel="noopener noreferrer"
                         className="mt-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-2 hover:bg-red-100 transition-colors">
-                        <Video size={16} /> Смотреть видео
+                        <Video size={16} /> {t('lms.watchVideo')}
                         <ExternalLink size={12} />
                       </a>
                     )}
 
                     {lesson.materials?.length > 0 && (
                       <div className="mt-3">
-                        <h5 className="text-xs font-semibold text-slate-500 uppercase mb-1.5">Материалы</h5>
+                        <h5 className="text-xs font-semibold text-slate-500 uppercase mb-1.5">{t('lms.materials')}</h5>
                         <div className="space-y-1">
                           {lesson.materials.map(m => (
                             <a key={m.id} href={m.url} target="_blank" rel="noopener noreferrer"
@@ -812,11 +819,11 @@ export default function LMSGroupView() {
                       <div className="mt-3 flex gap-2">
                         <button onClick={() => { setEditingItem(lesson); setShowModal('newLesson') }}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">
-                          <Pencil size={12} /> Редактировать
+                          <Pencil size={12} /> {t('common.edit')}
                         </button>
                         <button onClick={() => deleteLmsLesson(lesson.id)}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
-                          <Trash2 size={12} /> Удалить
+                          <Trash2 size={12} /> {t('common.delete')}
                         </button>
                       </div>
                     )}
@@ -833,7 +840,7 @@ export default function LMSGroupView() {
           {assignments.length === 0 ? (
             <div className="glass-card rounded-2xl p-8 text-center text-slate-400">
               <CheckCircle2 size={32} className="mx-auto mb-2 opacity-50" />
-              <p>Заданий пока нет</p>
+              <p>{t('lms.noAssignmentsYet')}</p>
             </div>
           ) : (
             assignments.map(assignment => {
@@ -849,7 +856,7 @@ export default function LMSGroupView() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-semibold text-slate-900 text-sm">{assignment.title}</h4>
-                      <p className="text-xs text-slate-400">Макс. балл: {assignment.maxScore}</p>
+                      <p className="text-xs text-slate-400">{t('lms.maxScoreLabel')}: {assignment.maxScore}</p>
                     </div>
                     {assignment.deadline && (
                       <span className={`text-xs px-2 py-1 rounded-lg ${isOverdue ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
@@ -872,11 +879,11 @@ export default function LMSGroupView() {
                         <div className="mt-3 flex gap-2">
                           <button onClick={() => { setEditingItem(assignment); setShowModal('newAssignment') }}
                             className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">
-                            <Pencil size={12} /> Редактировать
+                            <Pencil size={12} /> {t('common.edit')}
                           </button>
                           <button onClick={() => deleteLmsAssignment(assignment.id)}
                             className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
-                            <Trash2 size={12} /> Удалить
+                            <Trash2 size={12} /> {t('common.delete')}
                           </button>
                         </div>
                       )}
@@ -894,13 +901,13 @@ export default function LMSGroupView() {
           {canEdit && (
             <button onClick={() => setShowModal('newAnnouncement')}
               className="w-full glass-card rounded-xl p-3 flex items-center gap-2 text-sm text-amber-600 hover:bg-amber-50 transition-colors">
-              <Plus size={16} /> Новое объявление
+              <Plus size={16} /> {t('lms.newAnnouncement')}
             </button>
           )}
           {announcements.length === 0 ? (
             <div className="glass-card rounded-2xl p-8 text-center text-slate-400">
               <Bell size={32} className="mx-auto mb-2 opacity-50" />
-              <p>Объявлений пока нет</p>
+              <p>{t('lms.noAnnouncementsYet')}</p>
             </div>
           ) : (
             announcements.map(a => (
@@ -929,10 +936,10 @@ export default function LMSGroupView() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-white/40 border-b border-white/30">
-                <th className="text-left py-3 px-4 text-slate-500 font-medium">Ученик</th>
-                <th className="text-left py-3 px-4 text-slate-500 font-medium">Телефон</th>
-                <th className="text-center py-3 px-4 text-slate-500 font-medium">Формат</th>
-                <th className="text-center py-3 px-4 text-slate-500 font-medium">Статус</th>
+                <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('lms.studentCol')}</th>
+                <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('lms.phoneCol')}</th>
+                <th className="text-center py-3 px-4 text-slate-500 font-medium">{t('lms.formatCol')}</th>
+                <th className="text-center py-3 px-4 text-slate-500 font-medium">{t('lms.statusCol')}</th>
               </tr>
             </thead>
             <tbody>
@@ -942,18 +949,18 @@ export default function LMSGroupView() {
                   <td className="py-3 px-4 text-slate-500">{s.phone || '—'}</td>
                   <td className="py-3 px-4 text-center">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${s.learningFormat === 'Онлайн' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
-                      {s.learningFormat || 'Оффлайн'}
+                      {s.learningFormat || t('students.format.offline')}
                     </span>
                   </td>
                   <td className="py-3 px-4 text-center">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${s.status === 'active' ? 'bg-green-50 text-green-600' : s.status === 'debtor' ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>
-                      {s.status === 'active' ? 'Активен' : s.status === 'debtor' ? 'Должник' : 'Заморожен'}
+                      {s.status === 'active' ? t('students.status.active') : s.status === 'debtor' ? t('students.status.debtor') : t('students.status.frozen')}
                     </span>
                   </td>
                 </tr>
               ))}
               {groupStudents.length === 0 && (
-                <tr><td colSpan={4} className="py-8 text-center text-slate-400">Нет учеников в группе</td></tr>
+                <tr><td colSpan={4} className="py-8 text-center text-slate-400">{t('lms.noStudentsInGroup')}</td></tr>
               )}
             </tbody>
           </table>
@@ -971,9 +978,9 @@ export default function LMSGroupView() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
               <h3 className="text-lg font-bold text-slate-900">
-                {showModal === 'newLesson' ? (editingItem ? 'Редактировать урок' : 'Новый урок') :
-                 showModal === 'newAssignment' ? (editingItem ? 'Редактировать задание' : 'Новое задание') :
-                 'Новое объявление'}
+                {showModal === 'newLesson' ? (editingItem ? t('lms.editLesson') : t('lms.newLesson')) :
+                 showModal === 'newAssignment' ? (editingItem ? t('lms.editAssignment') : t('lms.newAssignment')) :
+                 t('lms.newAnnouncementModal')}
               </h3>
               <button onClick={() => { setShowModal(null); setEditingItem(null) }} className="p-1.5 rounded-lg hover:bg-slate-100">
                 <X size={20} className="text-slate-500" />

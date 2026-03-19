@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useAuth, ROLE_LABELS, ROLE_COLORS } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import {
   User, Lock, Phone, Building2, Shield, Camera,
   Save, Eye, EyeOff, CheckCircle, AlertTriangle,
@@ -18,6 +19,7 @@ const AVATAR_COLORS = [
 export default function Profile() {
   const { user, employees, updateEmployee, hasPermission, getRoleLabel } = useAuth()
   const { students, groups, branches, payments, getBranchName } = useData()
+  const { t } = useLanguage()
 
   const [activeTab, setActiveTab] = useState('profile')
   const [showPassword, setShowPassword] = useState(false)
@@ -141,20 +143,21 @@ export default function Profile() {
   const permissionsList = useMemo(() => {
     if (!user) return []
     const sections = [
-      { key: 'dashboard', label: 'Дашборд', icon: BarChart3 },
-      { key: 'branches', label: 'Филиалы', icon: Building2 },
-      { key: 'students', label: 'Ученики', icon: GraduationCap },
-      { key: 'teachers', label: 'Учителя', icon: Users },
-      { key: 'courses', label: 'Курсы', icon: BookOpen },
-      { key: 'finance', label: 'Финансы', icon: DollarSign },
-      { key: 'employees', label: 'Сотрудники', icon: Briefcase },
-      { key: 'settings', label: 'Настройки', icon: Shield },
+      { key: 'dashboard', icon: BarChart3 },
+      { key: 'branches', icon: Building2 },
+      { key: 'students', icon: GraduationCap },
+      { key: 'teachers', icon: Users },
+      { key: 'courses', icon: BookOpen },
+      { key: 'finance', icon: DollarSign },
+      { key: 'employees', icon: Briefcase },
+      { key: 'settings', icon: Shield },
     ]
     return sections.map(s => ({
       ...s,
+      label: t('section.' + s.key),
       hasAccess: hasPermission(s.key),
     }))
-  }, [user])
+  }, [user, t])
 
   const handleSaveProfile = () => {
     const updates = { name: form.name, phone: form.phone }
@@ -166,19 +169,19 @@ export default function Profile() {
   const handleChangePassword = () => {
     setPasswordError('')
     if (!passwordForm.currentPassword || !passwordForm.newPassword) {
-      setPasswordError('Заполните все поля')
+      setPasswordError(t('profile.fillAllFields'))
       return
     }
     if (fullEmployee?.password !== passwordForm.currentPassword) {
-      setPasswordError('Неверный текущий пароль')
+      setPasswordError(t('profile.wrongPassword'))
       return
     }
     if (passwordForm.newPassword.length < 4) {
-      setPasswordError('Минимум 4 символа')
+      setPasswordError(t('profile.minChars'))
       return
     }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError('Пароли не совпадают')
+      setPasswordError(t('profile.passwordsNotMatch'))
       return
     }
     updateEmployee(user.id, { password: passwordForm.newPassword })
@@ -188,17 +191,17 @@ export default function Profile() {
   }
 
   const fmtMoney = (n) => {
-    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' млн'
-    if (n >= 1_000) return (n / 1_000).toFixed(0) + ' тыс'
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + ' ' + t('format.million')
+    if (n >= 1_000) return (n / 1_000).toFixed(0) + ' ' + t('format.thousand')
     return n?.toLocaleString() || '0'
   }
 
   // Tabs based on role
   const tabs = [
-    { id: 'profile', label: 'Профиль', icon: User },
-    { id: 'security', label: 'Безопасность', icon: Lock },
-    { id: 'stats', label: 'Моя статистика', icon: Activity },
-    { id: 'access', label: 'Уровень доступа', icon: Shield },
+    { id: 'profile', label: t('profile.tab.profile'), icon: User },
+    { id: 'security', label: t('profile.tab.security'), icon: Lock },
+    { id: 'stats', label: t('profile.tab.stats'), icon: Activity },
+    { id: 'access', label: t('profile.tab.access'), icon: Shield },
   ]
 
   const roleColor = ROLE_COLORS[user?.role] || 'bg-blue-600'
@@ -221,11 +224,11 @@ export default function Profile() {
               {user?.branch && (
                 <span className="flex items-center gap-1 text-slate-300 text-sm">
                   <MapPin size={14} />
-                  {user.branch === 'all' ? 'Все филиалы' : getBranchName(user.branch)}
+                  {user.branch === 'all' ? t('common.allBranches') : getBranchName(user.branch)}
                 </span>
               )}
             </div>
-            <p className="text-slate-400 text-sm mt-1">Логин: {fullEmployee?.login}</p>
+            <p className="text-slate-400 text-sm mt-1">{t('profile.loginLabel')}: {fullEmployee?.login}</p>
           </div>
         </div>
       </div>
@@ -249,7 +252,7 @@ export default function Profile() {
       {saved && (
         <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm font-medium animate-pulse">
           <CheckCircle size={18} />
-          Изменения сохранены
+          {t('profile.saved')}
         </div>
       )}
 
@@ -258,43 +261,43 @@ export default function Profile() {
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
             <User size={20} className="text-blue-600" />
-            Личные данные
+            {t('profile.personalData')}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">ФИО</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('profile.fullName')}</label>
               <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Телефон</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('profile.phone')}</label>
               <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)}
                 placeholder="+998 90 123-45-67"
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Логин</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('profile.login')}</label>
               <input type="text" value={fullEmployee?.login || ''} disabled
                 className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Роль</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('profile.role')}</label>
               <input type="text" value={getRoleLabel()} disabled
                 className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Филиал</label>
-              <input type="text" value={user?.branch === 'all' ? 'Все филиалы' : getBranchName(user?.branch)} disabled
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('profile.branch')}</label>
+              <input type="text" value={user?.branch === 'all' ? t('common.allBranches') : getBranchName(user?.branch)} disabled
                 className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed" />
             </div>
 
             {/* Avatar color picker */}
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-2">Цвет аватара</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">{t('profile.avatarColor')}</label>
               <div className="flex gap-2 flex-wrap">
                 {AVATAR_COLORS.map(color => (
                   <button key={color} type="button" onClick={() => set('avatarColor', color)}
@@ -312,7 +315,7 @@ export default function Profile() {
             <button onClick={handleSaveProfile}
               className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
               <Save size={16} />
-              Сохранить
+              {t('common.save')}
             </button>
           </div>
         </div>
@@ -323,7 +326,7 @@ export default function Profile() {
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
             <Lock size={20} className="text-blue-600" />
-            Смена пароля
+            {t('profile.changePassword')}
           </h3>
 
           {passwordError && (
@@ -335,7 +338,7 @@ export default function Profile() {
 
           <div className="space-y-4 max-w-md">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Текущий пароль</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('profile.currentPassword')}</label>
               <div className="relative">
                 <input type={showPassword ? 'text' : 'password'} value={passwordForm.currentPassword}
                   onChange={e => setPwd('currentPassword', e.target.value)}
@@ -348,15 +351,15 @@ export default function Profile() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Новый пароль</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('profile.newPassword')}</label>
               <input type={showPassword ? 'text' : 'password'} value={passwordForm.newPassword}
                 onChange={e => setPwd('newPassword', e.target.value)}
-                placeholder="Минимум 4 символа"
+                placeholder={t('profile.minChars')}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Подтвердите пароль</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('profile.confirmPassword')}</label>
               <input type={showPassword ? 'text' : 'password'} value={passwordForm.confirmPassword}
                 onChange={e => setPwd('confirmPassword', e.target.value)}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -367,25 +370,25 @@ export default function Profile() {
             <button onClick={handleChangePassword}
               className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
               <Lock size={16} />
-              Изменить пароль
+              {t('profile.changePasswordBtn')}
             </button>
           </div>
 
           {/* Security info */}
           <div className="mt-6 p-4 bg-slate-50 rounded-xl">
-            <h4 className="text-sm font-semibold text-slate-700 mb-3">Информация о безопасности</h4>
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">{t('profile.securityInfo')}</h4>
             <div className="space-y-2 text-sm text-slate-600">
               <div className="flex items-center gap-2">
                 <Shield size={14} className="text-slate-400" />
-                <span>Роль: <span className="font-medium">{getRoleLabel()}</span></span>
+                <span>{t('profile.roleLabel')}: <span className="font-medium">{getRoleLabel()}</span></span>
               </div>
               <div className="flex items-center gap-2">
                 <Building2 size={14} className="text-slate-400" />
-                <span>Доступ: <span className="font-medium">{user?.branch === 'all' ? 'Полный (все филиалы)' : `Филиал: ${getBranchName(user?.branch)}`}</span></span>
+                <span>{t('profile.accessLabel')}: <span className="font-medium">{user?.branch === 'all' ? t('profile.fullAccess') : t('profile.branchAccess', { branch: getBranchName(user?.branch) })}</span></span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock size={14} className="text-slate-400" />
-                <span>Настройки: <span className="font-medium">{hasPermission('settings') ? 'Полный доступ' : 'Только профиль'}</span></span>
+                <span>{t('profile.settingsLabel')}: <span className="font-medium">{hasPermission('settings') ? t('profile.fullSettingsAccess') : t('profile.profileOnly')}</span></span>
               </div>
             </div>
           </div>
@@ -398,53 +401,53 @@ export default function Profile() {
           {/* Owner/Admin stats */}
           {(user?.role === 'owner' || user?.role === 'admin') && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard icon={GraduationCap} label="Всего учеников" value={roleStats.totalStudents} color="blue" />
-              <StatCard icon={Users} label="Активных" value={roleStats.activeStudents} color="emerald" />
-              <StatCard icon={BookOpen} label="Групп" value={roleStats.totalGroups} color="purple" />
-              <StatCard icon={Building2} label="Филиалов" value={roleStats.totalBranches} color="indigo" />
-              <StatCard icon={Briefcase} label="Сотрудников" value={roleStats.totalEmployees} color="teal" />
-              <StatCard icon={DollarSign} label="Общий доход" value={fmtMoney(roleStats.totalRevenue || 0)} color="amber" />
-              <StatCard icon={AlertTriangle} label="Должников" value={roleStats.debtors} color="red" />
+              <StatCard icon={GraduationCap} label={t('profile.stats.totalStudents')} value={roleStats.totalStudents} color="blue" />
+              <StatCard icon={Users} label={t('profile.stats.activeStudents')} value={roleStats.activeStudents} color="emerald" />
+              <StatCard icon={BookOpen} label={t('profile.stats.groups')} value={roleStats.totalGroups} color="purple" />
+              <StatCard icon={Building2} label={t('profile.stats.branches')} value={roleStats.totalBranches} color="indigo" />
+              <StatCard icon={Briefcase} label={t('profile.stats.employees')} value={roleStats.totalEmployees} color="teal" />
+              <StatCard icon={DollarSign} label={t('profile.stats.totalRevenue')} value={fmtMoney(roleStats.totalRevenue || 0)} color="amber" />
+              <StatCard icon={AlertTriangle} label={t('profile.stats.debtors')} value={roleStats.debtors} color="red" />
             </div>
           )}
 
           {/* Branch director stats */}
           {user?.role === 'branch_director' && (
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-              <StatCard icon={GraduationCap} label="Учеников филиала" value={roleStats.branchStudents} color="blue" />
-              <StatCard icon={Users} label="Активных" value={roleStats.activeStudents} color="emerald" />
-              <StatCard icon={BookOpen} label="Групп" value={roleStats.branchGroups} color="purple" />
-              <StatCard icon={Briefcase} label="Сотрудников" value={roleStats.branchEmployees} color="indigo" />
-              <StatCard icon={DollarSign} label="Доход филиала" value={fmtMoney(roleStats.branchRevenue || 0)} color="amber" />
-              <StatCard icon={AlertTriangle} label="Должников" value={roleStats.debtors} color="red" />
+              <StatCard icon={GraduationCap} label={t('profile.stats.branchStudents')} value={roleStats.branchStudents} color="blue" />
+              <StatCard icon={Users} label={t('profile.stats.activeStudents')} value={roleStats.activeStudents} color="emerald" />
+              <StatCard icon={BookOpen} label={t('profile.stats.branchGroups')} value={roleStats.branchGroups} color="purple" />
+              <StatCard icon={Briefcase} label={t('profile.stats.branchEmployees')} value={roleStats.branchEmployees} color="indigo" />
+              <StatCard icon={DollarSign} label={t('profile.stats.branchRevenue')} value={fmtMoney(roleStats.branchRevenue || 0)} color="amber" />
+              <StatCard icon={AlertTriangle} label={t('profile.stats.debtors')} value={roleStats.debtors} color="red" />
             </div>
           )}
 
           {/* ROP stats */}
           {user?.role === 'rop' && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard icon={Users} label="Размер команды" value={roleStats.teamSize} color="blue" />
-              <StatCard icon={GraduationCap} label="Учеников" value={roleStats.branchStudents} color="emerald" />
-              <StatCard icon={TrendingUp} label="Новых за месяц" value={roleStats.newStudentsThisMonth} color="purple" />
-              <StatCard icon={DollarSign} label="Доход филиала" value={fmtMoney(roleStats.branchRevenue || 0)} color="amber" />
+              <StatCard icon={Users} label={t('profile.stats.teamSize')} value={roleStats.teamSize} color="blue" />
+              <StatCard icon={GraduationCap} label={t('profile.stats.branchStudents')} value={roleStats.branchStudents} color="emerald" />
+              <StatCard icon={TrendingUp} label={t('profile.stats.newThisMonth')} value={roleStats.newStudentsThisMonth} color="purple" />
+              <StatCard icon={DollarSign} label={t('profile.stats.branchRevenue')} value={fmtMoney(roleStats.branchRevenue || 0)} color="amber" />
             </div>
           )}
 
           {/* Sales stats */}
           {user?.role === 'sales' && (
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-              <StatCard icon={GraduationCap} label="Мои ученики" value={roleStats.myStudents} color="blue" />
-              <StatCard icon={DollarSign} label="Мой доход" value={fmtMoney(roleStats.myRevenue || 0)} color="emerald" />
-              <StatCard icon={Activity} label="Платежей" value={roleStats.myPaymentsCount} color="purple" />
+              <StatCard icon={GraduationCap} label={t('profile.stats.myStudents')} value={roleStats.myStudents} color="blue" />
+              <StatCard icon={DollarSign} label={t('profile.stats.myRevenue')} value={fmtMoney(roleStats.myRevenue || 0)} color="emerald" />
+              <StatCard icon={Activity} label={t('profile.stats.payments')} value={roleStats.myPaymentsCount} color="purple" />
             </div>
           )}
 
           {/* Accountant / Financier stats */}
           {(user?.role === 'accountant' || user?.role === 'financier') && (
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-              <StatCard icon={DollarSign} label="Общий доход" value={fmtMoney(roleStats.totalRevenue || 0)} color="emerald" />
-              <StatCard icon={Activity} label="Платежей" value={roleStats.totalPayments} color="blue" />
-              <StatCard icon={AlertTriangle} label="Должников" value={roleStats.debtors} color="red" />
+              <StatCard icon={DollarSign} label={t('profile.stats.totalRevenue')} value={fmtMoney(roleStats.totalRevenue || 0)} color="emerald" />
+              <StatCard icon={Activity} label={t('profile.stats.totalPayments')} value={roleStats.totalPayments} color="blue" />
+              <StatCard icon={AlertTriangle} label={t('profile.stats.debtors')} value={roleStats.debtors} color="red" />
             </div>
           )}
 
@@ -452,16 +455,16 @@ export default function Profile() {
           {user?.role === 'hr' && (
             <div>
               <div className="grid grid-cols-2 gap-4 mb-6">
-                <StatCard icon={Briefcase} label="Всего сотрудников" value={roleStats.totalEmployees} color="blue" />
+                <StatCard icon={Briefcase} label={t('profile.stats.employees')} value={roleStats.totalEmployees} color="blue" />
               </div>
               {roleStats.roleDistribution && (
                 <div className="glass-card rounded-2xl p-6">
-                  <h4 className="text-sm font-bold text-slate-900 mb-4">Распределение по ролям</h4>
+                  <h4 className="text-sm font-bold text-slate-900 mb-4">{t('profile.stats.roleDistribution')}</h4>
                   <div className="space-y-3">
                     {roleStats.roleDistribution.map(([role, count]) => (
                       <div key={role} className="flex items-center gap-3">
                         <div className={`w-3 h-3 rounded-full ${ROLE_COLORS[role] || 'bg-slate-400'}`} />
-                        <span className="text-sm text-slate-600 flex-1">{ROLE_LABELS[role]}</span>
+                        <span className="text-sm text-slate-600 flex-1">{t('roles.' + role)}</span>
                         <span className="text-sm font-bold text-slate-900">{count}</span>
                         <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
                           <div className={`h-full ${ROLE_COLORS[role] || 'bg-slate-400'} rounded-full`}
@@ -479,12 +482,12 @@ export default function Profile() {
           {user?.role === 'teacher' && (
             <div>
               <div className="grid grid-cols-2 gap-4 mb-6">
-                <StatCard icon={BookOpen} label="Мои группы" value={roleStats.myGroups} color="purple" />
-                <StatCard icon={GraduationCap} label="Мои ученики" value={roleStats.myStudents} color="blue" />
+                <StatCard icon={BookOpen} label={t('profile.stats.myGroups')} value={roleStats.myGroups} color="purple" />
+                <StatCard icon={GraduationCap} label={t('profile.stats.myStudents')} value={roleStats.myStudents} color="blue" />
               </div>
               {roleStats.myGroupNames?.length > 0 && (
                 <div className="glass-card rounded-2xl p-6">
-                  <h4 className="text-sm font-bold text-slate-900 mb-4">Мои группы</h4>
+                  <h4 className="text-sm font-bold text-slate-900 mb-4">{t('profile.stats.myGroups')}</h4>
                   <div className="flex flex-wrap gap-2">
                     {roleStats.myGroupNames.map(name => (
                       <span key={name} className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium">
@@ -500,8 +503,8 @@ export default function Profile() {
           {/* SMM stats */}
           {user?.role === 'smm' && (
             <div className="grid grid-cols-2 gap-4">
-              <StatCard icon={GraduationCap} label="Всего учеников" value={roleStats.totalStudents} color="blue" />
-              <StatCard icon={Building2} label="Филиалов" value={roleStats.activeBranches} color="indigo" />
+              <StatCard icon={GraduationCap} label={t('profile.stats.totalStudents')} value={roleStats.totalStudents} color="blue" />
+              <StatCard icon={Building2} label={t('profile.stats.branches')} value={roleStats.activeBranches} color="indigo" />
             </div>
           )}
 
@@ -509,7 +512,7 @@ export default function Profile() {
           {user?.role === 'student' && (
             <div className="glass-card rounded-2xl p-6 text-center text-slate-500">
               <GraduationCap size={48} className="mx-auto mb-3 text-slate-300" />
-              <p className="text-sm">Статистика для студентов в разработке</p>
+              <p className="text-sm">{t('profile.stats.studentStatsWip')}</p>
             </div>
           )}
         </div>
@@ -520,10 +523,10 @@ export default function Profile() {
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
             <Shield size={20} className="text-blue-600" />
-            Уровень доступа
+            {t('profile.accessLevel')}
           </h3>
           <p className="text-sm text-slate-500 mb-6">
-            Ваша роль: <span className={`inline-flex px-2 py-0.5 ${roleColor} text-white rounded-md text-xs font-semibold`}>{getRoleLabel()}</span>
+            {t('profile.yourRole')}: <span className={`inline-flex px-2 py-0.5 ${roleColor} text-white rounded-md text-xs font-semibold`}>{getRoleLabel()}</span>
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -544,7 +547,7 @@ export default function Profile() {
                     {perm.label}
                   </p>
                   <p className="text-[11px] text-slate-400">
-                    {perm.hasAccess ? 'Доступ разрешён' : 'Нет доступа'}
+                    {perm.hasAccess ? t('profile.accessAllowed') : t('profile.noAccess')}
                   </p>
                 </div>
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
@@ -561,11 +564,10 @@ export default function Profile() {
             <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
               <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
                 <Star size={14} />
-                Полные права администратора
+                {t('profile.fullAdminRights')}
               </h4>
               <p className="text-xs text-blue-600">
-                У вас есть доступ ко всем разделам системы, включая управление сотрудниками,
-                настройки системы, полный финансовый отчёт и управление филиалами.
+                {t('profile.fullAdminDesc')}
               </p>
             </div>
           )}
@@ -574,11 +576,10 @@ export default function Profile() {
             <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-100">
               <h4 className="text-sm font-semibold text-amber-800 mb-2 flex items-center gap-2">
                 <AlertTriangle size={14} />
-                Ограниченный доступ
+                {t('profile.limitedAccess')}
               </h4>
               <p className="text-xs text-amber-600">
-                Ваш уровень доступа ограничен ролью «{getRoleLabel()}».
-                Для расширения прав обратитесь к администратору.
+                {t('profile.limitedAccessDesc', { role: getRoleLabel() })}
               </p>
             </div>
           )}

@@ -8,6 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell,
 } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { useData } from '../contexts/DataContext'
 import { db } from '../firebase'
 import {
@@ -15,18 +16,6 @@ import {
 } from 'firebase/firestore'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-
-const METRICS = [
-  { key: 'leads',       label: 'Кол-во заявок',          editable: true },
-  { key: 'conversations', label: 'Кол-во разговоров',    editable: true },
-  { key: 'signups',     label: 'Кол-во записей',         editable: true },
-  { key: 'convSignups', label: 'Конв-ия в записях (%)',   editable: false },
-  { key: 'visited',     label: 'Кол-во пришедших',       editable: true },
-  { key: 'convVisited', label: 'Конв-ия пришедших (%)',   editable: false },
-  { key: 'sales',       label: 'Кол-во продаж',          editable: true },
-  { key: 'convSales',   label: 'Конв-ия в продажу (%)',   editable: false },
-  { key: 'revenue',     label: 'Выручка',                editable: true },
-]
 
 const WEEK_RANGES = [
   { label: '1-7',   start: 1,  end: 7 },
@@ -36,7 +25,7 @@ const WEEK_RANGES = [
   { label: '26-31', start: 26, end: 31 },
 ]
 
-const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+// DAY_NAMES moved inside component for i18n
 
 const SEED_PLANS = {
   'Асад':   { leads: 260, conversations: 1300, signups: 130, visited: 104, sales: 35, revenue: 150000000 },
@@ -56,13 +45,13 @@ const OVERALL_PLAN = 400000000
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function formatRevenue(val) {
+function formatRevenue(val, t) {
   if (val == null || val === 0) return '0'
   if (Math.abs(val) >= 1000000) {
     const m = val / 1000000
-    return `${Number.isInteger(m) ? m : m.toFixed(1)} млн`
+    return `${Number.isInteger(m) ? m : m.toFixed(1)} ${t('format.million')}`
   }
-  if (Math.abs(val) >= 1000) return `${(val / 1000).toFixed(0)} тыс`
+  if (Math.abs(val) >= 1000) return `${(val / 1000).toFixed(0)} ${t('format.thousand')}`
   return String(val)
 }
 
@@ -128,8 +117,23 @@ function distributeSeedData(totals, year, month) {
 export default function Reports() {
   const { user, employees } = useAuth()
   const { setSalesPlan } = useData()
+  const { t } = useLanguage()
   const isAdmin = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'rop'
   const isSales = user?.role === 'sales'
+
+  const METRICS = [
+    { key: 'leads',       label: t('reports.metrics.leads'),          editable: true },
+    { key: 'conversations', label: t('reports.metrics.conversations'),    editable: true },
+    { key: 'signups',     label: t('reports.metrics.signups'),         editable: true },
+    { key: 'convSignups', label: t('reports.metrics.convSignups'),   editable: false },
+    { key: 'visited',     label: t('reports.metrics.visited'),       editable: true },
+    { key: 'convVisited', label: t('reports.metrics.convVisited'),   editable: false },
+    { key: 'sales',       label: t('reports.metrics.sales'),          editable: true },
+    { key: 'convSales',   label: t('reports.metrics.convSales'),   editable: false },
+    { key: 'revenue',     label: t('reports.metrics.revenue'),                editable: true },
+  ]
+
+  const DAY_NAMES = Array.from({length: 7}, (_, i) => t('days.' + i))
 
   const salesStaff = useMemo(() => {
     return employees.filter(e => e.role === 'sales' || e.role === 'rop')
@@ -161,10 +165,7 @@ export default function Reports() {
   const monthKey = getMonthKey(selectedYear, selectedMonth)
   const daysInMonth = getDaysInMonth(selectedYear, selectedMonth)
 
-  const MONTH_NAMES = [
-    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
-  ]
+  const MONTH_NAMES = Array.from({length: 12}, (_, i) => t('months.' + i))
 
   // ─── Firestore sync ──────────────────────────────────────────────────────
 
@@ -424,7 +425,7 @@ export default function Reports() {
 
   const kpiData = useMemo(() => {
     const metrics = ['leads', 'conversations', 'signups', 'sales', 'revenue']
-    const labels = ['Заявки', 'Разговоры', 'Записи', 'Продажи', 'Выручка']
+    const labels = [t('reports.leads'), t('reports.conversations'), t('reports.signups'), t('reports.sales'), t('reports.revenue')]
     const icons = [Phone, Users, UserCheck, ShoppingCart, DollarSign]
     return metrics.map((key, i) => {
       let fact = 0, plan = 0
@@ -436,8 +437,8 @@ export default function Reports() {
       return {
         label: labels[i], key, fact, plan, pct,
         Icon: icons[i],
-        factDisplay: key === 'revenue' ? formatRevenue(fact) : fact.toLocaleString('ru-RU'),
-        planDisplay: key === 'revenue' ? formatRevenue(plan) : plan.toLocaleString('ru-RU'),
+        factDisplay: key === 'revenue' ? formatRevenue(fact, t) : fact.toLocaleString('ru-RU'),
+        planDisplay: key === 'revenue' ? formatRevenue(plan, t) : plan.toLocaleString('ru-RU'),
       }
     })
   }, [visibleManagers, plans, getMonthlyFact])
@@ -454,7 +455,7 @@ export default function Reports() {
 
   const funnelData = useMemo(() => {
     const keys = ['leads', 'conversations', 'signups', 'visited', 'sales']
-    const labels = ['Заявки', 'Разговоры', 'Записи', 'Пришедшие', 'Продажи']
+    const labels = [t('reports.leads'), t('reports.conversations'), t('reports.signups'), t('reports.attended'), t('reports.sales')]
     const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981']
     return keys.map((key, i) => {
       let total = 0
@@ -466,11 +467,11 @@ export default function Reports() {
   const managerComparisonData = useMemo(() => {
     return visibleManagers.map(mgr => ({
       name: mgr,
-      'Заявки': getMonthlyFact(mgr, 'leads'),
-      'Разговоры': getMonthlyFact(mgr, 'conversations'),
-      'Записи': getMonthlyFact(mgr, 'signups'),
-      'Пришедшие': getMonthlyFact(mgr, 'visited'),
-      'Продажи': getMonthlyFact(mgr, 'sales'),
+      [t('reports.leads')]: getMonthlyFact(mgr, 'leads'),
+      [t('reports.conversations')]: getMonthlyFact(mgr, 'conversations'),
+      [t('reports.signups')]: getMonthlyFact(mgr, 'signups'),
+      [t('reports.attended')]: getMonthlyFact(mgr, 'visited'),
+      [t('reports.sales')]: getMonthlyFact(mgr, 'sales'),
     }))
   }, [visibleManagers, getMonthlyFact])
 
@@ -567,7 +568,7 @@ export default function Reports() {
 
     const rawVal = getDayValue(manager, metric.key, day)
     const display = rawVal > 0
-      ? (metric.key === 'revenue' ? formatRevenue(rawVal) : rawVal)
+      ? (metric.key === 'revenue' ? formatRevenue(rawVal, t) : rawVal)
       : '—'
 
     return (
@@ -587,7 +588,7 @@ export default function Reports() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-        <span className="ml-3 text-slate-500">Загрузка отчётов...</span>
+        <span className="ml-3 text-slate-500">{t('reports.loading')}</span>
       </div>
     )
   }
@@ -599,9 +600,9 @@ export default function Reports() {
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
             <FileBarChart size={24} className="text-blue-600" />
-            Отчёт по продажам
+            {t('reports.title')}
           </h2>
-          <p className="text-slate-500 mt-1">Аналитика и ежедневный контроль менеджеров</p>
+          <p className="text-slate-500 mt-1">{t('reports.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {isAdmin && (
@@ -609,7 +610,7 @@ export default function Reports() {
               onClick={openPlanModal}
               className="bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2"
             >
-              <Settings size={16} /> Настроить планы
+              <Settings size={16} /> {t('reports.configurePlans')}
             </button>
           )}
         </div>
@@ -635,7 +636,7 @@ export default function Reports() {
             onChange={e => setManagerFilter(e.target.value)}
             className="glass-input text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">Все менеджеры</option>
+            <option value="all">{t('reports.allManagers')}</option>
             {managers.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
@@ -643,9 +644,9 @@ export default function Reports() {
         {/* Period toggle */}
         <div className="flex bg-slate-100 rounded-lg p-0.5">
           {[
-            { key: 'day', label: 'День' },
-            { key: 'week', label: 'Неделя' },
-            { key: 'month', label: 'Месяц' },
+            { key: 'day', label: t('reports.day') },
+            { key: 'week', label: t('reports.week') },
+            { key: 'month', label: t('reports.month') },
           ].map(p => (
             <button
               key={p.key}
@@ -672,7 +673,7 @@ export default function Reports() {
             </div>
             <p className="text-lg font-bold text-slate-900">{kpi.factDisplay}</p>
             <div className="flex items-center justify-between mt-1">
-              <span className="text-xs text-slate-400">План: {kpi.planDisplay}</span>
+              <span className="text-xs text-slate-400">{t('reports.plan')}: {kpi.planDisplay}</span>
               {kpi.plan > 0 && pctBadge(kpi.pct)}
             </div>
             {kpi.plan > 0 && (
@@ -693,17 +694,17 @@ export default function Reports() {
       <div className="glass-card rounded-2xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="text-center p-3 bg-blue-50 rounded-lg">
-            <p className="text-xs text-blue-600 font-medium mb-1">Общий план</p>
-            <p className="text-xl font-bold text-blue-700">{formatRevenue(overallPlan)}</p>
+            <p className="text-xs text-blue-600 font-medium mb-1">{t('reports.overallPlan')}</p>
+            <p className="text-xl font-bold text-blue-700">{formatRevenue(overallPlan, t)}</p>
           </div>
           <div className="text-center p-3 bg-emerald-50 rounded-lg">
-            <p className="text-xs text-emerald-600 font-medium mb-1">Факт</p>
-            <p className="text-xl font-bold text-emerald-700">{formatRevenue(overallFact)}</p>
+            <p className="text-xs text-emerald-600 font-medium mb-1">{t('reports.fact')}</p>
+            <p className="text-xl font-bold text-emerald-700">{formatRevenue(overallFact, t)}</p>
           </div>
           <div className={`text-center p-3 rounded-lg ${overallDeviation > 0 ? 'bg-red-50' : 'bg-emerald-50'}`}>
-            <p className={`text-xs font-medium mb-1 ${overallDeviation > 0 ? 'text-red-600' : 'text-emerald-600'}`}>Отклонение</p>
+            <p className={`text-xs font-medium mb-1 ${overallDeviation > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{t('reports.deviation')}</p>
             <p className={`text-xl font-bold ${overallDeviation > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-              {overallDeviation > 0 ? '-' : '+'}{formatRevenue(Math.abs(overallDeviation))}
+              {overallDeviation > 0 ? '-' : '+'}{formatRevenue(Math.abs(overallDeviation), t)}
             </p>
           </div>
         </div>
@@ -717,13 +718,13 @@ export default function Reports() {
               {/* Header row 1: Week groups */}
               <tr className="bg-white/40 border-b border-white/30">
                 <th className="sticky left-0 z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 100 }}>
-                  Менеджер
+                  {t('reports.manager')}
                 </th>
                 <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 160 }}>
-                  Показатель
+                  {t('reports.metric')}
                 </th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 bg-blue-50" colSpan={3}>
-                  Месяц
+                  {t('reports.month')}
                 </th>
                 {WEEK_RANGES.map((week, wi) => {
                   const maxDay = Math.min(week.end, daysInMonth)
@@ -735,7 +736,7 @@ export default function Reports() {
                       className="px-2 py-2 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 bg-slate-100"
                       colSpan={numDays + 2} // weekPlan + days + weekTotal
                     >
-                      Неделя {week.label}
+                      {t('reports.weekLabel')} {week.label}
                     </th>
                   )
                 })}
@@ -745,8 +746,8 @@ export default function Reports() {
                 <th className="sticky left-0 z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
                 <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
                 {/* Month columns */}
-                <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">План</th>
-                <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">Факт</th>
+                <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">{t('reports.plan')}</th>
+                <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">{t('reports.fact')}</th>
                 <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-200 bg-blue-50">%</th>
                 {/* Week columns */}
                 {WEEK_RANGES.map((week, wi) => {
@@ -755,7 +756,7 @@ export default function Reports() {
                   const cells = []
                   cells.push(
                     <th key={`wp_${wi}`} className="px-1 py-1 text-center text-[10px] font-medium text-slate-500 border-r border-slate-100 bg-slate-100">
-                      Пл.нед
+                      {t('reports.weekPlan')}
                     </th>
                   )
                   for (let d = week.start; d <= maxDay; d++) {
@@ -770,7 +771,7 @@ export default function Reports() {
                   }
                   cells.push(
                     <th key={`wt_${wi}`} className="px-1 py-1 text-center text-[10px] font-medium text-slate-600 border-r border-slate-200 bg-slate-100">
-                      Итого
+                      {t('reports.total')}
                     </th>
                   )
                   return cells
@@ -831,14 +832,14 @@ export default function Reports() {
 
                       {/* Monthly Plan */}
                       <td className="px-2 py-1.5 text-center text-xs border-r border-slate-100 bg-blue-50/30 font-medium text-slate-600">
-                        {isConversion ? '—' : (metric.key === 'revenue' ? formatRevenue(monthPlan) : monthPlan.toLocaleString('ru-RU'))}
+                        {isConversion ? '—' : (metric.key === 'revenue' ? formatRevenue(monthPlan, t) : monthPlan.toLocaleString('ru-RU'))}
                       </td>
 
                       {/* Monthly Fact */}
                       <td className="px-2 py-1.5 text-center text-xs border-r border-slate-100 bg-blue-50/30 font-semibold text-slate-800">
                         {isConversion
                           ? `${monthFact.toFixed(1)}%`
-                          : (metric.key === 'revenue' ? formatRevenue(monthFact) : monthFact.toLocaleString('ru-RU'))
+                          : (metric.key === 'revenue' ? formatRevenue(monthFact, t) : monthFact.toLocaleString('ru-RU'))
                         }
                       </td>
 
@@ -860,7 +861,7 @@ export default function Reports() {
                         const wp = getWeekPlan(manager, metric.key, week.start, week.end)
                         cells.push(
                           <td key={`wp_${wi}`} className="px-1 py-1.5 text-center text-xs border-r border-slate-100 bg-slate-50 text-slate-500 font-mono">
-                            {isConversion ? '—' : (wp ? (metric.key === 'revenue' ? formatRevenue(wp) : wp) : '—')}
+                            {isConversion ? '—' : (wp ? (metric.key === 'revenue' ? formatRevenue(wp, t) : wp) : '—')}
                           </td>
                         )
 
@@ -875,7 +876,7 @@ export default function Reports() {
                           <td key={`wt_${wi}`} className="px-1 py-1.5 text-center text-xs border-r border-slate-200 bg-slate-100 font-semibold text-slate-700">
                             {isConversion
                               ? (wt > 0 ? `${wt.toFixed(1)}%` : '—')
-                              : (wt > 0 ? (metric.key === 'revenue' ? formatRevenue(wt) : wt.toLocaleString('ru-RU')) : '—')
+                              : (wt > 0 ? (metric.key === 'revenue' ? formatRevenue(wt, t) : wt.toLocaleString('ru-RU')) : '—')
                             }
                           </td>
                         )
@@ -890,13 +891,13 @@ export default function Reports() {
               {/* ─── ИТОГО row ────────────────────────────────────────────── */}
               <tr className="bg-slate-800 text-white font-semibold">
                 <td className="sticky left-0 z-10 bg-slate-800 px-3 py-3 text-sm border-r border-slate-600" colSpan={2}>
-                  ИТОГО (Выручка)
+                  {t('reports.totalRevenue')}
                 </td>
                 <td className="px-2 py-3 text-center text-sm border-r border-slate-600">
-                  {formatRevenue(overallPlan)}
+                  {formatRevenue(overallPlan, t)}
                 </td>
                 <td className="px-2 py-3 text-center text-sm border-r border-slate-600">
-                  {formatRevenue(overallFact)}
+                  {formatRevenue(overallFact, t)}
                 </td>
                 <td className={`px-2 py-3 text-center text-sm border-r border-slate-600 ${
                   overallPlan > 0 && (overallFact / overallPlan * 100) >= 100 ? 'text-emerald-300' :
@@ -914,7 +915,7 @@ export default function Reports() {
                   const weekPlanRev = activeWeeks > 0 ? Math.round(overallPlan / activeWeeks) : 0
                   cells.push(
                     <td key={`owp_${wi}`} className="px-1 py-3 text-center text-xs border-r border-slate-600 text-slate-300">
-                      {formatRevenue(weekPlanRev)}
+                      {formatRevenue(weekPlanRev, t)}
                     </td>
                   )
 
@@ -923,7 +924,7 @@ export default function Reports() {
                     managers.forEach(mgr => { dayTotal += getDayValue(mgr, 'revenue', d) })
                     cells.push(
                       <td key={`od_${d}`} className="px-1 py-3 text-center text-xs border-r border-slate-600 text-slate-300">
-                        {dayTotal > 0 ? formatRevenue(dayTotal) : '—'}
+                        {dayTotal > 0 ? formatRevenue(dayTotal, t) : '—'}
                       </td>
                     )
                   }
@@ -932,7 +933,7 @@ export default function Reports() {
                   managers.forEach(mgr => { weekTotalRev += getWeekTotal(mgr, 'revenue', week.start, week.end) })
                   cells.push(
                     <td key={`owt_${wi}`} className="px-1 py-3 text-center text-xs border-r border-slate-600 font-bold text-white">
-                      {weekTotalRev > 0 ? formatRevenue(weekTotalRev) : '—'}
+                      {weekTotalRev > 0 ? formatRevenue(weekTotalRev, t) : '—'}
                     </td>
                   )
                   return cells
@@ -949,7 +950,7 @@ export default function Reports() {
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <TrendingUp size={16} className="text-blue-600" />
-            Воронка продаж
+            {t('reports.salesFunnel')}
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={funnelData} layout="vertical" margin={{ left: 20, right: 20 }}>
@@ -973,7 +974,7 @@ export default function Reports() {
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <Users size={16} className="text-blue-600" />
-            Сравнение менеджеров
+            {t('reports.managerComparison')}
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={managerComparisonData} margin={{ left: 0, right: 20 }}>
@@ -985,11 +986,11 @@ export default function Reports() {
                 contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Заявки" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Разговоры" fill="#8b5cf6" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Записи" fill="#06b6d4" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Пришедшие" fill="#f59e0b" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Продажи" fill="#10b981" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.leads')} fill="#3b82f6" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.conversations')} fill="#8b5cf6" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.signups')} fill="#06b6d4" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.attended')} fill="#f59e0b" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.sales')} fill="#10b981" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -999,27 +1000,27 @@ export default function Reports() {
       <div className="glass-card rounded-2xl p-4 md:p-6">
         <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
           <DollarSign size={16} className="text-blue-600" />
-          Выручка по менеджерам
+          {t('reports.revenueByManager')}
         </h3>
         <ResponsiveContainer width="100%" height={250}>
           <BarChart
             data={visibleManagers.map(mgr => ({
               name: mgr,
-              'План': plans[mgr]?.revenue || 0,
-              'Факт': getMonthlyFact(mgr, 'revenue'),
+              [t('reports.plan')]: plans[mgr]?.revenue || 0,
+              [t('reports.fact')]: getMonthlyFact(mgr, 'revenue'),
             }))}
             margin={{ left: 20, right: 20 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => formatRevenue(v)} />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => formatRevenue(v, t)} />
             <Tooltip
-              formatter={(val) => [formatRevenueFullNumber(val) + ' сум', '']}
+              formatter={(val) => [formatRevenueFullNumber(val) + ' ' + t('common.sum'), '']}
               contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="План" fill="#93c5fd" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Факт" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            <Bar dataKey={t('reports.plan')} fill="#93c5fd" radius={[4, 4, 0, 0]} />
+            <Bar dataKey={t('reports.fact')} fill="#3b82f6" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -1031,7 +1032,7 @@ export default function Reports() {
             <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Settings size={20} className="text-blue-600" />
-                Настройка планов — {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+                {t('reports.planSetup')} — {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
               </h3>
               <button onClick={() => setPlanModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-lg">
                 <X size={20} />
@@ -1040,7 +1041,7 @@ export default function Reports() {
             <div className="p-6 space-y-6">
               {/* Overall plan */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Общий план по выручке</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">{t('reports.overallRevenuePlan')}</label>
                 <input
                   type="number"
                   value={planForm.__overall__ || ''}
@@ -1048,7 +1049,7 @@ export default function Reports() {
                   className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="400000000"
                 />
-                <p className="text-xs text-slate-400 mt-1">Текущее: {formatRevenue(planForm.__overall__ || 0)}</p>
+                <p className="text-xs text-slate-400 mt-1">{t('reports.current')}: {formatRevenue(planForm.__overall__ || 0, t)}</p>
               </div>
 
               {/* Per-manager plans */}
@@ -1062,12 +1063,12 @@ export default function Reports() {
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {[
-                      { key: 'leads', label: 'Заявки' },
-                      { key: 'conversations', label: 'Разговоры' },
-                      { key: 'signups', label: 'Записи' },
-                      { key: 'visited', label: 'Пришедшие' },
-                      { key: 'sales', label: 'Продажи' },
-                      { key: 'revenue', label: 'Выручка' },
+                      { key: 'leads', label: t('reports.leads') },
+                      { key: 'conversations', label: t('reports.conversations') },
+                      { key: 'signups', label: t('reports.signups') },
+                      { key: 'visited', label: t('reports.attended') },
+                      { key: 'sales', label: t('reports.sales') },
+                      { key: 'revenue', label: t('reports.revenue') },
                     ].map(field => (
                       <div key={field.key}>
                         <label className="block text-xs text-slate-500 mb-1">{field.label}</label>
@@ -1084,7 +1085,7 @@ export default function Reports() {
                           className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         {field.key === 'revenue' && planForm[mgr]?.[field.key] > 0 && (
-                          <p className="text-xs text-slate-400 mt-0.5">{formatRevenue(planForm[mgr][field.key])}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{formatRevenue(planForm[mgr][field.key], t)}</p>
                         )}
                       </div>
                     ))}
@@ -1097,13 +1098,13 @@ export default function Reports() {
                 onClick={() => setPlanModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <button
                 onClick={savePlans}
                 className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
               >
-                <Save size={16} /> Сохранить планы
+                <Save size={16} /> {t('reports.savePlans')}
               </button>
             </div>
           </div>

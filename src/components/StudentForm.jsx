@@ -1,23 +1,25 @@
 import { useState, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { AlertTriangle, Users, Wifi } from 'lucide-react'
-
-const STATUSES = [
-  { value: 'active', label: 'Активен' },
-  { value: 'debtor', label: 'Должник' },
-  { value: 'frozen', label: 'Заморожен' },
-]
-
-const FORMATS = [
-  { value: 'Оффлайн', label: 'Оффлайн' },
-  { value: 'Онлайн', label: 'Онлайн' },
-]
 
 export default function StudentForm({ student, onClose }) {
   const { branches, groups, addStudent, updateStudent, getGroupOfflineCount } = useData()
   const { user } = useAuth()
+  const { t } = useLanguage()
   const isEdit = !!student
+
+  const STATUSES = [
+    { value: 'active', label: t('students.status.active') },
+    { value: 'debtor', label: t('students.status.debtor') },
+    { value: 'frozen', label: t('students.status.frozen') },
+  ]
+
+  const FORMATS = [
+    { value: 'Оффлайн', label: t('studentForm.offline') },
+    { value: 'Онлайн', label: t('studentForm.online') },
+  ]
 
   const [form, setForm] = useState({
     name: '',
@@ -64,7 +66,7 @@ export default function StudentForm({ student, onClose }) {
         ? currentOffline - 1
         : currentOffline
       if (adjustedCount >= selectedGroup.maxOffline) {
-        setCapacityWarning(`Группа заполнена: ${adjustedCount}/${selectedGroup.maxOffline} оффлайн мест занято. Переключите на Онлайн или выберите другую группу.`)
+        setCapacityWarning(t('studentForm.groupFullWarning', { count: adjustedCount, max: selectedGroup.maxOffline }))
       }
     }
   }, [form.group, form.learningFormat, selectedGroup])
@@ -105,14 +107,14 @@ export default function StudentForm({ student, onClose }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-slate-700 mb-1">ФИО ученика *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.studentName')} *</label>
           <input type="text" value={form.name} onChange={e => set('name', e.target.value)} required
-            placeholder="Иванов Иван Иванович"
+            placeholder={t('studentForm.studentNamePlaceholder')}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Филиал *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.branch')} *</label>
           <select value={form.branch} onChange={e => handleBranchChange(e.target.value)}
             disabled={user?.branch !== 'all'}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -121,30 +123,30 @@ export default function StudentForm({ student, onClose }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Группа *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.group')} *</label>
           <select value={form.group} onChange={e => handleGroupChange(e.target.value)} required
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">— Выберите группу —</option>
+            <option value="">{t('studentForm.selectGroup')}</option>
             {branchGroups.map(g => {
               const offCount = getGroupOfflineCount(g.name)
               const isFull = offCount >= g.maxOffline
               return (
                 <option key={g.id} value={g.name}>
-                  {g.name} — {g.course} ({offCount}/{g.maxOffline} офф){isFull ? ' [ПОЛНАЯ]' : ''}
+                  {g.name} — {g.course} ({offCount}/{g.maxOffline} {t('studentForm.offlineShort')}){isFull ? ` [${t('studentForm.groupFull')}]` : ''}
                 </option>
               )
             })}
           </select>
           {selectedGroup && (
             <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-              <span className="text-slate-500">Курс: <span className="font-semibold text-slate-700">{selectedGroup.course}</span></span>
-              <span className="text-slate-500">Расписание: <span className="font-semibold text-slate-700">{selectedGroup.schedule || '—'}</span></span>
+              <span className="text-slate-500">{t('studentForm.course')} <span className="font-semibold text-slate-700">{selectedGroup.course}</span></span>
+              <span className="text-slate-500">{t('studentForm.schedule')} <span className="font-semibold text-slate-700">{selectedGroup.schedule || '—'}</span></span>
             </div>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Формат обучения *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.learningFormat')} *</label>
           <div className="flex gap-2">
             {FORMATS.map(f => (
               <button key={f.value} type="button" onClick={() => set('learningFormat', f.value)}
@@ -161,12 +163,12 @@ export default function StudentForm({ student, onClose }) {
             ))}
           </div>
           {form.learningFormat === 'Онлайн' && (
-            <p className="text-[10px] text-purple-500 mt-1">Онлайн — без ограничения по количеству мест</p>
+            <p className="text-[10px] text-purple-500 mt-1">{t('studentForm.onlineNoLimit')}</p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Телефон *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.phone')} *</label>
           <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} required
             placeholder="+998 90 123-45-67"
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -180,27 +182,27 @@ export default function StudentForm({ student, onClose }) {
         )}
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Стоимость курса (сум)</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.coursePrice')}</label>
           <input type="number" value={form.totalCoursePrice} onChange={e => set('totalCoursePrice', e.target.value)}
             placeholder="7 200 000"
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Номер договора</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.contractNumber')}</label>
           <input type="text" value={form.contractNumber} onChange={e => set('contractNumber', e.target.value)}
             placeholder="25/03"
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Баланс (сум)</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.balance')}</label>
           <input type="number" value={form.balance} onChange={e => set('balance', Number(e.target.value))}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Статус</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.status')}</label>
           <select value={form.status} onChange={e => set('status', e.target.value)}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -210,7 +212,7 @@ export default function StudentForm({ student, onClose }) {
 
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
-          Отмена
+          {t('common.cancel')}
         </button>
         <button type="submit"
           disabled={!!(capacityWarning && form.learningFormat === 'Оффлайн')}
@@ -219,7 +221,7 @@ export default function StudentForm({ student, onClose }) {
               ? 'bg-slate-300 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700'
           }`}>
-          {isEdit ? 'Сохранить' : 'Добавить ученика'}
+          {isEdit ? t('common.save') : t('studentForm.addStudent')}
         </button>
       </div>
     </form>

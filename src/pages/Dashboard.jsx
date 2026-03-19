@@ -13,13 +13,14 @@ import {
 import SalesDashboard from '../components/SalesDashboard'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { formatCurrency } from '../data/mockData'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmtShort = (n) => {
-  if (n >= 1e9) return (n / 1e9).toFixed(1) + ' млрд'
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' млн'
-  if (n >= 1e3) return (n / 1e3).toFixed(0) + ' тыс'
+const fmtShort = (n, t) => {
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + ' ' + t('format.billion')
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' ' + t('format.million')
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + ' ' + t('format.thousand')
   return String(n)
 }
 
@@ -27,24 +28,6 @@ const pct = (a, b) => b > 0 ? Math.round((a / b) * 100) : 0
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16']
 const STATUS_COLORS = { active: '#10b981', debtor: '#ef4444', frozen: '#94a3b8' }
-
-const TABS = [
-  { id: 'executive', label: 'Аналитика' },
-  { id: 'branches',  label: 'Филиалы' },
-  { id: 'sales',     label: 'Продажи' },
-]
-
-// ─── Time Periods ─────────────────────────────────────────────────────────────
-const TIME_PERIODS = [
-  { id: 'today',     label: 'Сегодня' },
-  { id: 'yesterday', label: 'Вчера' },
-  { id: 'week',      label: 'Неделя' },
-  { id: 'month',     label: 'Месяц' },
-  { id: 'quarter',   label: 'Квартал' },
-  { id: 'year',      label: 'Год' },
-  { id: 'all',       label: 'Всё время' },
-  { id: 'custom',    label: 'Период' },
-]
 
 function getDateRange(periodId, customFrom, customTo) {
   const now = new Date()
@@ -91,15 +74,6 @@ function getDateRange(periodId, customFrom, customTo) {
   return { from, to }
 }
 
-function formatPeriodLabel(periodId, customFrom, customTo) {
-  if (periodId === 'custom' && customFrom && customTo) {
-    const f = new Date(customFrom).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-    const t = new Date(customTo).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-    return `${f} — ${t}`
-  }
-  return TIME_PERIODS.find(p => p.id === periodId)?.label || 'Всё время'
-}
-
 // ─── Mini KPI Card ────────────────────────────────────────────────────────────
 function KpiCard({ title, value, subtitle, icon: Icon, color, trend, trendLabel }) {
   const bg = {
@@ -138,7 +112,7 @@ function KpiCard({ title, value, subtitle, icon: Icon, color, trend, trendLabel 
 }
 
 // ─── Branch Scorecard Row ─────────────────────────────────────────────────────
-function BranchScoreRow({ branch, students, teachers, payments, rank }) {
+function BranchScoreRow({ branch, students, teachers, payments, rank, fmt }) {
   const branchStudents = students.filter(s => s.branch === branch.id)
   const branchTeachers = teachers.filter(t => t.branch === branch.id)
   const branchIncome = payments.filter(p => p.branch === branch.id && p.type === 'income').reduce((s, p) => s + p.amount, 0)
@@ -169,13 +143,13 @@ function BranchScoreRow({ branch, students, teachers, payments, rank }) {
       </td>
       <td className="py-4 px-3 text-center">
         <p className="text-sm font-bold text-slate-800">{actualStudents}</p>
-        <p className="text-[10px] text-slate-400">из {branch.capacity}</p>
+        <p className="text-[10px] text-slate-400">{branch.capacity}</p>
       </td>
       <td className="py-4 px-3 text-center hidden md:table-cell">
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${occColor}`}>{occupancy}%</span>
       </td>
       <td className="py-4 px-3 text-right">
-        <p className="text-sm font-bold text-emerald-600">{fmtShort(branch.monthlyRevenue || branchIncome)}</p>
+        <p className="text-sm font-bold text-emerald-600">{fmt(branch.monthlyRevenue || branchIncome)}</p>
       </td>
       <td className="py-4 px-3 text-right hidden md:table-cell">
         <p className={`text-sm font-bold ${marginColor}`}>{margin}%</p>
@@ -190,7 +164,7 @@ function BranchScoreRow({ branch, students, teachers, payments, rank }) {
         }
       </td>
       <td className="py-4 px-3 text-right hidden lg:table-cell">
-        <p className="text-xs font-medium text-slate-600">{fmtShort(avgPerStudent)}</p>
+        <p className="text-xs font-medium text-slate-600">{fmt(avgPerStudent)}</p>
       </td>
       <td className="py-4 px-3 hidden lg:table-cell">
         <div className="flex items-center gap-1">
@@ -206,6 +180,35 @@ function BranchScoreRow({ branch, students, teachers, payments, rank }) {
 export default function Dashboard() {
   const { user, hasPermission, employees } = useAuth()
   const { branches, students, teachers, payments, getDebtors, getBranchName } = useData()
+  const { t } = useLanguage()
+
+  const fmt = (n) => fmtShort(n, t)
+
+  const TABS = [
+    { id: 'executive', label: t('dashboard.tabs.executive') },
+    { id: 'branches',  label: t('dashboard.tabs.branches') },
+    { id: 'sales',     label: t('dashboard.tabs.sales') },
+  ]
+
+  const TIME_PERIODS = [
+    { id: 'today',     label: t('dashboard.period.today') },
+    { id: 'yesterday', label: t('dashboard.period.yesterday') },
+    { id: 'week',      label: t('dashboard.period.week') },
+    { id: 'month',     label: t('dashboard.period.month') },
+    { id: 'quarter',   label: t('dashboard.period.quarter') },
+    { id: 'year',      label: t('dashboard.period.year') },
+    { id: 'all',       label: t('dashboard.period.all') },
+    { id: 'custom',    label: t('dashboard.period.custom') },
+  ]
+
+  function formatPeriodLabel(periodId, customFrom, customTo) {
+    if (periodId === 'custom' && customFrom && customTo) {
+      const f = new Date(customFrom).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+      const tDate = new Date(customTo).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+      return `${f} — ${tDate}`
+    }
+    return TIME_PERIODS.find(p => p.id === periodId)?.label || t('dashboard.period.all')
+  }
 
   const isSales = user.role === 'sales'
   const [activeTab, setActiveTab] = useState(isSales ? 'sales' : 'executive')
@@ -280,9 +283,9 @@ export default function Dashboard() {
 
     // Student status distribution
     const statusData = [
-      { name: 'Активные', value: activeStudents, color: STATUS_COLORS.active },
-      { name: 'Должники', value: debtorStudents, color: STATUS_COLORS.debtor },
-      { name: 'Заморожены', value: frozenStudents, color: STATUS_COLORS.frozen },
+      { name: t('dashboard.status.active'), value: activeStudents, color: STATUS_COLORS.active },
+      { name: t('dashboard.status.debtors'), value: debtorStudents, color: STATUS_COLORS.debtor },
+      { name: t('dashboard.status.frozen'), value: frozenStudents, color: STATUS_COLORS.frozen },
     ].filter(d => d.value > 0)
 
     // Course distribution from actual data
@@ -356,12 +359,12 @@ export default function Dashboard() {
       monthlyTrend, branchRevenueData,
       todayIncome, todayCount, totalEmployees,
     }
-  }, [scopedStudents, scopedTeachers, scopedPayments, branches, payments, employees, user.branch, filterByDate])
+  }, [scopedStudents, scopedTeachers, scopedPayments, branches, payments, employees, user.branch, filterByDate, t])
 
   // ── Visible tabs ─────────────────────────────────────────────────────
-  const visibleTabs = TABS.filter(t => {
-    if (t.id === 'sales') return canSeeSales
-    if (t.id === 'branches') return canFullPnL
+  const visibleTabs = TABS.filter(tab => {
+    if (tab.id === 'sales') return canSeeSales
+    if (tab.id === 'branches') return canFullPnL
     return true
   })
 
@@ -388,16 +391,16 @@ export default function Dashboard() {
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900">
-            {user.branch === 'all' ? 'BI Дашборд' : `Дашборд — ${getBranchName(user.branch)}`}
+            {user.branch === 'all' ? t('dashboard.title') : `${t('dashboard.titleBranch')} — ${getBranchName(user.branch)}`}
           </h2>
           <p className="text-slate-500 mt-1 text-sm">
-            {user.branch === 'all' ? 'Аналитика всех филиалов INTERNO School' : 'Аналитика вашего филиала'}
+            {user.branch === 'all' ? t('dashboard.subtitle') : t('dashboard.subtitleBranch')}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-xs text-slate-400 glass rounded-full px-3 py-1.5">
             <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-            Реальное время
+            {t('dashboard.realtime')}
           </div>
         </div>
       </div>
@@ -407,7 +410,7 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-slate-500 mr-1">
             <Calendar size={16} />
-            <span className="text-xs font-semibold uppercase tracking-wide hidden sm:inline">Период:</span>
+            <span className="text-xs font-semibold uppercase tracking-wide hidden sm:inline">{t('dashboard.periodLabel')}:</span>
           </div>
           {TIME_PERIODS.filter(p => p.id !== 'custom').map(period => (
             <button
@@ -434,15 +437,15 @@ export default function Dashboard() {
               <Filter size={12} />
               {timePeriod === 'custom' && customFrom && customTo
                 ? formatPeriodLabel('custom', customFrom, customTo)
-                : 'Период'}
+                : t('dashboard.period.custom')}
               <ChevronDown size={12} className={`transition-transform ${showTimePicker ? 'rotate-180' : ''}`} />
             </button>
             {showTimePicker && (
               <div className="absolute right-0 top-full mt-2 glass-strong rounded-xl shadow-xl p-4 z-50 min-w-[280px]">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Произвольный период</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{t('dashboard.customPeriod')}</p>
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Начало</label>
+                    <label className="text-xs text-slate-500 mb-1 block">{t('dashboard.dateFrom')}</label>
                     <input
                       type="date"
                       value={customFrom}
@@ -451,7 +454,7 @@ export default function Dashboard() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Конец</label>
+                    <label className="text-xs text-slate-500 mb-1 block">{t('dashboard.dateTo')}</label>
                     <input
                       type="date"
                       value={customTo}
@@ -463,7 +466,7 @@ export default function Dashboard() {
                     onClick={() => setShowTimePicker(false)}
                     className="w-full bg-blue-600 text-white text-sm font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors"
                   >
-                    Применить
+                    {t('dashboard.apply')}
                   </button>
                 </div>
               </div>
@@ -476,14 +479,14 @@ export default function Dashboard() {
               <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2.5 py-1 rounded-full">
                 {timePeriod === 'custom' && customFrom && customTo
                   ? formatPeriodLabel('custom', customFrom, customTo)
-                  : `Фильтр: ${TIME_PERIODS.find(p => p.id === timePeriod)?.label}`
+                  : `${t('dashboard.filter')}: ${TIME_PERIODS.find(p => p.id === timePeriod)?.label}`
                 }
-                {' '}({scopedPayments.length} операций)
+                {' '}({scopedPayments.length} {t('dashboard.operations')})
               </span>
               <button
                 onClick={() => { setTimePeriod('all'); setCustomFrom(''); setCustomTo(''); setShowTimePicker(false) }}
                 className="text-slate-400 hover:text-red-500 transition-colors"
-                title="Сбросить фильтр"
+                title={t('dashboard.resetFilter')}
               >
                 <XCircle size={16} />
               </button>
@@ -514,28 +517,28 @@ export default function Dashboard() {
         <>
           {/* Row 1: Primary KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <KpiCard title="Общий доход" value={fmtShort(metrics.totalIncome)} icon={DollarSign} color="green"
-              subtitle={`${metrics.todayCount} оплат сегодня`}
-              trendLabel={`Сегодня: ${fmtShort(metrics.todayIncome)}`} />
+            <KpiCard title={t('dashboard.kpi.totalRevenue')} value={fmt(metrics.totalIncome)} icon={DollarSign} color="green"
+              subtitle={`${metrics.todayCount} ${t('dashboard.kpi.paymentsToday')}`}
+              trendLabel={`${t('dashboard.kpi.today')}: ${fmt(metrics.todayIncome)}`} />
 
             {canFullPnL && (
-              <KpiCard title="Чистая прибыль" value={fmtShort(metrics.profit)} icon={PiggyBank}
+              <KpiCard title={t('dashboard.kpi.netProfit')} value={fmt(metrics.profit)} icon={PiggyBank}
                 color={metrics.profit >= 0 ? 'teal' : 'red'}
-                subtitle={`Маржа: ${metrics.margin}%`} />
+                subtitle={`${t('dashboard.kpi.margin')}: ${metrics.margin}%`} />
             )}
 
-            <KpiCard title="Всего учеников" value={metrics.totalStudents} icon={GraduationCap} color="blue"
-              subtitle={`Активных: ${metrics.activeStudents}`}
-              trendLabel={`Удержание: ${metrics.retentionRate}%`} />
+            <KpiCard title={t('dashboard.kpi.totalStudents')} value={metrics.totalStudents} icon={GraduationCap} color="blue"
+              subtitle={`${t('dashboard.kpi.activeStudents')}: ${metrics.activeStudents}`}
+              trendLabel={`${t('dashboard.kpi.retention')}: ${metrics.retentionRate}%`} />
 
-            <KpiCard title="ARPU" value={fmtShort(metrics.arpu)} icon={Target} color="purple"
-              subtitle="Ср. доход на ученика" />
+            <KpiCard title={t('dashboard.kpi.arpu')} value={fmt(metrics.arpu)} icon={Target} color="purple"
+              subtitle={t('dashboard.kpi.arpuSubtitle')} />
 
-            <KpiCard title="Должники" value={debtors.length} icon={UserMinus} color="red"
-              subtitle={metrics.totalDebt > 0 ? `Долг: ${fmtShort(metrics.totalDebt)}` : 'Нет долгов'}
-              trendLabel={`Сбор: ${metrics.collectionRate}%`} />
+            <KpiCard title={t('dashboard.kpi.debtors')} value={debtors.length} icon={UserMinus} color="red"
+              subtitle={metrics.totalDebt > 0 ? `${t('dashboard.kpi.debt')}: ${fmt(metrics.totalDebt)}` : t('dashboard.kpi.noDebts')}
+              trendLabel={`${t('dashboard.kpi.collection')}: ${metrics.collectionRate}%`} />
 
-            <KpiCard title="Загруженность" value={`${metrics.utilization}%`} icon={Activity} color="orange"
+            <KpiCard title={t('dashboard.kpi.utilization')} value={`${metrics.utilization}%`} icon={Activity} color="orange"
               subtitle={`${metrics.totalStudents} / ${metrics.totalCapacity}`} />
           </div>
 
@@ -545,13 +548,13 @@ export default function Dashboard() {
             <div className="lg:col-span-2 glass-card rounded-2xl p-4 md:p-6">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
                 <div>
-                  <h3 className="text-base font-semibold text-slate-900">Финансовый поток</h3>
-                  <p className="text-xs text-slate-400">Доходы, расходы и прибыль по месяцам (млн сум)</p>
+                  <h3 className="text-base font-semibold text-slate-900">{t('dashboard.charts.cashFlow')}</h3>
+                  <p className="text-xs text-slate-400">{t('dashboard.charts.cashFlowDesc')}</p>
                 </div>
                 <div className="flex items-center gap-4 text-xs hidden md:flex">
-                  <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-emerald-500" /> Доход</span>
-                  {canFullPnL && <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-red-400" /> Расход</span>}
-                  {canFullPnL && <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-blue-500" /> Прибыль</span>}
+                  <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-emerald-500" /> {t('dashboard.charts.income')}</span>
+                  {canFullPnL && <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-red-400" /> {t('dashboard.charts.expense')}</span>}
+                  {canFullPnL && <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded bg-blue-500" /> {t('dashboard.charts.profit')}</span>}
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={280}>
@@ -560,17 +563,17 @@ export default function Dashboard() {
                   <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="incomeM" fill="#10b981" name="Доход" radius={[4, 4, 0, 0]} barSize={24} fillOpacity={0.85} />
-                  {canFullPnL && <Bar dataKey="expenseM" fill="#fca5a5" name="Расход" radius={[4, 4, 0, 0]} barSize={24} fillOpacity={0.7} />}
-                  {canFullPnL && <Line type="monotone" dataKey="profitM" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4, fill: '#3b82f6' }} name="Прибыль" />}
+                  <Bar dataKey="incomeM" fill="#10b981" name={t('dashboard.charts.income')} radius={[4, 4, 0, 0]} barSize={24} fillOpacity={0.85} />
+                  {canFullPnL && <Bar dataKey="expenseM" fill="#fca5a5" name={t('dashboard.charts.expense')} radius={[4, 4, 0, 0]} barSize={24} fillOpacity={0.7} />}
+                  {canFullPnL && <Line type="monotone" dataKey="profitM" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4, fill: '#3b82f6' }} name={t('dashboard.charts.profit')} />}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
 
             {/* Student Status Donut */}
             <div className="glass-card rounded-2xl p-4 md:p-6">
-              <h3 className="text-base font-semibold text-slate-900 mb-1">Статус учеников</h3>
-              <p className="text-xs text-slate-400 mb-3">Распределение по статусам</p>
+              <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.charts.studentStatus')}</h3>
+              <p className="text-xs text-slate-400 mb-3">{t('dashboard.charts.studentStatusDesc')}</p>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie data={metrics.statusData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={4} dataKey="value" strokeWidth={0}>
@@ -596,18 +599,18 @@ export default function Dashboard() {
             <div className="glass-card rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Users size={16} className="text-purple-500" />
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Учителя</span>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.ops.teachers')}</span>
               </div>
               <p className="text-2xl font-bold text-slate-900">{scopedTeachers.length}</p>
               <div className="mt-2 space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Уч./учитель</span>
+                  <span className="text-slate-400">{t('dashboard.ops.studentsPerTeacher')}</span>
                   <span className="font-semibold text-slate-700">{metrics.teacherLoad}</span>
                 </div>
                 {canFullPnL && (
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Доход/учитель</span>
-                    <span className="font-semibold text-slate-700">{fmtShort(metrics.revenuePerTeacher)}</span>
+                    <span className="text-slate-400">{t('dashboard.ops.revenuePerTeacher')}</span>
+                    <span className="font-semibold text-slate-700">{fmt(metrics.revenuePerTeacher)}</span>
                   </div>
                 )}
               </div>
@@ -616,14 +619,14 @@ export default function Dashboard() {
             <div className="glass-card rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <UserCheck size={16} className="text-emerald-500" />
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Удержание</span>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.ops.retention')}</span>
               </div>
               <p className="text-2xl font-bold text-slate-900">{metrics.retentionRate}%</p>
               <div className="mt-2">
                 <div className="w-full bg-slate-100 rounded-full h-2">
                   <div className="h-2 rounded-full bg-emerald-500 transition-all" style={{ width: `${metrics.retentionRate}%` }} />
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Отток: {metrics.churnRate}%</p>
+                <p className="text-[10px] text-slate-400 mt-1">{t('dashboard.ops.churn')}: {metrics.churnRate}%</p>
               </div>
             </div>
 
@@ -631,14 +634,14 @@ export default function Dashboard() {
               <div className="glass-card rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Percent size={16} className="text-cyan-500" />
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Маржа</span>
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.ops.margin')}</span>
                 </div>
                 <p className={`text-2xl font-bold ${metrics.margin >= 20 ? 'text-emerald-600' : metrics.margin >= 0 ? 'text-amber-600' : 'text-red-600'}`}>
                   {metrics.margin}%
                 </p>
                 <div className="mt-2 space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">ФОТ / Доход</span>
+                    <span className="text-slate-400">{t('dashboard.ops.salaryToRevenue')}</span>
                     <span className="font-semibold text-slate-700">{metrics.salaryToRevenue}%</span>
                   </div>
                 </div>
@@ -648,16 +651,16 @@ export default function Dashboard() {
             <div className="glass-card rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Building2 size={16} className="text-orange-500" />
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Инфра</span>
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.ops.infra')}</span>
               </div>
               <p className="text-2xl font-bold text-slate-900">{user.branch === 'all' ? branches.length : 1}</p>
               <div className="mt-2 space-y-1">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Сотрудники</span>
+                  <span className="text-slate-400">{t('dashboard.ops.employees')}</span>
                   <span className="font-semibold text-slate-700">{metrics.totalEmployees}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Загрузка</span>
+                  <span className="text-slate-400">{t('dashboard.ops.load')}</span>
                   <span className="font-semibold text-slate-700">{metrics.utilization}%</span>
                 </div>
               </div>
@@ -668,8 +671,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             {/* Course distribution */}
             <div className="glass-card rounded-2xl p-4 md:p-6">
-              <h3 className="text-base font-semibold text-slate-900 mb-1">Распределение по курсам</h3>
-              <p className="text-xs text-slate-400 mb-4">Количество учеников на каждом курсе</p>
+              <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.charts.courseDistribution')}</h3>
+              <p className="text-xs text-slate-400 mb-4">{t('dashboard.charts.courseDistributionDesc')}</p>
               {metrics.courseData.length > 0 ? (
                 <div className="space-y-3">
                   {metrics.courseData.map((course, i) => {
@@ -689,7 +692,7 @@ export default function Dashboard() {
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400 text-center py-8">Нет данных</p>
+                <p className="text-sm text-slate-400 text-center py-8">{t('dashboard.noData')}</p>
               )}
             </div>
 
@@ -697,8 +700,8 @@ export default function Dashboard() {
             <div className="space-y-6">
               {metrics.methodData.length > 0 && (
                 <div className="glass-card rounded-2xl p-6">
-                  <h3 className="text-base font-semibold text-slate-900 mb-1">Методы оплаты</h3>
-                  <p className="text-xs text-slate-400 mb-3">По сумме поступлений</p>
+                  <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.charts.paymentMethods')}</h3>
+                  <p className="text-xs text-slate-400 mb-3">{t('dashboard.charts.paymentMethodsDesc')}</p>
                   <div className="flex items-center gap-6">
                     <div className="w-32 h-32">
                       <ResponsiveContainer width="100%" height="100%">
@@ -731,7 +734,7 @@ export default function Dashboard() {
 
               {/* Recent payments feed */}
               <div className="glass-card rounded-2xl p-6">
-                <h3 className="text-base font-semibold text-slate-900 mb-3">Последние операции</h3>
+                <h3 className="text-base font-semibold text-slate-900 mb-3">{t('dashboard.charts.recentOps')}</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {scopedPayments.slice(0, 8).map((p) => (
                     <div key={p.id} className={`flex items-center justify-between py-2 px-3 rounded-lg ${
@@ -744,11 +747,11 @@ export default function Dashboard() {
                       <span className={`text-sm font-bold whitespace-nowrap ml-2 ${
                         p.type === 'income' ? 'text-emerald-600' : 'text-red-500'
                       }`}>
-                        {p.type === 'income' ? '+' : '-'}{fmtShort(p.amount)}
+                        {p.type === 'income' ? '+' : '-'}{fmt(p.amount)}
                       </span>
                     </div>
                   ))}
-                  {scopedPayments.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Нет операций</p>}
+                  {scopedPayments.length === 0 && <p className="text-sm text-slate-400 text-center py-4">{t('dashboard.noOperations')}</p>}
                 </div>
               </div>
             </div>
@@ -759,8 +762,8 @@ export default function Dashboard() {
             <div className="glass-card rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-base font-semibold text-slate-900">Доход по филиалам</h3>
-                  <p className="text-xs text-slate-400">Сравнение поступлений (млн сум)</p>
+                  <h3 className="text-base font-semibold text-slate-900">{t('dashboard.charts.revenueByBranch')}</h3>
+                  <p className="text-xs text-slate-400">{t('dashboard.charts.revenueByBranchDesc')}</p>
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={280}>
@@ -785,39 +788,39 @@ export default function Dashboard() {
         <>
           {/* Summary row */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard title="Филиалов" value={branches.length} icon={Building2} color="blue" />
-            <KpiCard title="Общая вместимость" value={branches.reduce((s, b) => s + (b.capacity || 0), 0)} icon={Users} color="purple"
-              subtitle={`Загрузка: ${metrics.utilization}%`} />
-            <KpiCard title="Общий доход" value={fmtShort(branches.reduce((s, b) => s + (b.monthlyRevenue || 0), 0))} icon={DollarSign} color="green" />
-            <KpiCard title="Общая прибыль" value={fmtShort(branches.reduce((s, b) => s + ((b.monthlyRevenue || 0) - (b.monthlyExpenses || 0)), 0))} icon={TrendingUp} color="teal" />
+            <KpiCard title={t('dashboard.branches.count')} value={branches.length} icon={Building2} color="blue" />
+            <KpiCard title={t('dashboard.branches.totalCapacity')} value={branches.reduce((s, b) => s + (b.capacity || 0), 0)} icon={Users} color="purple"
+              subtitle={`${t('dashboard.ops.load')}: ${metrics.utilization}%`} />
+            <KpiCard title={t('dashboard.branches.totalRevenue')} value={fmt(branches.reduce((s, b) => s + (b.monthlyRevenue || 0), 0))} icon={DollarSign} color="green" />
+            <KpiCard title={t('dashboard.branches.totalProfit')} value={fmt(branches.reduce((s, b) => s + ((b.monthlyRevenue || 0) - (b.monthlyExpenses || 0)), 0))} icon={TrendingUp} color="teal" />
           </div>
 
           {/* Branch Scoreboard */}
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="px-4 md:px-6 py-4 border-b border-slate-100 bg-slate-50">
-              <h3 className="text-base font-semibold text-slate-900">Скорборд филиалов</h3>
-              <p className="text-xs text-slate-400">Рейтинг филиалов по ключевым метрикам</p>
+              <h3 className="text-base font-semibold text-slate-900">{t('dashboard.branches.scoreboard')}</h3>
+              <p className="text-xs text-slate-400">{t('dashboard.branches.scoreboardDesc')}</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">Филиал</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Ученики</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Загрузка</th>
-                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Доход</th>
-                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Маржа</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Учителя</th>
-                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Долги</th>
-                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">ARPU</th>
-                    <th className="py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Рейтинг</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.branches.branch')}</th>
+                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.branches.students')}</th>
+                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">{t('dashboard.branches.occupancy')}</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.branches.revenue')}</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">{t('dashboard.branches.marginCol')}</th>
+                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">{t('dashboard.branches.teachersCol')}</th>
+                    <th className="text-center py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">{t('dashboard.branches.debts')}</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">{t('dashboard.branches.arpuCol')}</th>
+                    <th className="py-3 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">{t('dashboard.branches.rating')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {[...branches]
                     .sort((a, b) => (b.monthlyRevenue || 0) - (a.monthlyRevenue || 0))
                     .map((branch, i) => (
-                      <BranchScoreRow key={branch.id} branch={branch} students={students} teachers={teachers} payments={payments} rank={i} />
+                      <BranchScoreRow key={branch.id} branch={branch} students={students} teachers={teachers} payments={payments} rank={i} fmt={fmt} />
                     ))}
                 </tbody>
               </table>
@@ -827,8 +830,8 @@ export default function Dashboard() {
           {/* Branch capacity + Profitability */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="glass-card rounded-2xl p-6">
-              <h3 className="text-base font-semibold text-slate-900 mb-1">Загруженность филиалов</h3>
-              <p className="text-xs text-slate-400 mb-4">Текущее количество учеников vs вместимость</p>
+              <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.branches.capacityTitle')}</h3>
+              <p className="text-xs text-slate-400 mb-4">{t('dashboard.branches.capacityDesc')}</p>
               <div className="space-y-4">
                 {branches.map((b) => {
                   const actual = students.filter(s => s.branch === b.id).length || b.students
@@ -853,8 +856,8 @@ export default function Dashboard() {
             </div>
 
             <div className="glass-card rounded-2xl p-6">
-              <h3 className="text-base font-semibold text-slate-900 mb-1">Рентабельность</h3>
-              <p className="text-xs text-slate-400 mb-4">Доход vs Расход по филиалам (млн сум)</p>
+              <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.branches.profitability')}</h3>
+              <p className="text-xs text-slate-400 mb-4">{t('dashboard.branches.profitabilityDesc')}</p>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={branches.map(b => ({
                   name: b.name,
@@ -867,9 +870,9 @@ export default function Dashboard() {
                   <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend />
-                  <Bar dataKey="income" fill="#10b981" name="Доход" radius={[4, 4, 0, 0]} barSize={28} />
-                  <Bar dataKey="expense" fill="#fca5a5" name="Расход" radius={[4, 4, 0, 0]} barSize={28} />
-                  <Bar dataKey="profit" fill="#3b82f6" name="Прибыль" radius={[4, 4, 0, 0]} barSize={28} />
+                  <Bar dataKey="income" fill="#10b981" name={t('dashboard.charts.income')} radius={[4, 4, 0, 0]} barSize={28} />
+                  <Bar dataKey="expense" fill="#fca5a5" name={t('dashboard.charts.expense')} radius={[4, 4, 0, 0]} barSize={28} />
+                  <Bar dataKey="profit" fill="#3b82f6" name={t('dashboard.charts.profit')} radius={[4, 4, 0, 0]} barSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -877,8 +880,8 @@ export default function Dashboard() {
 
           {/* Debt analysis by branch */}
           <div className="glass-card rounded-2xl p-6">
-            <h3 className="text-base font-semibold text-slate-900 mb-1">Анализ задолженностей</h3>
-            <p className="text-xs text-slate-400 mb-4">Должники и суммы долгов по филиалам</p>
+            <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.branches.debtAnalysis')}</h3>
+            <p className="text-xs text-slate-400 mb-4">{t('dashboard.branches.debtAnalysisDesc')}</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {branches.map(b => {
                 const brDebtors = students.filter(s => s.branch === b.id && s.status === 'debtor')
@@ -894,17 +897,17 @@ export default function Dashboard() {
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                         debtPct > 30 ? 'bg-red-100 text-red-700' : debtPct > 10 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
                       }`}>
-                        {debtPct}% долг
+                        {debtPct}% {t('dashboard.branches.debtLabel')}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
-                        <p className="text-slate-500">Должников</p>
+                        <p className="text-slate-500">{t('dashboard.branches.debtorsCount')}</p>
                         <p className="font-bold text-lg text-slate-900">{brDebtors.length}</p>
                       </div>
                       <div>
-                        <p className="text-slate-500">Сумма долга</p>
-                        <p className="font-bold text-lg text-red-600">{fmtShort(brDebt)}</p>
+                        <p className="text-slate-500">{t('dashboard.branches.debtAmount')}</p>
+                        <p className="font-bold text-lg text-red-600">{fmt(brDebt)}</p>
                       </div>
                     </div>
                     {brDebtors.length > 0 && (
@@ -912,11 +915,11 @@ export default function Dashboard() {
                         {brDebtors.slice(0, 3).map(d => (
                           <div key={d.id} className="flex items-center justify-between text-xs bg-white rounded-lg px-2 py-1.5">
                             <span className="text-slate-700 truncate">{d.name}</span>
-                            <span className="text-red-600 font-semibold">{fmtShort(Math.abs(d.balance))}</span>
+                            <span className="text-red-600 font-semibold">{fmt(Math.abs(d.balance))}</span>
                           </div>
                         ))}
                         {brDebtors.length > 3 && (
-                          <p className="text-[10px] text-slate-400 text-center">+{brDebtors.length - 3} ещё</p>
+                          <p className="text-[10px] text-slate-400 text-center">+{brDebtors.length - 3} {t('dashboard.branches.more')}</p>
                         )}
                       </div>
                     )}

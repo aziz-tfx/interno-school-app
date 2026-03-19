@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { formatCurrency } from '../data/mockData'
 import {
   User, Phone, BookOpen, Calendar, CreditCard, FileText,
@@ -13,6 +14,7 @@ import PaymentForm from './PaymentForm'
 export default function StudentProfile({ student, onClose }) {
   const { payments, branches, updateStudent } = useData()
   const { hasPermission } = useAuth()
+  const { t } = useLanguage()
   const canPayments = hasPermission('finance', 'payments')
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
@@ -63,7 +65,7 @@ export default function StudentProfile({ student, onClose }) {
           <div className="flex flex-wrap gap-3 mt-1 text-sm text-slate-500">
             <span className="flex items-center gap-1"><Phone size={13} />{student.phone}</span>
             <span className="flex items-center gap-1"><BookOpen size={13} />{student.course}</span>
-            <span className="flex items-center gap-1"><Calendar size={13} />с {student.startDate}</span>
+            <span className="flex items-center gap-1"><Calendar size={13} />{t('studentProfile.since')} {student.startDate}</span>
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{branchName}</span>
@@ -73,7 +75,7 @@ export default function StudentProfile({ student, onClose }) {
               student.status === 'debtor' ? 'bg-red-100 text-red-700' :
               'bg-slate-100 text-slate-600'
             }`}>
-              {student.status === 'active' ? 'Активен' : student.status === 'debtor' ? 'Должник' : 'Заморожен'}
+              {student.status === 'active' ? t('students.status.active') : student.status === 'debtor' ? t('students.status.debtor') : t('students.status.frozen')}
             </span>
           </div>
         </div>
@@ -86,11 +88,11 @@ export default function StudentProfile({ student, onClose }) {
             <Monitor size={18} className={student.lmsAccess ? 'text-emerald-600' : 'text-red-500'} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900">Доступ к LMS</p>
+            <p className="text-sm font-semibold text-slate-900">{t('studentProfile.lmsAccess')}</p>
             <p className="text-xs text-slate-500">
               {student.lmsAccess
-                ? student.status === 'active' ? 'Активен — студент имеет доступ к курсу' : 'Выдан, но заблокирован из-за статуса'
-                : 'Не активирован — выдаётся после первой оплаты'}
+                ? student.status === 'active' ? t('studentProfile.lmsActiveAccess') : t('studentProfile.lmsBlockedStatus')
+                : t('studentProfile.lmsNotActivated')}
             </p>
           </div>
         </div>
@@ -98,7 +100,7 @@ export default function StudentProfile({ student, onClose }) {
           <button
             onClick={() => updateStudent(student.id, { lmsAccess: !student.lmsAccess })}
             className="flex-shrink-0"
-            title={student.lmsAccess ? 'Отключить доступ' : 'Включить доступ'}
+            title={student.lmsAccess ? t('studentProfile.lmsDisable') : t('studentProfile.lmsEnable')}
           >
             {student.lmsAccess ? (
               <ToggleRight size={36} className="text-emerald-500 hover:text-emerald-600 transition-colors" />
@@ -114,12 +116,12 @@ export default function StudentProfile({ student, onClose }) {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Monitor size={16} className="text-blue-600" />
-            <p className="text-sm font-semibold text-blue-800">Данные для входа в LMS</p>
+            <p className="text-sm font-semibold text-blue-800">{t('studentProfile.lmsCredentials')}</p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <span className="text-slate-500">Логин:</span>
+            <span className="text-slate-500">{t('studentProfile.login')}:</span>
             <span className="font-mono font-bold text-slate-900">{student.lmsLogin}</span>
-            <span className="text-slate-500">Пароль:</span>
+            <span className="text-slate-500">{t('studentProfile.password')}:</span>
             <span className="font-mono font-bold text-slate-900">{student.lmsPassword}</span>
           </div>
         </div>
@@ -128,7 +130,7 @@ export default function StudentProfile({ student, onClose }) {
       {/* Financial Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-slate-50 rounded-lg p-3">
-          <p className="text-xs text-slate-500 mb-1">Стоимость курса</p>
+          <p className="text-xs text-slate-500 mb-1">{t('studentProfile.coursePrice')}</p>
           {editingPrice ? (
             <div className="flex gap-1">
               <input type="number" value={coursePrice} onChange={(e) => setCoursePrice(e.target.value)}
@@ -138,24 +140,24 @@ export default function StudentProfile({ student, onClose }) {
             </div>
           ) : (
             <p className="text-sm font-bold text-slate-900 cursor-pointer hover:text-blue-600" onClick={() => setEditingPrice(true)}>
-              {totalCoursePrice > 0 ? formatCurrency(totalCoursePrice) : <span className="text-blue-500 text-xs">Нажмите чтобы указать</span>}
+              {totalCoursePrice > 0 ? formatCurrency(totalCoursePrice) : <span className="text-blue-500 text-xs">{t('studentProfile.clickToSet')}</span>}
             </p>
           )}
         </div>
         <div className="bg-emerald-50 rounded-lg p-3">
-          <p className="text-xs text-emerald-600 mb-1">Всего оплачено</p>
+          <p className="text-xs text-emerald-600 mb-1">{t('studentProfile.totalPaid')}</p>
           <p className="text-sm font-bold text-emerald-700">{formatCurrency(totalPaid)}</p>
-          <p className="text-xs text-emerald-500">{studentPayments.length} транш(ей)</p>
+          <p className="text-xs text-emerald-500">{studentPayments.length} {t('studentProfile.tranches')}</p>
         </div>
         <div className={`${remainingDebt > 0 ? 'bg-red-50' : 'bg-emerald-50'} rounded-lg p-3`}>
-          <p className={`text-xs ${remainingDebt > 0 ? 'text-red-500' : 'text-emerald-600'} mb-1`}>Дебиторка</p>
+          <p className={`text-xs ${remainingDebt > 0 ? 'text-red-500' : 'text-emerald-600'} mb-1`}>{t('studentProfile.debt')}</p>
           <p className={`text-sm font-bold ${remainingDebt > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
             {totalCoursePrice > 0 ? formatCurrency(remainingDebt) : '—'}
           </p>
         </div>
         <div className={`${isOverdue ? 'bg-amber-50' : 'bg-blue-50'} rounded-lg p-3`}>
           <p className={`text-xs ${isOverdue ? 'text-amber-600' : 'text-blue-500'} mb-1`}>
-            {isOverdue ? 'Просрочена!' : 'След. оплата'}
+            {isOverdue ? t('studentProfile.overdue') : t('studentProfile.nextPayment')}
           </p>
           <p className={`text-sm font-bold ${isOverdue ? 'text-amber-700' : 'text-blue-700'}`}>
             {nextPaymentDate || '—'}
@@ -168,7 +170,7 @@ export default function StudentProfile({ student, onClose }) {
       {totalCoursePrice > 0 && (
         <div>
           <div className="flex justify-between text-xs text-slate-500 mb-1">
-            <span>Оплата курса</span>
+            <span>{t('studentProfile.coursePayment')}</span>
             <span>{Math.min(100, Math.round((totalPaid / totalCoursePrice) * 100))}%</span>
           </div>
           <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
@@ -183,12 +185,12 @@ export default function StudentProfile({ student, onClose }) {
       {/* Payment History (Tranches) */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold text-slate-900">История оплат (транши)</h4>
+          <h4 className="text-sm font-semibold text-slate-900">{t('studentProfile.paymentHistory')}</h4>
           {canPayments && (
             <button onClick={() => setPaymentModalOpen(true)}
               className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors">
               <Plus size={14} />
-              Новый транш
+              {t('studentProfile.newTranche')}
             </button>
           )}
         </div>
@@ -196,11 +198,11 @@ export default function StudentProfile({ student, onClose }) {
         {studentPayments.length === 0 ? (
           <div className="text-center py-8 bg-slate-50 rounded-lg">
             <CreditCard size={32} className="mx-auto text-slate-300 mb-2" />
-            <p className="text-sm text-slate-400">Оплат ещё не было</p>
+            <p className="text-sm text-slate-400">{t('studentProfile.noPayments')}</p>
             {canPayments && (
               <button onClick={() => setPaymentModalOpen(true)}
                 className="mt-2 text-sm text-blue-600 hover:text-blue-700 font-medium">
-                Добавить первый транш
+                {t('studentProfile.addFirstTranche')}
               </button>
             )}
           </div>
@@ -223,7 +225,7 @@ export default function StudentProfile({ student, onClose }) {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-slate-900">{p.date}</p>
-                        <p className="text-xs text-slate-500">{p.method}{p.contractNumber ? ` · Договор ${p.contractNumber}` : ''}</p>
+                        <p className="text-xs text-slate-500">{p.method}{p.contractNumber ? ` · ${t('studentProfile.contract')} ${p.contractNumber}` : ''}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -243,43 +245,43 @@ export default function StudentProfile({ student, onClose }) {
                   {isExpanded && (
                     <div className="border-t border-slate-100 bg-slate-50 p-4 space-y-3">
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="text-slate-500">Вид оплаты:</div>
+                        <div className="text-slate-500">{t('studentProfile.paymentMethod')}:</div>
                         <div className="font-medium">{p.method}</div>
 
                         {p.course && (
                           <>
-                            <div className="text-slate-500">Курс:</div>
+                            <div className="text-slate-500">{t('studentProfile.courseLbl')}:</div>
                             <div className="font-medium">{p.course}</div>
                           </>
                         )}
 
                         {p.tariff && (
                           <>
-                            <div className="text-slate-500">Тариф:</div>
+                            <div className="text-slate-500">{t('studentProfile.tariff')}:</div>
                             <div className="font-medium">{p.learningFormat} ({p.tariff})</div>
                           </>
                         )}
 
                         {p.debt > 0 && (
                           <>
-                            <div className="text-slate-500">Остаток на момент оплаты:</div>
+                            <div className="text-slate-500">{t('studentProfile.remainingAtPayment')}:</div>
                             <div className="font-medium text-red-500">{formatCurrency(p.debt)}</div>
                           </>
                         )}
 
                         {p.nextPaymentDate && (
                           <>
-                            <div className="text-slate-500">Дата след. оплаты:</div>
+                            <div className="text-slate-500">{t('studentProfile.nextPaymentDate')}:</div>
                             <div className={`font-medium ${new Date(p.nextPaymentDate) < new Date() ? 'text-red-500' : 'text-blue-600'}`}>
                               {p.nextPaymentDate}
-                              {new Date(p.nextPaymentDate) < new Date() && ' (просрочена)'}
+                              {new Date(p.nextPaymentDate) < new Date() && ` (${t('studentProfile.overdueShort')})`}
                             </div>
                           </>
                         )}
 
                         {p.comment && (
                           <>
-                            <div className="text-slate-500">Комментарий:</div>
+                            <div className="text-slate-500">{t('studentProfile.comment')}:</div>
                             <div className="font-medium">{p.comment}</div>
                           </>
                         )}
@@ -288,7 +290,7 @@ export default function StudentProfile({ student, onClose }) {
                       {/* Attached files */}
                       {p.files && p.files.length > 0 && (
                         <div className="space-y-2">
-                          <p className="text-xs font-semibold text-slate-500 uppercase">Прикреплённые файлы</p>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">{t('studentProfile.attachedFiles')}</p>
                           {p.files.map(f => (
                             <div key={f.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-slate-200">
                               <div className="flex items-center gap-2 min-w-0">
@@ -297,11 +299,11 @@ export default function StudentProfile({ student, onClose }) {
                               </div>
                               <div className="flex gap-1 flex-shrink-0">
                                 {f.type && f.type.startsWith('image/') && (
-                                  <button onClick={() => setViewingFile(f)} className="p-1.5 hover:bg-blue-50 rounded transition-colors" title="Просмотр">
+                                  <button onClick={() => setViewingFile(f)} className="p-1.5 hover:bg-blue-50 rounded transition-colors" title={t('studentProfile.view')}>
                                     <Eye size={14} className="text-blue-500" />
                                   </button>
                                 )}
-                                <a href={f.data} download={f.name} className="p-1.5 hover:bg-emerald-50 rounded transition-colors" title="Скачать">
+                                <a href={f.data} download={f.name} className="p-1.5 hover:bg-emerald-50 rounded transition-colors" title={t('studentProfile.download')}>
                                   <Download size={14} className="text-emerald-600" />
                                 </a>
                               </div>
@@ -321,7 +323,7 @@ export default function StudentProfile({ student, onClose }) {
       {/* All Documents section */}
       {allFiles.length > 0 && (
         <div>
-          <h4 className="text-sm font-semibold text-slate-900 mb-3">Все документы ({allFiles.length})</h4>
+          <h4 className="text-sm font-semibold text-slate-900 mb-3">{t('studentProfile.allDocuments')} ({allFiles.length})</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {allFiles.map(f => (
               <div key={f.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
@@ -329,7 +331,7 @@ export default function StudentProfile({ student, onClose }) {
                   {getFileIcon(f.type)}
                   <div className="min-w-0">
                     <p className="text-sm text-slate-700 truncate">{f.name}</p>
-                    <p className="text-xs text-slate-400">Транш {f.tranche} · {f.paymentDate}</p>
+                    <p className="text-xs text-slate-400">{t('studentProfile.tranche')} {f.tranche} · {f.paymentDate}</p>
                   </div>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
@@ -351,12 +353,12 @@ export default function StudentProfile({ student, onClose }) {
       {/* Close */}
       <div className="flex justify-end pt-4 border-t border-slate-100">
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
-          Закрыть
+          {t('common.close')}
         </button>
       </div>
 
       {/* New Payment Modal */}
-      <Modal isOpen={paymentModalOpen} onClose={() => setPaymentModalOpen(false)} title="Новый транш оплаты" size="lg">
+      <Modal isOpen={paymentModalOpen} onClose={() => setPaymentModalOpen(false)} title={t('studentProfile.newPaymentTitle')} size="lg">
         <PaymentForm
           onClose={() => setPaymentModalOpen(false)}
           preselectedStudentId={student.id}
@@ -364,7 +366,7 @@ export default function StudentProfile({ student, onClose }) {
       </Modal>
 
       {/* File Preview Modal */}
-      <Modal isOpen={!!viewingFile} onClose={() => setViewingFile(null)} title={viewingFile?.name || 'Просмотр'} size="xl">
+      <Modal isOpen={!!viewingFile} onClose={() => setViewingFile(null)} title={viewingFile?.name || t('studentProfile.view')} size="xl">
         {viewingFile && viewingFile.type && viewingFile.type.startsWith('image/') && (
           <div className="flex justify-center">
             <img src={viewingFile.data} alt={viewingFile.name} className="max-w-full max-h-[70vh] rounded-lg" />
