@@ -232,7 +232,7 @@ export default function Students() {
       } else if (bulkAction === 'lms') {
         const val = bulkTarget === 'on'
         for (const id of ids) await updateStudent(id, { lmsAccess: val })
-      } else if (bulkAction === 'delete') {
+      } else if (bulkAction === 'delete' && (bulkTarget === 'confirmed' || bulkTarget === 'confirm')) {
         for (const id of ids) await deleteStudent(id)
       }
     } catch (err) {
@@ -381,7 +381,7 @@ export default function Students() {
 
               {/* Delete */}
               {canDelete && (
-                <button onClick={() => { setBulkAction('delete'); setBulkTarget('confirm') }}
+                <button onClick={() => { setBulkAction('delete'); setBulkTarget('pending') }}
                   className="text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5 hover:bg-red-100 transition-colors flex items-center gap-1">
                   <Trash2 size={12} /> Удалить
                 </button>
@@ -389,12 +389,27 @@ export default function Students() {
 
               <div className="h-5 w-px bg-blue-200" />
 
-              {/* Execute */}
-              {bulkAction && bulkTarget && (
+              {/* Execute non-delete actions */}
+              {bulkAction && bulkTarget && bulkAction !== 'delete' && (
                 <button onClick={executeBulkAction} disabled={bulkProcessing}
                   className="text-xs bg-blue-600 text-white rounded-lg px-4 py-1.5 hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium">
-                  {bulkProcessing ? 'Выполняется...' : bulkAction === 'delete' ? `Удалить ${selectedIds.size} учеников?` : 'Применить'}
+                  {bulkProcessing ? 'Выполняется...' : 'Применить'}
                 </button>
+              )}
+
+              {/* Delete confirmation */}
+              {bulkAction === 'delete' && bulkTarget === 'pending' && (
+                <div className="flex items-center gap-2 bg-red-100 border border-red-300 rounded-lg px-3 py-1.5">
+                  <span className="text-xs text-red-700 font-medium">Удалить {selectedIds.size} учеников?</span>
+                  <button onClick={() => { setBulkTarget('confirmed'); executeBulkAction() }} disabled={bulkProcessing}
+                    className="text-xs bg-red-600 text-white rounded px-3 py-1 hover:bg-red-700 disabled:opacity-50 font-medium">
+                    {bulkProcessing ? '...' : 'Да, удалить'}
+                  </button>
+                  <button onClick={() => { setBulkAction(null); setBulkTarget('') }}
+                    className="text-xs text-red-500 hover:text-red-700">
+                    Отмена
+                  </button>
+                </div>
               )}
             </div>
           )}
