@@ -20,6 +20,8 @@ export default function GroupForm({ group, onClose }) {
     maxOffline: 15,
     schedule: '',
     status: 'active',
+    startDate: '',
+    room: '',
   })
 
   useEffect(() => {
@@ -32,9 +34,22 @@ export default function GroupForm({ group, onClose }) {
         maxOffline: group.maxOffline || 15,
         schedule: group.schedule || '',
         status: group.status || 'active',
+        startDate: group.startDate || '',
+        room: group.room || '',
       })
     }
   }, [group])
+
+  // Auto-calculate endDate from startDate + course duration
+  const selectedCourse = courses.find(c => c.name === form.course)
+  const courseDuration = selectedCourse?.duration ? parseInt(selectedCourse.duration) : 0
+  const endDate = form.startDate && courseDuration
+    ? (() => {
+        const d = new Date(form.startDate)
+        d.setMonth(d.getMonth() + courseDuration)
+        return d.toISOString().split('T')[0]
+      })()
+    : ''
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
@@ -47,6 +62,7 @@ export default function GroupForm({ group, onClose }) {
       ...form,
       teacherId: form.teacherId ? Number(form.teacherId) : null,
       maxOffline: Number(form.maxOffline) || 15,
+      endDate: endDate || null,
     }
     if (isEdit) {
       updateGroup(group.id, data)
@@ -99,7 +115,29 @@ export default function GroupForm({ group, onClose }) {
           <p className="text-[10px] text-slate-400 mt-1">{t('groupForm.online_unlimited')}</p>
         </div>
 
-        <div className="col-span-2">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Дата старта</label>
+          <input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Дата окончания</label>
+          <input type="date" value={endDate} disabled
+            className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-500" />
+          {courseDuration > 0 && (
+            <p className="text-[10px] text-slate-400 mt-1">Авто: {courseDuration} мес ({selectedCourse?.name})</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Кабинет</label>
+          <input type="text" value={form.room} onChange={e => set('room', e.target.value)}
+            placeholder="Кабинет 1"
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_schedule')}</label>
           <input type="text" value={form.schedule} onChange={e => set('schedule', e.target.value)}
             placeholder={t('groupForm.placeholder_schedule')}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X } from 'lucide-react'
+import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X, Calendar, DoorOpen, ChevronDown, ChevronUp, Phone, LayoutGrid, CalendarRange } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -13,7 +13,7 @@ export default function Students() {
   const { t } = useLanguage()
   const { user, hasPermission } = useAuth()
   const {
-    students, branches, payments, groups, teachers,
+    students, branches, payments, groups, teachers, courses,
     addStudent, deleteStudent, deleteGroup,
     getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
     getBranchName,
@@ -29,11 +29,13 @@ export default function Students() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [profileStudent, setProfileStudent] = useState(null)
 
-  // Group modals
+  // Group modals & state
   const [groupModalOpen, setGroupModalOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState(null)
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null)
   const [groupSearch, setGroupSearch] = useState('')
+  const [expandedGroup, setExpandedGroup] = useState(null)
+  const [groupView, setGroupView] = useState('cards') // 'cards' | 'timeline'
 
   const canAdd = hasPermission('students', 'add')
   const canEdit = hasPermission('students', 'edit')
@@ -395,7 +397,7 @@ export default function Students() {
       {/* ═══════ GROUPS TAB ═══════ */}
       {activeTab === 'groups' && (
         <>
-          {/* Filters */}
+          {/* Filters + View Switcher */}
           <div className="glass-card rounded-2xl p-4 flex flex-wrap gap-4 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -410,121 +412,359 @@ export default function Students() {
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
+            <div className="flex rounded-xl overflow-hidden border border-slate-200">
+              <button onClick={() => setGroupView('cards')}
+                className={`px-3 py-2 text-xs font-medium flex items-center gap-1.5 transition-colors ${groupView === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+                <LayoutGrid size={14} /> Карточки
+              </button>
+              <button onClick={() => setGroupView('timeline')}
+                className={`px-3 py-2 text-xs font-medium flex items-center gap-1.5 transition-colors ${groupView === 'timeline' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+                <CalendarRange size={14} /> Расписание
+              </button>
+            </div>
           </div>
 
-          {/* Group Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredGroups.map(group => {
-              const offlineCount = getGroupOfflineCount(group.name)
-              const onlineCount = getGroupOnlineCount(group.name)
-              const totalCount = offlineCount + onlineCount
-              const offlinePct = group.maxOffline > 0 ? Math.round((offlineCount / group.maxOffline) * 100) : 0
-              const isFull = offlineCount >= group.maxOffline
-              const teacher = group.teacherId ? teachers.find(t => t.id === group.teacherId) : null
+          {/* ── CARDS VIEW ── */}
+          {groupView === 'cards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredGroups.map(group => {
+                const offlineCount = getGroupOfflineCount(group.name)
+                const onlineCount = getGroupOnlineCount(group.name)
+                const totalCount = offlineCount + onlineCount
+                const offlinePct = group.maxOffline > 0 ? Math.round((offlineCount / group.maxOffline) * 100) : 0
+                const isFull = offlineCount >= group.maxOffline
+                const teacher = group.teacherId ? teachers.find(tc => tc.id === group.teacherId) : null
+                const isExpanded = expandedGroup === group.id
+                const groupStudentsList = getGroupStudents(group.name)
+                const courseDuration = courses.find(c => c.name === group.course)?.duration
+                const durationMonths = courseDuration ? parseInt(courseDuration) : 0
+                const endDate = group.startDate && durationMonths ? (() => {
+                  const d = new Date(group.startDate); d.setMonth(d.getMonth() + durationMonths); return d.toISOString().split('T')[0]
+                })() : group.endDate || null
+                const courseProgress = group.startDate && endDate ? (() => {
+                  const now = Date.now(), start = new Date(group.startDate).getTime(), end = new Date(endDate).getTime()
+                  if (now < start) return 0
+                  if (now > end) return 100
+                  return Math.round(((now - start) / (end - start)) * 100)
+                })() : null
 
-              return (
-                <div key={group.id} className="glass-card rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
-                  {/* Header */}
-                  <div className={`px-5 py-4 ${isFull ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'} text-white`}>
-                    <div className="flex items-center justify-between">
+                return (
+                  <div key={group.id} className="glass-card rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
+                    {/* Header */}
+                    <div className={`px-5 py-4 ${isFull ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'} text-white cursor-pointer`}
+                      onClick={() => setExpandedGroup(isExpanded ? null : group.id)}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-bold text-lg">{group.name}</h3>
+                          <p className="text-sm opacity-90">{group.course}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {canEdit && (
+                            <button onClick={(e) => { e.stopPropagation(); handleEditGroup(group) }}
+                              className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteGroup(group.id) }}
+                              className="p-1.5 bg-white/20 hover:bg-red-500/50 rounded-lg transition-colors">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                          {isExpanded ? <ChevronUp size={18} className="ml-1 opacity-70" /> : <ChevronDown size={18} className="ml-1 opacity-70" />}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-5 space-y-4">
+                      {/* Stats */}
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="bg-blue-50 rounded-lg p-2.5">
+                          <Users size={13} className="text-blue-600 mx-auto mb-1" />
+                          <p className="text-lg font-bold text-slate-900">{offlineCount}</p>
+                          <p className="text-[10px] text-slate-500">{t('students.group_offline')}</p>
+                        </div>
+                        <div className="bg-purple-50 rounded-lg p-2.5">
+                          <Wifi size={13} className="text-purple-600 mx-auto mb-1" />
+                          <p className="text-lg font-bold text-slate-900">{onlineCount}</p>
+                          <p className="text-[10px] text-slate-500">{t('students.group_online')}</p>
+                        </div>
+                        <div className="bg-emerald-50 rounded-lg p-2.5">
+                          <p className="text-lg font-bold text-slate-900">{totalCount}</p>
+                          <p className="text-[10px] text-slate-500">{t('students.group_total')}</p>
+                        </div>
+                      </div>
+
+                      {/* Offline capacity bar */}
                       <div>
-                        <h3 className="font-bold text-lg">{group.name}</h3>
-                        <p className="text-sm opacity-90">{group.course}</p>
+                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                          <span>{t('students.group_offline_seats')}</span>
+                          <span className={`font-semibold ${isFull ? 'text-red-500' : 'text-slate-700'}`}>
+                            {offlineCount}/{group.maxOffline}
+                            {isFull && ` ${t('students.group_full')}`}
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-2.5">
+                          <div className={`h-2.5 rounded-full transition-all ${offlinePct >= 100 ? 'bg-red-500' : offlinePct >= 80 ? 'bg-amber-500' : 'bg-blue-500'}`}
+                            style={{ width: `${Math.min(offlinePct, 100)}%` }} />
+                        </div>
                       </div>
-                      <div className="flex gap-1">
-                        {canEdit && (
-                          <button onClick={() => handleEditGroup(group)}
-                            className="p-1.5 bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
-                            <Pencil size={14} />
-                          </button>
+
+                      {/* Details */}
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <BookOpen size={14} className="text-slate-400" />
+                          <span>{getBranchName(group.branch)}</span>
+                        </div>
+                        {teacher && (
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <User size={14} className="text-slate-400" />
+                            <span>{teacher.name}</span>
+                          </div>
                         )}
-                        {canDelete && (
-                          <button onClick={() => setConfirmDeleteGroup(group.id)}
-                            className="p-1.5 bg-white/20 hover:bg-red-500/50 rounded-lg transition-colors">
-                            <Trash2 size={14} />
-                          </button>
+                        {group.schedule && (
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Clock size={14} className="text-slate-400" />
+                            <span>{group.schedule}</span>
+                          </div>
+                        )}
+                        {group.room && (
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <DoorOpen size={14} className="text-slate-400" />
+                            <span>{group.room}</span>
+                          </div>
+                        )}
+                        {group.startDate && (
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Calendar size={14} className="text-slate-400" />
+                            <span>{new Date(group.startDate).toLocaleDateString('ru-RU')} → {endDate ? new Date(endDate).toLocaleDateString('ru-RU') : '...'}</span>
+                          </div>
                         )}
                       </div>
+
+                      {/* Course Progress */}
+                      {courseProgress !== null && (
+                        <div>
+                          <div className="flex justify-between text-xs text-slate-500 mb-1">
+                            <span>Прогресс курса</span>
+                            <span className="font-semibold text-slate-700">{courseProgress}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-2">
+                            <div className={`h-2 rounded-full transition-all ${courseProgress >= 90 ? 'bg-emerald-500' : courseProgress >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                              style={{ width: `${courseProgress}%` }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Status badge */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                          group.status === 'active' ? 'bg-emerald-50 text-emerald-700' :
+                          group.status === 'full' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {group.status === 'active' ? t('students.group_status_active') : group.status === 'full' ? t('students.group_status_full') : t('students.group_status_archived')}
+                        </span>
+                        <span className="text-xs text-slate-400">{t('students.group_online_unlimited')}</span>
+                      </div>
+
+                      {/* ── Expandable Student List ── */}
+                      {isExpanded && (
+                        <div className="pt-3 border-t border-slate-200 space-y-2">
+                          <p className="text-xs font-semibold text-slate-500 uppercase">Ученики ({groupStudentsList.length})</p>
+                          {groupStudentsList.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-2">Нет зачисленных учеников</p>
+                          ) : (
+                            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                              {groupStudentsList.map(s => (
+                                <div key={s.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 hover:bg-slate-100 cursor-pointer transition-colors"
+                                  onClick={() => setProfileStudent(s)}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
+                                      s.status === 'active' ? 'bg-emerald-500' : s.status === 'debtor' ? 'bg-red-500' : 'bg-slate-400'
+                                    }`}>
+                                      {s.name?.charAt(0)}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium text-slate-800 truncate">{s.name}</p>
+                                      <p className="text-[10px] text-slate-400">{s.phone || '—'}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                      s.learningFormat === 'Онлайн' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                      {s.learningFormat === 'Онлайн' ? 'ONL' : 'OFF'}
+                                    </span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                      s.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
+                                      s.status === 'debtor' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'
+                                    }`}>
+                                      {s.status === 'active' ? '✓' : s.status === 'debtor' ? '₽' : '❄'}
+                                    </span>
+                                    {s.lmsAccess && <Monitor size={12} className="text-emerald-500" />}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
+                )
+              })}
+            </div>
+          )}
 
-                  <div className="p-5 space-y-4">
-                    {/* Stats */}
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="bg-blue-50 rounded-lg p-2.5">
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                          <Users size={13} className="text-blue-600" />
+          {/* ── TIMELINE VIEW ── */}
+          {groupView === 'timeline' && (() => {
+            // Build timeline data
+            const timelineGroups = filteredGroups.filter(g => g.startDate).map(g => {
+              const courseDur = courses.find(c => c.name === g.course)?.duration
+              const durMonths = courseDur ? parseInt(courseDur) : 6
+              const start = new Date(g.startDate)
+              const end = g.endDate ? new Date(g.endDate) : new Date(new Date(g.startDate).setMonth(start.getMonth() + durMonths))
+              return { ...g, startD: start, endD: end, durMonths }
+            })
+
+            // Get all unique rooms
+            const rooms = [...new Set(timelineGroups.map(g => g.room || 'Без кабинета'))].sort()
+
+            // Timeline range: 6 months back, 6 months forward
+            const now = new Date()
+            const tlStart = new Date(now.getFullYear(), now.getMonth() - 2, 1)
+            const tlEnd = new Date(now.getFullYear(), now.getMonth() + 10, 0)
+            const totalDays = (tlEnd - tlStart) / (1000 * 60 * 60 * 24)
+
+            // Generate month labels
+            const months = []
+            for (let d = new Date(tlStart); d < tlEnd; d.setMonth(d.getMonth() + 1)) {
+              months.push({ date: new Date(d), label: d.toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' }) })
+            }
+
+            // Course colors
+            const courseColors = {}
+            const palette = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1']
+            const uniqueCourses = [...new Set(timelineGroups.map(g => g.course))]
+            uniqueCourses.forEach((c, i) => { courseColors[c] = palette[i % palette.length] })
+
+            // Detect conflicts (same room + overlapping time + same schedule time)
+            const getConflicts = (group) => {
+              return timelineGroups.filter(other =>
+                other.id !== group.id &&
+                (other.room || 'Без кабинета') === (group.room || 'Без кабинета') &&
+                other.room &&
+                other.startD < group.endD &&
+                other.endD > group.startD &&
+                other.schedule === group.schedule
+              )
+            }
+
+            const noRoomGroups = timelineGroups.filter(g => !g.room)
+
+            return (
+              <div className="space-y-4">
+                {/* Legend */}
+                <div className="glass-card rounded-2xl p-4">
+                  <div className="flex flex-wrap gap-3 items-center">
+                    <span className="text-xs font-semibold text-slate-500 mr-2">Курсы:</span>
+                    {uniqueCourses.map(c => (
+                      <span key={c} className="flex items-center gap-1.5 text-xs">
+                        <span className="w-3 h-3 rounded" style={{ background: courseColors[c] }} />
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Timeline Grid */}
+                <div className="glass-card rounded-2xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <div style={{ minWidth: '900px' }}>
+                      {/* Month headers */}
+                      <div className="flex border-b border-slate-200">
+                        <div className="w-36 shrink-0 px-3 py-2 bg-slate-50 text-xs font-semibold text-slate-500 border-r border-slate-200">
+                          Кабинет
                         </div>
-                        <p className="text-lg font-bold text-slate-900">{offlineCount}</p>
-                        <p className="text-[10px] text-slate-500">{t('students.group_offline')}</p>
-                      </div>
-                      <div className="bg-purple-50 rounded-lg p-2.5">
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                          <Wifi size={13} className="text-purple-600" />
+                        <div className="flex-1 flex">
+                          {months.map((m, i) => {
+                            const isCurrentMonth = m.date.getMonth() === now.getMonth() && m.date.getFullYear() === now.getFullYear()
+                            return (
+                              <div key={i} className={`flex-1 px-2 py-2 text-xs text-center border-r border-slate-100 ${isCurrentMonth ? 'bg-blue-50 font-bold text-blue-700' : 'text-slate-500'}`}>
+                                {m.label}
+                              </div>
+                            )
+                          })}
                         </div>
-                        <p className="text-lg font-bold text-slate-900">{onlineCount}</p>
-                        <p className="text-[10px] text-slate-500">{t('students.group_online')}</p>
                       </div>
-                      <div className="bg-emerald-50 rounded-lg p-2.5">
-                        <p className="text-lg font-bold text-slate-900">{totalCount}</p>
-                        <p className="text-[10px] text-slate-500">{t('students.group_total')}</p>
-                      </div>
-                    </div>
 
-                    {/* Offline capacity bar */}
-                    <div>
-                      <div className="flex justify-between text-xs text-slate-500 mb-1">
-                        <span>{t('students.group_offline_seats')}</span>
-                        <span className={`font-semibold ${isFull ? 'text-red-500' : 'text-slate-700'}`}>
-                          {offlineCount}/{group.maxOffline}
-                          {isFull && ` ${t('students.group_full')}`}
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5">
-                        <div className={`h-2.5 rounded-full transition-all ${
-                          offlinePct >= 100 ? 'bg-red-500' : offlinePct >= 80 ? 'bg-amber-500' : 'bg-blue-500'
-                        }`} style={{ width: `${Math.min(offlinePct, 100)}%` }} />
-                      </div>
-                    </div>
+                      {/* Room rows */}
+                      {rooms.map(room => {
+                        const roomGroups = timelineGroups.filter(g => (g.room || 'Без кабинета') === room)
+                        return (
+                          <div key={room} className="flex border-b border-slate-100 min-h-[52px]">
+                            <div className="w-36 shrink-0 px-3 py-3 bg-slate-50/50 border-r border-slate-200 flex items-center gap-2">
+                              <DoorOpen size={14} className="text-slate-400" />
+                              <span className="text-xs font-medium text-slate-700 truncate">{room}</span>
+                            </div>
+                            <div className="flex-1 relative py-1.5">
+                              {/* Today marker */}
+                              {(() => {
+                                const todayPos = ((now - tlStart) / (1000 * 60 * 60 * 24)) / totalDays * 100
+                                return todayPos > 0 && todayPos < 100 ? (
+                                  <div className="absolute top-0 bottom-0 w-px bg-red-400 z-10" style={{ left: `${todayPos}%` }} />
+                                ) : null
+                              })()}
+                              {roomGroups.map(g => {
+                                const left = Math.max(0, ((g.startD - tlStart) / (1000 * 60 * 60 * 24)) / totalDays * 100)
+                                const right = Math.min(100, ((g.endD - tlStart) / (1000 * 60 * 60 * 24)) / totalDays * 100)
+                                const width = right - left
+                                const conflicts = getConflicts(g)
+                                const hasConflict = conflicts.length > 0
+                                return (
+                                  <div key={g.id}
+                                    className={`absolute top-1.5 h-7 rounded-md flex items-center px-2 text-[10px] font-medium text-white truncate cursor-pointer hover:opacity-90 transition-opacity ${hasConflict ? 'ring-2 ring-red-500 ring-offset-1' : ''}`}
+                                    style={{
+                                      left: `${left}%`,
+                                      width: `${Math.max(width, 2)}%`,
+                                      background: courseColors[g.course] || '#64748b',
+                                    }}
+                                    title={`${g.name} | ${g.course}\n${g.schedule || ''}\n${g.startD.toLocaleDateString('ru-RU')} → ${g.endD.toLocaleDateString('ru-RU')}\nУчеников: ${getGroupOfflineCount(g.name) + getGroupOnlineCount(g.name)}${hasConflict ? '\n⚠️ Конфликт: ' + conflicts.map(c => c.name).join(', ') : ''}`}
+                                  >
+                                    {width > 5 ? g.name : ''}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
 
-                    {/* Details */}
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center gap-2 text-slate-600">
-                        <BookOpen size={14} className="text-slate-400" />
-                        <span>{getBranchName(group.branch)}</span>
-                      </div>
-                      {teacher && (
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <User size={14} className="text-slate-400" />
-                          <span>{teacher.name}</span>
+                      {rooms.length === 0 && (
+                        <div className="text-center py-8 text-slate-400 text-sm">
+                          Нет групп с датой старта и кабинетом. Укажите «Дата старта» и «Кабинет» при редактировании группы.
                         </div>
                       )}
-                      {group.schedule && (
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Clock size={14} className="text-slate-400" />
-                          <span>{group.schedule}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Status badge */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                      <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                        group.status === 'active' ? 'bg-emerald-50 text-emerald-700' :
-                        group.status === 'full' ? 'bg-amber-50 text-amber-700' :
-                        'bg-slate-100 text-slate-500'
-                      }`}>
-                        {group.status === 'active' ? t('students.group_status_active') : group.status === 'full' ? t('students.group_status_full') : t('students.group_status_archived')}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {t('students.group_online_unlimited')}
-                      </span>
                     </div>
                   </div>
                 </div>
-              )
-            })}
-          </div>
+
+                {/* Groups without room/startDate */}
+                {noRoomGroups.length > 0 && (
+                  <div className="glass-card rounded-2xl p-4">
+                    <p className="text-xs font-semibold text-amber-600 mb-2">⚠ Группы без кабинета/даты старта ({noRoomGroups.length})</p>
+                    <div className="flex flex-wrap gap-2">
+                      {noRoomGroups.map(g => (
+                        <span key={g.id} className="text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-lg border border-amber-200">
+                          {g.name} — {g.course}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {filteredGroups.length === 0 && (
             <div className="text-center py-12 text-slate-400 glass-card rounded-2xl">
