@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X, Calendar, DoorOpen, ChevronDown, ChevronUp, Phone, LayoutGrid, CalendarRange } from 'lucide-react'
+import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X, Calendar, DoorOpen, ChevronDown, ChevronUp, Phone, LayoutGrid, CalendarRange, CheckSquare, Square, UserMinus, ArrowRightLeft, Snowflake } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -14,7 +14,7 @@ export default function Students() {
   const { user, hasPermission } = useAuth()
   const {
     students, branches, payments, groups, teachers, courses,
-    addStudent, deleteStudent, deleteGroup,
+    addStudent, updateStudent, deleteStudent, deleteGroup,
     getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
     getBranchName,
   } = useData()
@@ -36,6 +36,12 @@ export default function Students() {
   const [groupSearch, setGroupSearch] = useState('')
   const [expandedGroup, setExpandedGroup] = useState(null)
   const [groupView, setGroupView] = useState('cards') // 'cards' | 'timeline'
+
+  // Bulk actions state
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkAction, setBulkAction] = useState(null) // 'status' | 'group' | 'delete' | 'lms'
+  const [bulkTarget, setBulkTarget] = useState('')
+  const [bulkProcessing, setBulkProcessing] = useState(false)
 
   const canAdd = hasPermission('students', 'add')
   const canEdit = hasPermission('students', 'edit')
@@ -193,6 +199,49 @@ export default function Students() {
     setSyncing(false)
   }
 
+  // ─── Bulk Actions ───
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map(s => s.id)))
+    }
+  }
+  const clearSelection = () => { setSelectedIds(new Set()); setBulkAction(null) }
+
+  const executeBulkAction = async () => {
+    if (selectedIds.size === 0) return
+    setBulkProcessing(true)
+    const ids = [...selectedIds]
+    try {
+      if (bulkAction === 'status' && bulkTarget) {
+        const lmsUpdate = bulkTarget === 'active' ? { lmsAccess: true } : bulkTarget === 'debtor' || bulkTarget === 'frozen' ? { lmsAccess: false } : {}
+        for (const id of ids) await updateStudent(id, { status: bulkTarget, ...lmsUpdate })
+      } else if (bulkAction === 'group' && bulkTarget) {
+        const targetGroup = groups.find(g => g.id === bulkTarget)
+        if (targetGroup) {
+          for (const id of ids) await updateStudent(id, { group: targetGroup.name, groupId: targetGroup.id, branch: targetGroup.branch, course: targetGroup.course })
+        }
+      } else if (bulkAction === 'lms') {
+        const val = bulkTarget === 'on'
+        for (const id of ids) await updateStudent(id, { lmsAccess: val })
+      } else if (bulkAction === 'delete') {
+        for (const id of ids) await deleteStudent(id)
+      }
+    } catch (err) {
+      console.error('Bulk action error:', err)
+    }
+    setBulkProcessing(false)
+    clearSelection()
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -283,12 +332,86 @@ export default function Students() {
             </div>
           </div>
 
+          {/* ── Bulk Actions Bar ── */}
+          {selectedIds.size > 0 && canEdit && (
+            <div className="glass-card rounded-2xl p-3 flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200">
+              <div className="flex items-center gap-2">
+                <CheckSquare size={16} className="text-blue-600" />
+                <span className="text-sm font-semibold text-blue-800">
+                  Выбрано: {selectedIds.size}
+                </span>
+                <button onClick={clearSelection} className="text-blue-400 hover:text-blue-600">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="h-5 w-px bg-blue-200" />
+
+              {/* Status Change */}
+              <div className="flex items-center gap-1.5">
+                <select value={bulkAction === 'status' ? bulkTarget : ''}
+                  onChange={(e) => { setBulkAction('status'); setBulkTarget(e.target.value) }}
+                  className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  <option value="">Сменить статус...</option>
+                  <option value="active">✅ Активен</option>
+                  <option value="debtor">🔴 Должник</option>
+                  <option value="frozen">❄️ Заморожен</option>
+                </select>
+              </div>
+
+              {/* Group Transfer */}
+              <div className="flex items-center gap-1.5">
+                <select value={bulkAction === 'group' ? bulkTarget : ''}
+                  onChange={(e) => { setBulkAction('group'); setBulkTarget(e.target.value) }}
+                  className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  <option value="">Перевести в группу...</option>
+                  {allGroups.map(g => <option key={g.id} value={g.id}>{g.name} — {g.course}</option>)}
+                </select>
+              </div>
+
+              {/* LMS Access */}
+              <div className="flex items-center gap-1.5">
+                <select value={bulkAction === 'lms' ? bulkTarget : ''}
+                  onChange={(e) => { setBulkAction('lms'); setBulkTarget(e.target.value) }}
+                  className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  <option value="">LMS доступ...</option>
+                  <option value="on">✅ Включить</option>
+                  <option value="off">❌ Отключить</option>
+                </select>
+              </div>
+
+              {/* Delete */}
+              {canDelete && (
+                <button onClick={() => { setBulkAction('delete'); setBulkTarget('confirm') }}
+                  className="text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5 hover:bg-red-100 transition-colors flex items-center gap-1">
+                  <Trash2 size={12} /> Удалить
+                </button>
+              )}
+
+              <div className="h-5 w-px bg-blue-200" />
+
+              {/* Execute */}
+              {bulkAction && bulkTarget && (
+                <button onClick={executeBulkAction} disabled={bulkProcessing}
+                  className="text-xs bg-blue-600 text-white rounded-lg px-4 py-1.5 hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium">
+                  {bulkProcessing ? 'Выполняется...' : bulkAction === 'delete' ? `Удалить ${selectedIds.size} учеников?` : 'Применить'}
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Table */}
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-white/40 border-b border-white/30">
+                    {canEdit && (
+                      <th className="py-3 px-2 w-8">
+                        <button onClick={toggleSelectAll} className="text-slate-400 hover:text-blue-600 transition-colors">
+                          {selectedIds.size === filtered.length && filtered.length > 0 ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
+                        </button>
+                      </th>
+                    )}
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('students.th_name')}</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('students.th_branch')}</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('students.th_group')}</th>
@@ -306,8 +429,15 @@ export default function Students() {
                     const isOnline = student.learningFormat === 'Онлайн'
                     return (
                       <tr key={student.id}
-                        className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors cursor-pointer"
+                        className={`border-b border-slate-50 hover:bg-blue-50/30 transition-colors cursor-pointer ${selectedIds.has(student.id) ? 'bg-blue-50/50' : ''}`}
                         onClick={() => setProfileStudent(student)}>
+                        {canEdit && (
+                          <td className="py-3 px-2 w-8" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => toggleSelect(student.id)} className="text-slate-400 hover:text-blue-600 transition-colors">
+                              {selectedIds.has(student.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
+                            </button>
+                          </td>
+                        )}
                         <td className="py-3 px-4">
                           <p className="font-medium text-slate-900">{student.name}</p>
                           <p className="text-xs text-slate-400">
