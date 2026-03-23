@@ -162,6 +162,8 @@ export let PERMISSIONS = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
 const DEFAULT_EMPLOYEES = [
   // Владелец
   { id: 1,  login: 'owner',   password: 'owner123',  name: 'Тошполатов Азиз',     role: 'owner',   branch: 'all',       avatar: 'А', phone: '' },
+  // Демо-аккаунт для презентации
+  { id: 100, login: 'demo',   password: 'demo123',   name: 'DEMO Аккаунт',         role: 'owner',   branch: 'all',       avatar: 'D', phone: '' },
   // Администратор
   { id: 2,  login: 'admin',   password: 'admin123',  name: 'Каримов Азиз',         role: 'admin',   branch: 'all',       avatar: 'К', phone: '' },
   // Руководители филиалов
