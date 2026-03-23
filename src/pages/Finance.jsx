@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { formatCurrency } from '../data/mockData'
 import { db } from '../firebase'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
@@ -15,15 +16,7 @@ import Modal from '../components/Modal'
 import PaymentForm from '../components/PaymentForm'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
-function formatRevenue(val) {
-  if (val == null || val === 0) return '0'
-  if (Math.abs(val) >= 1000000) {
-    const m = val / 1000000
-    return `${Number.isInteger(m) ? m : m.toFixed(1)} млн`
-  }
-  if (Math.abs(val) >= 1000) return `${(val / 1000).toFixed(0)} тыс`
-  return String(val)
-}
+// formatRevenue is defined inside the component to access t()
 
 function getMonthKey(year, month) {
   return `${year}-${String(month).padStart(2, '0')}`
@@ -36,9 +29,20 @@ const MONTH_NAMES = [
 
 // ─── Component ──────────────────────────────────────────────────────────────
 export default function Finance() {
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const { user, hasPermission, employees, getSalesStaff } = useAuth()
   const { branches, payments, getSalesPlan, getManagerPerf } = useData()
+
+  function formatRevenue(val) {
+    if (val == null || val === 0) return '0'
+    if (Math.abs(val) >= 1000000) {
+      const m = val / 1000000
+      return `${Number.isInteger(m) ? m : m.toFixed(1)} ${t('finance.fmt_million')}`
+    }
+    if (Math.abs(val) >= 1000) return `${(val / 1000).toFixed(0)} ${t('finance.fmt_thousand')}`
+    return String(val)
+  }
 
   const canFullPnL = hasPermission('finance', 'fullPnL')
   const canPayments = hasPermission('finance', 'payments')
@@ -254,10 +258,10 @@ export default function Finance() {
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
             <DollarSign className="text-blue-600" size={24} />
-            Продажи
+            {t('finance.title')}
           </h2>
           <p className="text-slate-500 mt-1">
-            {isSales ? 'Ваши показатели эффективности' : 'Управление продажами и KPI менеджеров'}
+            {isSales ? t('finance.subtitle_sales') : t('finance.subtitle_admin')}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -266,17 +270,17 @@ export default function Finance() {
             <>
               <button onClick={openNewSale}
                 className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/25 flex items-center gap-2">
-                <Plus size={16} /> Новая продажа
+                <Plus size={16} /> {t('finance.btn_new_sale')}
               </button>
               <button onClick={openDoplata}
                 className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
-                <CreditCard size={16} /> Доплата
+                <CreditCard size={16} /> {t('finance.btn_doplata')}
               </button>
             </>
           )}
           <button onClick={() => navigate('/reports')}
             className="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors flex items-center gap-2">
-            <FileBarChart size={16} /> Отчёты
+            <FileBarChart size={16} /> {t('finance.btn_reports')}
           </button>
         </div>
       </div>
@@ -303,7 +307,7 @@ export default function Finance() {
             <Filter size={16} className="text-slate-400" />
             <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
               className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer">
-              <option value="all">Все филиалы</option>
+              <option value="all">{t('finance.filter_all_branches')}</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
@@ -316,15 +320,15 @@ export default function Finance() {
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-blue-50 rounded-lg"><Target size={16} className="text-blue-600" /></div>
-              <span className="text-xs text-slate-500">План выручки</span>
+              <span className="text-xs text-slate-500">{t('finance.plan_revenue')}</span>
             </div>
             <p className="text-lg font-bold text-slate-900">{formatRevenue(teamTotals.planRevenue)}</p>
-            <p className="text-xs text-slate-400">сум</p>
+            <p className="text-xs text-slate-400">{t('finance.sum')}</p>
           </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-emerald-50 rounded-lg"><TrendingUp size={16} className="text-emerald-600" /></div>
-              <span className="text-xs text-slate-500">Факт выручки</span>
+              <span className="text-xs text-slate-500">{t('finance.fact_revenue')}</span>
             </div>
             <p className="text-lg font-bold text-emerald-600">{formatRevenue(teamTotals.actualRevenue)}</p>
             <p className={`text-xs font-semibold ${teamTotals.planRevenue > 0
@@ -336,27 +340,27 @@ export default function Finance() {
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-purple-50 rounded-lg"><ShoppingCart size={16} className="text-purple-600" /></div>
-              <span className="text-xs text-slate-500">Продажи</span>
+              <span className="text-xs text-slate-500">{t('finance.sales_label')}</span>
             </div>
             <p className="text-lg font-bold text-slate-900">{teamTotals.actualSales} <span className="text-sm text-slate-400">/ {teamTotals.planSales}</span></p>
           </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-amber-50 rounded-lg"><CreditCard size={16} className="text-amber-600" /></div>
-              <span className="text-xs text-slate-500">Ожидаемые доплаты</span>
+              <span className="text-xs text-slate-500">{t('finance.expected_doplata')}</span>
             </div>
             <p className="text-lg font-bold text-amber-600">{formatRevenue(teamTotals.totalDoplata)}</p>
           </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-cyan-50 rounded-lg"><Users size={16} className="text-cyan-600" /></div>
-              <span className="text-xs text-slate-500">Пришедшие</span>
+              <span className="text-xs text-slate-500">{t('finance.visitors')}</span>
             </div>
             <p className="text-lg font-bold text-slate-900">
               <span className="text-cyan-600">{teamTotals.offlineCount}</span>
-              <span className="text-xs text-slate-400 mx-1">офф</span>
+              <span className="text-xs text-slate-400 mx-1">{t('finance.off')}</span>
               <span className="text-blue-600">{teamTotals.onlineCount}</span>
-              <span className="text-xs text-slate-400 ml-1">онл</span>
+              <span className="text-xs text-slate-400 ml-1">{t('finance.onl')}</span>
             </p>
           </div>
         </div>
@@ -366,13 +370,13 @@ export default function Finance() {
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           <BarChart3 size={20} className="text-blue-600" />
-          {isSales ? 'Ваши показатели' : 'Показатели менеджеров'}
+          {isSales ? t('finance.your_metrics') : t('finance.manager_metrics')}
         </h3>
 
         {managerKPIs.length === 0 && (
           <div className="glass-card rounded-2xl p-8 text-center text-slate-400">
             <Users size={40} className="mx-auto mb-3 opacity-50" />
-            <p>Нет менеджеров для отображения</p>
+            <p>{t('finance.no_managers')}</p>
           </div>
         )}
 
@@ -395,10 +399,10 @@ export default function Finance() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-slate-900 text-sm">
-                        {mgr.name} {isCurrentUser && <span className="text-xs text-blue-500">(вы)</span>}
+                        {mgr.name} {isCurrentUser && <span className="text-xs text-blue-500">{t('finance.you')}</span>}
                       </h4>
                       <p className="text-xs text-slate-500">
-                        {mgr.role === 'rop' ? 'РОП' : 'Менеджер'} · {mgr.branch === 'all' ? 'Все филиалы' : (branches.find(b => b.id === mgr.branch)?.name || mgr.branch)}
+                        {mgr.role === 'rop' ? t('finance.rop') : t('finance.manager')} · {mgr.branch === 'all' ? t('finance.all_branches') : (branches.find(b => b.id === mgr.branch)?.name || mgr.branch)}
                       </p>
                     </div>
                   </div>
@@ -410,8 +414,8 @@ export default function Finance() {
                 {/* Progress bar */}
                 <div className="mb-4">
                   <div className="flex justify-between text-xs text-slate-500 mb-1">
-                    <span>Выручка: {formatRevenue(mgr.actual.revenue)}</span>
-                    <span>План: {formatRevenue(mgr.plan.revenue)}</span>
+                    <span>{t('finance.revenue')} {formatRevenue(mgr.actual.revenue)}</span>
+                    <span>{t('finance.plan')} {formatRevenue(mgr.plan.revenue)}</span>
                   </div>
                   <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full transition-all duration-500 ${progressBg(pct)}`}
@@ -419,7 +423,7 @@ export default function Finance() {
                   </div>
                   <div className="flex justify-between text-xs mt-1">
                     <span className={`font-semibold ${mgr.deviation >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      Отклонение: {mgr.deviation >= 0 ? '+' : ''}{formatRevenue(mgr.deviation)}
+                      {t('finance.deviation')} {mgr.deviation >= 0 ? '+' : ''}{formatRevenue(mgr.deviation)}
                     </span>
                   </div>
                 </div>
@@ -430,21 +434,21 @@ export default function Finance() {
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <Percent size={12} className="text-purple-500" />
-                      <span className="text-[10px] text-slate-500">Конв. ОУ→Продажа</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.conv_ou_sale')}</span>
                     </div>
                     <p className="text-sm font-bold text-purple-600">{mgr.convOpenToSale}%</p>
                   </div>
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <CreditCard size={12} className="text-amber-500" />
-                      <span className="text-[10px] text-slate-500">Ожид. доплаты</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.expected_doplata_short')}</span>
                     </div>
                     <p className="text-sm font-bold text-amber-600">{formatRevenue(mgr.expectedDoplata)}</p>
                   </div>
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <ShoppingCart size={12} className="text-emerald-500" />
-                      <span className="text-[10px] text-slate-500">Продажи</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.sales_short')}</span>
                     </div>
                     <p className="text-sm font-bold text-emerald-600">
                       {mgr.actual.sales} <span className="text-xs text-slate-400">/ {mgr.plan.sales}</span>
@@ -455,21 +459,21 @@ export default function Finance() {
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <UserCheck size={12} className="text-cyan-500" />
-                      <span className="text-[10px] text-slate-500">Пришли офф</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.visited_off')}</span>
                     </div>
                     <p className="text-sm font-bold text-cyan-600">{mgr.actual.visited}</p>
                   </div>
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <Users size={12} className="text-blue-500" />
-                      <span className="text-[10px] text-slate-500">Продаж офф</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.sales_off')}</span>
                     </div>
                     <p className="text-sm font-bold text-blue-600">{mgr.offlineSales}</p>
                   </div>
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <Eye size={12} className="text-indigo-500" />
-                      <span className="text-[10px] text-slate-500">Пришли онл</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.visited_onl')}</span>
                     </div>
                     <p className="text-sm font-bold text-indigo-600">{mgr.onlineCount}</p>
                   </div>
@@ -478,7 +482,7 @@ export default function Finance() {
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <Phone size={12} className="text-slate-500" />
-                      <span className="text-[10px] text-slate-500">Заявки</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.leads')}</span>
                     </div>
                     <p className="text-sm font-bold text-slate-700">
                       {mgr.actual.leads} <span className="text-xs text-slate-400">/ {mgr.plan.leads}</span>
@@ -487,7 +491,7 @@ export default function Finance() {
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <Phone size={12} className="text-slate-500" />
-                      <span className="text-[10px] text-slate-500">Разговоры</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.conversations')}</span>
                     </div>
                     <p className="text-sm font-bold text-slate-700">
                       {mgr.actual.conversations} <span className="text-xs text-slate-400">/ {mgr.plan.conversations}</span>
@@ -496,7 +500,7 @@ export default function Finance() {
                   <div className="bg-slate-50 rounded-lg p-2">
                     <div className="flex items-center justify-center gap-1 mb-1">
                       <TrendingUp size={12} className="text-emerald-500" />
-                      <span className="text-[10px] text-slate-500">Выручка</span>
+                      <span className="text-[10px] text-slate-500">{t('finance.revenue_short')}</span>
                     </div>
                     <p className="text-sm font-bold text-emerald-600">{formatRevenue(mgr.actual.revenue)}</p>
                   </div>
@@ -511,10 +515,10 @@ export default function Finance() {
       <div className="glass-card rounded-2xl p-4 md:p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <ArrowUpRight size={20} className="text-emerald-600" />
-          Последние продажи
+          {t('finance.recent_sales')}
         </h3>
         {recentTransactions.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-6">Нет продаж за выбранный период</p>
+          <p className="text-sm text-slate-400 text-center py-6">{t('finance.no_sales_period')}</p>
         ) : (
           <div className="space-y-2">
             {recentTransactions.map((p) => (
@@ -524,12 +528,12 @@ export default function Finance() {
                   <p className="text-xs text-slate-500">
                     {branches.find(b => b.id === p.branch)?.name} · {p.date} · {p.method}
                     {p.course ? ` · ${p.course}` : ''}
-                    {p.trancheNumber > 1 ? ` · Транш №${p.trancheNumber}` : ''}
+                    {p.trancheNumber > 1 ? ` · ${t('finance.tranche_number')}${p.trancheNumber}` : ''}
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0 ml-3">
                   <span className="text-sm font-bold text-emerald-600">+{formatCurrency(p.amount)}</span>
-                  {p.debt > 0 && <p className="text-xs text-red-500">Долг: {formatCurrency(p.debt)}</p>}
+                  {p.debt > 0 && <p className="text-xs text-red-500">{t('finance.debt_label')} {formatCurrency(p.debt)}</p>}
                 </div>
               </div>
             ))}
@@ -539,7 +543,7 @@ export default function Finance() {
 
       {/* ─── Payment Modal ──────────────────────────────────────────────── */}
       <Modal isOpen={paymentModal} onClose={() => setPaymentModal(false)}
-        title={paymentType === 'doplata' ? 'Доплата' : 'Новая продажа'} size="lg">
+        title={paymentType === 'doplata' ? t('finance.modal_doplata') : t('finance.modal_new_sale')} size="lg">
         <PaymentForm onClose={() => setPaymentModal(false)} mode={paymentType} />
       </Modal>
     </div>

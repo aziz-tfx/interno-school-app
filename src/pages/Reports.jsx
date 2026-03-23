@@ -9,6 +9,7 @@ import {
 } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { db } from '../firebase'
 import {
   collection, doc, addDoc, setDoc, getDocs, onSnapshot, query, where, deleteDoc,
@@ -16,16 +17,16 @@ import {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const METRICS = [
-  { key: 'leads',       label: 'Кол-во заявок',          editable: true },
-  { key: 'conversations', label: 'Кол-во разговоров',    editable: true },
-  { key: 'signups',     label: 'Кол-во записей',         editable: true },
-  { key: 'convSignups', label: 'Конв-ия в записях (%)',   editable: false },
-  { key: 'visited',     label: 'Кол-во пришедших',       editable: true },
-  { key: 'convVisited', label: 'Конв-ия пришедших (%)',   editable: false },
-  { key: 'sales',       label: 'Кол-во продаж',          editable: true },
-  { key: 'convSales',   label: 'Конв-ия в продажу (%)',   editable: false },
-  { key: 'revenue',     label: 'Выручка',                editable: true },
+const METRICS_KEYS = [
+  { key: 'leads',       labelKey: 'reports.metric_leads',          editable: true },
+  { key: 'conversations', labelKey: 'reports.metric_conversations',    editable: true },
+  { key: 'signups',     labelKey: 'reports.metric_signups',         editable: true },
+  { key: 'convSignups', labelKey: 'reports.metric_conv_signups',   editable: false },
+  { key: 'visited',     labelKey: 'reports.metric_visited',       editable: true },
+  { key: 'convVisited', labelKey: 'reports.metric_conv_visited',   editable: false },
+  { key: 'sales',       labelKey: 'reports.metric_sales',          editable: true },
+  { key: 'convSales',   labelKey: 'reports.metric_conv_sales',   editable: false },
+  { key: 'revenue',     labelKey: 'reports.metric_revenue',                editable: true },
 ]
 
 const WEEK_RANGES = [
@@ -126,8 +127,10 @@ function distributeSeedData(totals, year, month) {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function Reports() {
+  const { t } = useLanguage()
   const { user, employees } = useAuth()
   const { setSalesPlan } = useData()
+  const METRICS = useMemo(() => METRICS_KEYS.map(m => ({ ...m, label: t(m.labelKey) })), [t])
   const isAdmin = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'rop'
   const isSales = user?.role === 'sales'
 
@@ -424,7 +427,8 @@ export default function Reports() {
 
   const kpiData = useMemo(() => {
     const metrics = ['leads', 'conversations', 'signups', 'sales', 'revenue']
-    const labels = ['Заявки', 'Разговоры', 'Записи', 'Продажи', 'Выручка']
+    const labelKeys = ['reports.kpi_leads', 'reports.kpi_conversations', 'reports.kpi_signups', 'reports.kpi_sales', 'reports.kpi_revenue']
+    const labels = labelKeys.map(k => t(k))
     const icons = [Phone, Users, UserCheck, ShoppingCart, DollarSign]
     return metrics.map((key, i) => {
       let fact = 0, plan = 0
@@ -454,7 +458,7 @@ export default function Reports() {
 
   const funnelData = useMemo(() => {
     const keys = ['leads', 'conversations', 'signups', 'visited', 'sales']
-    const labels = ['Заявки', 'Разговоры', 'Записи', 'Пришедшие', 'Продажи']
+    const labels = [t('reports.funnel_leads'), t('reports.funnel_conversations'), t('reports.funnel_signups'), t('reports.funnel_visited'), t('reports.funnel_sales')]
     const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981']
     return keys.map((key, i) => {
       let total = 0
@@ -466,11 +470,11 @@ export default function Reports() {
   const managerComparisonData = useMemo(() => {
     return visibleManagers.map(mgr => ({
       name: mgr,
-      'Заявки': getMonthlyFact(mgr, 'leads'),
-      'Разговоры': getMonthlyFact(mgr, 'conversations'),
-      'Записи': getMonthlyFact(mgr, 'signups'),
-      'Пришедшие': getMonthlyFact(mgr, 'visited'),
-      'Продажи': getMonthlyFact(mgr, 'sales'),
+      [t('reports.funnel_leads')]: getMonthlyFact(mgr, 'leads'),
+      [t('reports.funnel_conversations')]: getMonthlyFact(mgr, 'conversations'),
+      [t('reports.funnel_signups')]: getMonthlyFact(mgr, 'signups'),
+      [t('reports.funnel_visited')]: getMonthlyFact(mgr, 'visited'),
+      [t('reports.funnel_sales')]: getMonthlyFact(mgr, 'sales'),
     }))
   }, [visibleManagers, getMonthlyFact])
 
@@ -587,7 +591,7 @@ export default function Reports() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-        <span className="ml-3 text-slate-500">Загрузка отчётов...</span>
+        <span className="ml-3 text-slate-500">{t('reports.loading')}</span>
       </div>
     )
   }
@@ -599,9 +603,9 @@ export default function Reports() {
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
             <FileBarChart size={24} className="text-blue-600" />
-            Отчёт по продажам
+            {t('reports.heading')}
           </h2>
-          <p className="text-slate-500 mt-1">Аналитика и ежедневный контроль менеджеров</p>
+          <p className="text-slate-500 mt-1">{t('reports.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {isAdmin && (
@@ -609,7 +613,7 @@ export default function Reports() {
               onClick={openPlanModal}
               className="bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2"
             >
-              <Settings size={16} /> Настроить планы
+              <Settings size={16} /> {t('reports.btn_setup_plans')}
             </button>
           )}
         </div>
@@ -635,7 +639,7 @@ export default function Reports() {
             onChange={e => setManagerFilter(e.target.value)}
             className="glass-input text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">Все менеджеры</option>
+            <option value="all">{t('reports.filter_all_managers')}</option>
             {managers.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
@@ -643,9 +647,9 @@ export default function Reports() {
         {/* Period toggle */}
         <div className="flex bg-slate-100 rounded-lg p-0.5">
           {[
-            { key: 'day', label: 'День' },
-            { key: 'week', label: 'Неделя' },
-            { key: 'month', label: 'Месяц' },
+            { key: 'day', label: t('reports.period_day') },
+            { key: 'week', label: t('reports.period_week') },
+            { key: 'month', label: t('reports.period_month') },
           ].map(p => (
             <button
               key={p.key}
@@ -672,7 +676,7 @@ export default function Reports() {
             </div>
             <p className="text-lg font-bold text-slate-900">{kpi.factDisplay}</p>
             <div className="flex items-center justify-between mt-1">
-              <span className="text-xs text-slate-400">План: {kpi.planDisplay}</span>
+              <span className="text-xs text-slate-400">{t('reports.plan_label')} {kpi.planDisplay}</span>
               {kpi.plan > 0 && pctBadge(kpi.pct)}
             </div>
             {kpi.plan > 0 && (
@@ -693,15 +697,15 @@ export default function Reports() {
       <div className="glass-card rounded-2xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="text-center p-3 bg-blue-50 rounded-lg">
-            <p className="text-xs text-blue-600 font-medium mb-1">Общий план</p>
+            <p className="text-xs text-blue-600 font-medium mb-1">{t('reports.overall_plan')}</p>
             <p className="text-xl font-bold text-blue-700">{formatRevenue(overallPlan)}</p>
           </div>
           <div className="text-center p-3 bg-emerald-50 rounded-lg">
-            <p className="text-xs text-emerald-600 font-medium mb-1">Факт</p>
+            <p className="text-xs text-emerald-600 font-medium mb-1">{t('reports.fact')}</p>
             <p className="text-xl font-bold text-emerald-700">{formatRevenue(overallFact)}</p>
           </div>
           <div className={`text-center p-3 rounded-lg ${overallDeviation > 0 ? 'bg-red-50' : 'bg-emerald-50'}`}>
-            <p className={`text-xs font-medium mb-1 ${overallDeviation > 0 ? 'text-red-600' : 'text-emerald-600'}`}>Отклонение</p>
+            <p className={`text-xs font-medium mb-1 ${overallDeviation > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{t('reports.deviation')}</p>
             <p className={`text-xl font-bold ${overallDeviation > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
               {overallDeviation > 0 ? '-' : '+'}{formatRevenue(Math.abs(overallDeviation))}
             </p>
@@ -717,13 +721,13 @@ export default function Reports() {
               {/* Header row 1: Week groups */}
               <tr className="bg-white/40 border-b border-white/30">
                 <th className="sticky left-0 z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 100 }}>
-                  Менеджер
+                  {t('reports.th_manager')}
                 </th>
                 <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 160 }}>
-                  Показатель
+                  {t('reports.th_metric')}
                 </th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 bg-blue-50" colSpan={3}>
-                  Месяц
+                  {t('reports.period_month')}
                 </th>
                 {WEEK_RANGES.map((week, wi) => {
                   const maxDay = Math.min(week.end, daysInMonth)
@@ -735,7 +739,7 @@ export default function Reports() {
                       className="px-2 py-2 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 bg-slate-100"
                       colSpan={numDays + 2} // weekPlan + days + weekTotal
                     >
-                      Неделя {week.label}
+                      {t('reports.th_week')} {week.label}
                     </th>
                   )
                 })}
@@ -745,8 +749,8 @@ export default function Reports() {
                 <th className="sticky left-0 z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
                 <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
                 {/* Month columns */}
-                <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">План</th>
-                <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">Факт</th>
+                <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">{t('reports.th_month_plan')}</th>
+                <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">{t('reports.th_month_fact')}</th>
                 <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-200 bg-blue-50">%</th>
                 {/* Week columns */}
                 {WEEK_RANGES.map((week, wi) => {
@@ -755,7 +759,7 @@ export default function Reports() {
                   const cells = []
                   cells.push(
                     <th key={`wp_${wi}`} className="px-1 py-1 text-center text-[10px] font-medium text-slate-500 border-r border-slate-100 bg-slate-100">
-                      Пл.нед
+                      {t('reports.th_week_plan')}
                     </th>
                   )
                   for (let d = week.start; d <= maxDay; d++) {
@@ -770,7 +774,7 @@ export default function Reports() {
                   }
                   cells.push(
                     <th key={`wt_${wi}`} className="px-1 py-1 text-center text-[10px] font-medium text-slate-600 border-r border-slate-200 bg-slate-100">
-                      Итого
+                      {t('reports.th_total')}
                     </th>
                   )
                   return cells
@@ -890,7 +894,7 @@ export default function Reports() {
               {/* ─── ИТОГО row ────────────────────────────────────────────── */}
               <tr className="bg-slate-800 text-white font-semibold">
                 <td className="sticky left-0 z-10 bg-slate-800 px-3 py-3 text-sm border-r border-slate-600" colSpan={2}>
-                  ИТОГО (Выручка)
+                  {t('reports.row_total')}
                 </td>
                 <td className="px-2 py-3 text-center text-sm border-r border-slate-600">
                   {formatRevenue(overallPlan)}
@@ -949,7 +953,7 @@ export default function Reports() {
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <TrendingUp size={16} className="text-blue-600" />
-            Воронка продаж
+            {t('reports.funnel_title')}
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={funnelData} layout="vertical" margin={{ left: 20, right: 20 }}>
@@ -973,7 +977,7 @@ export default function Reports() {
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
             <Users size={16} className="text-blue-600" />
-            Сравнение менеджеров
+            {t('reports.manager_comparison')}
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={managerComparisonData} margin={{ left: 0, right: 20 }}>
@@ -985,11 +989,11 @@ export default function Reports() {
                 contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Заявки" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Разговоры" fill="#8b5cf6" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Записи" fill="#06b6d4" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Пришедшие" fill="#f59e0b" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="Продажи" fill="#10b981" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.funnel_leads')} fill="#3b82f6" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.funnel_conversations')} fill="#8b5cf6" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.funnel_signups')} fill="#06b6d4" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.funnel_visited')} fill="#f59e0b" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={t('reports.funnel_sales')} fill="#10b981" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -999,7 +1003,7 @@ export default function Reports() {
       <div className="glass-card rounded-2xl p-4 md:p-6">
         <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
           <DollarSign size={16} className="text-blue-600" />
-          Выручка по менеджерам
+          {t('reports.revenue_by_manager')}
         </h3>
         <ResponsiveContainer width="100%" height={250}>
           <BarChart
@@ -1014,7 +1018,7 @@ export default function Reports() {
             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={v => formatRevenue(v)} />
             <Tooltip
-              formatter={(val) => [formatRevenueFullNumber(val) + ' сум', '']}
+              formatter={(val) => [formatRevenueFullNumber(val) + ' ' + t('reports.sum'), '']}
               contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -1031,7 +1035,7 @@ export default function Reports() {
             <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Settings size={20} className="text-blue-600" />
-                Настройка планов — {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+                {t('reports.modal_plans_title')} — {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
               </h3>
               <button onClick={() => setPlanModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-lg">
                 <X size={20} />
@@ -1040,7 +1044,7 @@ export default function Reports() {
             <div className="p-6 space-y-6">
               {/* Overall plan */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Общий план по выручке</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">{t('reports.overall_revenue_plan')}</label>
                 <input
                   type="number"
                   value={planForm.__overall__ || ''}
@@ -1048,7 +1052,7 @@ export default function Reports() {
                   className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="400000000"
                 />
-                <p className="text-xs text-slate-400 mt-1">Текущее: {formatRevenue(planForm.__overall__ || 0)}</p>
+                <p className="text-xs text-slate-400 mt-1">{t('reports.current_label')} {formatRevenue(planForm.__overall__ || 0)}</p>
               </div>
 
               {/* Per-manager plans */}
@@ -1097,13 +1101,13 @@ export default function Reports() {
                 onClick={() => setPlanModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                Отмена
+                {t('reports.btn_cancel')}
               </button>
               <button
                 onClick={savePlans}
                 className="px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
               >
-                <Save size={16} /> Сохранить планы
+                <Save size={16} /> {t('reports.btn_save_plans')}
               </button>
             </div>
           </div>

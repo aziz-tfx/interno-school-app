@@ -15,24 +15,26 @@ import {
   Monitor,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import Logo from './Logo'
 
 export default function Sidebar({ open, onClose }) {
   const { user, hasPermission, getRoleLabel, logout } = useAuth()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const location = useLocation()
 
   const allNavItems = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Дашборд', permission: 'dashboard' },
-    { to: '/branches', icon: Building2, label: 'Филиалы', permission: 'branches' },
-    { to: '/students', icon: GraduationCap, label: 'Ученики', permission: 'students' },
-    { to: '/teachers', icon: Users, label: 'Учителя', permission: 'teachers' },
-    { to: '/courses', icon: BookOpen, label: 'Курсы', permission: 'courses' },
-    { to: '/finance', icon: DollarSign, label: 'Продажи', permission: 'finance' },
-    { to: '/employees', icon: UserCog, label: 'Сотрудники', permission: 'employees' },
-    { to: '/reports', icon: FileBarChart, label: 'Отчёты', permission: 'finance' },
-    { to: '/lms', icon: Monitor, label: 'LMS', permission: 'lms' },
-    { to: '/attendance', icon: ClipboardCheck, label: 'Посещаемость', permission: null },
+    { to: '/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard'), permission: 'dashboard' },
+    { to: '/branches', icon: Building2, label: t('sidebar.branches'), permission: 'branches' },
+    { to: '/students', icon: GraduationCap, label: t('sidebar.students'), permission: 'students' },
+    { to: '/teachers', icon: Users, label: t('sidebar.teachers'), permission: 'teachers' },
+    { to: '/courses', icon: BookOpen, label: t('sidebar.courses'), permission: 'courses' },
+    { to: '/finance', icon: DollarSign, label: t('sidebar.finance'), permission: 'finance' },
+    { to: '/employees', icon: UserCog, label: t('sidebar.employees'), permission: 'employees' },
+    { to: '/reports', icon: FileBarChart, label: t('sidebar.reports'), permission: 'finance' },
+    { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
+    { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: null },
   ]
 
   const navItems = allNavItems.filter(item => {
@@ -119,7 +121,7 @@ export default function Sidebar({ open, onClose }) {
             className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:bg-white/8 rounded-xl transition-all"
           >
             <LogOut size={16} />
-            Выйти
+            {t('sidebar.logout')}
           </button>
         </div>
       </aside>

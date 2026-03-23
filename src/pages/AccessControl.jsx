@@ -6,32 +6,33 @@ import {
   Lock, Unlock,
 } from 'lucide-react'
 import { useAuth, ROLE_LABELS, ROLE_COLORS, DEFAULT_PERMISSIONS } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 
 // ─── Permission structure labels ──────────────────────────────────────────────
 const SECTION_META = {
-  dashboard:  { label: 'Дашборд',     icon: BarChart3,    type: 'boolean' },
-  branches:   { label: 'Филиалы',     icon: Building2,    type: 'boolean' },
-  students:   { label: 'Ученики',     icon: GraduationCap, type: 'object', actions: ['view', 'add', 'edit', 'delete'] },
-  teachers:   { label: 'Учителя',     icon: Users,        type: 'object', actions: ['view', 'add', 'edit', 'delete', 'salaries'] },
-  courses:    { label: 'Курсы',       icon: BookOpen,     type: 'object', actions: ['view', 'add', 'edit'] },
-  finance:    { label: 'Продажи',     icon: DollarSign,   type: 'object', actions: ['view', 'fullPnL', 'expenses', 'payments'] },
-  employees:  { label: 'Сотрудники',  icon: UserCog,      type: 'object', actions: ['view', 'add', 'edit', 'delete'] },
-  lms:        { label: 'LMS',         icon: BookOpen,     type: 'object', actions: ['view', 'create_content', 'grade', 'manage'] },
-  settings:   { label: 'Настройки',   icon: Settings,     type: 'boolean' },
+  dashboard:  { labelKey: 'access.section_dashboard',  icon: BarChart3,    type: 'boolean' },
+  branches:   { labelKey: 'access.section_branches',   icon: Building2,    type: 'boolean' },
+  students:   { labelKey: 'access.section_students',   icon: GraduationCap, type: 'object', actions: ['view', 'add', 'edit', 'delete'] },
+  teachers:   { labelKey: 'access.section_teachers',   icon: Users,        type: 'object', actions: ['view', 'add', 'edit', 'delete', 'salaries'] },
+  courses:    { labelKey: 'access.section_courses',    icon: BookOpen,     type: 'object', actions: ['view', 'add', 'edit'] },
+  finance:    { labelKey: 'access.section_finance',    icon: DollarSign,   type: 'object', actions: ['view', 'fullPnL', 'expenses', 'payments'] },
+  employees:  { labelKey: 'access.section_employees',  icon: UserCog,      type: 'object', actions: ['view', 'add', 'edit', 'delete'] },
+  lms:        { labelKey: 'access.section_lms',        icon: BookOpen,     type: 'object', actions: ['view', 'create_content', 'grade', 'manage'] },
+  settings:   { labelKey: 'access.section_settings',   icon: Settings,     type: 'boolean' },
 }
 
-const ACTION_LABELS = {
-  view: 'Просмотр',
-  add: 'Добавление',
-  edit: 'Редактирование',
-  delete: 'Удаление',
-  salaries: 'Зарплаты',
-  fullPnL: 'Полный P&L',
-  expenses: 'Расходы',
-  payments: 'Платежи',
-  create_content: 'Создание контента',
-  grade: 'Оценивание',
-  manage: 'Управление',
+const ACTION_LABEL_KEYS = {
+  view: 'access.action_view',
+  add: 'access.action_add',
+  edit: 'access.action_edit',
+  delete: 'access.action_delete',
+  salaries: 'access.action_salaries',
+  fullPnL: 'access.action_fullPnL',
+  expenses: 'access.action_expenses',
+  payments: 'access.action_payments',
+  create_content: 'access.action_create_content',
+  grade: 'access.action_grade',
+  manage: 'access.action_manage',
 }
 
 const ROLES_ORDER = [
@@ -64,6 +65,7 @@ function Toggle({ checked, onChange, disabled, size = 'md' }) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function AccessControl({ embedded = false }) {
+  const { t } = useLanguage()
   const { user, getPermissions, updatePermissions, resetPermissions } = useAuth()
 
   const [permissions, setPermissions] = useState({})
@@ -152,7 +154,7 @@ export default function AccessControl({ embedded = false }) {
   }
 
   const handleReset = async () => {
-    if (!confirm('Сбросить все права доступа к значениям по умолчанию?')) return
+    if (!confirm(t('access.btn_reset') + '?')) return
     await resetPermissions()
     setPermissions(JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS)))
   }
@@ -180,7 +182,7 @@ export default function AccessControl({ embedded = false }) {
   const isOwner = selectedRole === 'owner'
 
   if (!permissions || Object.keys(permissions).length === 0) {
-    return <div className="flex items-center justify-center h-64 text-slate-400">Загрузка...</div>
+    return <div className="flex items-center justify-center h-64 text-slate-400">{t('access.loading')}</div>
   }
 
   return (
@@ -191,10 +193,10 @@ export default function AccessControl({ embedded = false }) {
           <div>
             <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-3">
               <Shield className="text-blue-600" size={28} />
-              Управление доступом
+              {t('access.heading')}
             </h2>
             <p className="text-slate-500 mt-1 text-sm">
-              Настройте права доступа для каждой роли сотрудников
+              {t('access.subtitle')}
             </p>
           </div>
         </div>
@@ -205,7 +207,7 @@ export default function AccessControl({ embedded = false }) {
           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 glass-btn rounded-xl hover:bg-white/80 transition-colors"
         >
           <RotateCcw size={16} />
-          Сбросить
+          {t('access.btn_reset')}
         </button>
         <button
           onClick={handleSave}
@@ -219,7 +221,7 @@ export default function AccessControl({ embedded = false }) {
           }`}
         >
           {saved ? <CheckCircle2 size={16} /> : <Save size={16} />}
-          {saving ? 'Сохранение...' : saved ? 'Сохранено!' : 'Сохранить'}
+          {saving ? t('access.btn_saving') : saved ? t('access.btn_saved') : t('access.btn_save')}
         </button>
       </div>
 
@@ -227,7 +229,7 @@ export default function AccessControl({ embedded = false }) {
       {hasChanges && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
           <AlertTriangle size={18} className="text-amber-500 shrink-0" />
-          <p className="text-sm text-amber-700">Есть несохранённые изменения. Нажмите «Сохранить» для применения.</p>
+          <p className="text-sm text-amber-700">{t('access.unsaved_warning')}</p>
         </div>
       )}
 
@@ -236,7 +238,7 @@ export default function AccessControl({ embedded = false }) {
         <div className="lg:col-span-1">
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="px-4 py-3 bg-white/40 border-b border-white/30 hidden lg:block">
-              <h3 className="text-sm font-semibold text-slate-700">Роли</h3>
+              <h3 className="text-sm font-semibold text-slate-700">{t('access.roles_title')}</h3>
             </div>
             <div className="flex lg:flex-col overflow-x-auto lg:overflow-x-visible divide-x lg:divide-x-0 lg:divide-y divide-slate-50">
               {ROLES_ORDER.map(role => {
@@ -288,7 +290,7 @@ export default function AccessControl({ embedded = false }) {
               {isOwner && (
                 <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg">
                   <Lock size={14} />
-                  <span className="text-xs font-medium">Права владельца нельзя изменить</span>
+                  <span className="text-xs font-medium">{t('access.owner_locked')}</span>
                 </div>
               )}
             </div>
@@ -323,7 +325,7 @@ export default function AccessControl({ embedded = false }) {
                         </div>
                         <div>
                           <p className={`text-sm font-semibold ${enabled ? 'text-slate-900' : 'text-slate-400'}`}>
-                            {meta.label}
+                            {t(meta.labelKey)}
                           </p>
                           {meta.type === 'object' && (
                             <p className="text-[10px] text-slate-400">
@@ -341,13 +343,13 @@ export default function AccessControl({ embedded = false }) {
                               onClick={() => toggleEntireSection(selectedRole, section, true)}
                               className="text-[10px] text-emerald-600 hover:text-emerald-700 font-medium px-2 py-1 rounded hover:bg-emerald-50 transition-colors"
                             >
-                              Все вкл
+                              {t('access.toggle_all_on')}
                             </button>
                             <button
                               onClick={() => toggleEntireSection(selectedRole, section, false)}
                               className="text-[10px] text-red-500 hover:text-red-600 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
                             >
-                              Все выкл
+                              {t('access.toggle_all_off')}
                             </button>
                           </div>
                         )}
@@ -386,7 +388,7 @@ export default function AccessControl({ embedded = false }) {
                                     : <ShieldX size={14} className="text-slate-300" />
                                   }
                                   <span className={`text-sm ${actionEnabled ? 'text-slate-800 font-medium' : 'text-slate-400'}`}>
-                                    {ACTION_LABELS[action] || action}
+                                    {t(ACTION_LABEL_KEYS[action]) || action}
                                   </span>
                                 </div>
                                 <Toggle
@@ -410,14 +412,14 @@ export default function AccessControl({ embedded = false }) {
           {/* ── Permission Matrix Overview ── */}
           <div className="glass-card rounded-2xl mt-6 overflow-hidden">
             <div className="px-6 py-4 bg-white/40 border-b border-white/30">
-              <h3 className="text-sm font-semibold text-slate-700">Матрица доступа — Обзор</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Быстрый просмотр прав всех ролей</p>
+              <h3 className="text-sm font-semibold text-slate-700">{t('access.matrix_title')}</h3>
+              <p className="text-xs text-slate-400 mt-0.5">{t('access.matrix_subtitle')}</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    <th className="text-left py-3 px-4 font-semibold text-slate-500 sticky left-0 bg-white z-10">Раздел</th>
+                    <th className="text-left py-3 px-4 font-semibold text-slate-500 sticky left-0 bg-white z-10">{t('access.th_section')}</th>
                     {ROLES_ORDER.map(role => (
                       <th
                         key={role}
@@ -437,7 +439,7 @@ export default function AccessControl({ embedded = false }) {
                       <td className="py-2.5 px-4 font-medium text-slate-700 sticky left-0 bg-white z-10">
                         <div className="flex items-center gap-2">
                           <meta.icon size={13} className="text-slate-400" />
-                          {meta.label}
+                          {t(meta.labelKey)}
                         </div>
                       </td>
                       {ROLES_ORDER.map(role => {

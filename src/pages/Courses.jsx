@@ -1,13 +1,17 @@
 import { useState, useMemo } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { BookOpen, MapPin, Users, ChevronDown, ChevronUp, Tag, Monitor, GraduationCap, Plus, Pencil, Trash2, X, CheckCircle2, Info } from 'lucide-react'
 import CourseForm from '../components/CourseForm'
 
-const REGION_LABELS = {
-  tashkent: 'Ташкент',
-  fergana: 'Фергана / Самарканд',
-  online: 'Онлайн',
+function useRegionLabels() {
+  const { t } = useLanguage()
+  return {
+    tashkent: t('courses.region_tashkent'),
+    fergana: t('courses.region_fergana'),
+    online: t('courses.region_online'),
+  }
 }
 
 const TARIFF_LABELS = {
@@ -37,15 +41,16 @@ function formatPrice(val) {
 }
 
 function PricingTable({ pricing, region, tariffFeatures }) {
+  const { t } = useLanguage()
   const regionData = pricing?.[region]
-  if (!regionData) return <p className="text-sm text-slate-400 py-3">Нет данных для этого региона</p>
+  if (!regionData) return <p className="text-sm text-slate-400 py-3">{t('courses.no_data_region')}</p>
 
   const tariffs = Object.keys(regionData)
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       {tariffs.map(tariff => {
-        const t = regionData[tariff]
+        const tr = regionData[tariff]
         const features = tariffFeatures?.[tariff] || []
         return (
           <div key={tariff} className="rounded-xl border border-slate-200 overflow-hidden bg-white/60">
@@ -54,27 +59,27 @@ function PricingTable({ pricing, region, tariffFeatures }) {
             </div>
             <div className="p-4 space-y-2">
               <div className="flex justify-between items-baseline">
-                <span className="text-xs text-slate-500">Полная цена</span>
+                <span className="text-xs text-slate-500">{t('courses.full_price')}</span>
                 <span className="font-bold text-slate-900 text-sm">
-                  {formatPrice(t.full)} {t.monthly ? '/ мес' : 'сум'}
+                  {formatPrice(tr.full)} {tr.monthly ? t('courses.per_month') : t('courses.sum')}
                 </span>
               </div>
-              {t.d10 > 0 && (
+              {tr.d10 > 0 && (
                 <div className="flex justify-between items-baseline">
                   <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">-10%</span>
-                  <span className="text-sm text-slate-700">{formatPrice(t.d10)}</span>
+                  <span className="text-sm text-slate-700">{formatPrice(tr.d10)}</span>
                 </div>
               )}
-              {t.d15 > 0 && (
+              {tr.d15 > 0 && (
                 <div className="flex justify-between items-baseline">
                   <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">-15%</span>
-                  <span className="text-sm text-slate-700">{formatPrice(t.d15)}</span>
+                  <span className="text-sm text-slate-700">{formatPrice(tr.d15)}</span>
                 </div>
               )}
-              {t.d20 > 0 && (
+              {tr.d20 > 0 && (
                 <div className="flex justify-between items-baseline">
                   <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">-20%</span>
-                  <span className="text-sm text-slate-700">{formatPrice(t.d20)}</span>
+                  <span className="text-sm text-slate-700">{formatPrice(tr.d20)}</span>
                 </div>
               )}
               {features.length > 0 && (
@@ -96,6 +101,8 @@ function PricingTable({ pricing, region, tariffFeatures }) {
 }
 
 function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelete }) {
+  const { t } = useLanguage()
+  const REGION_LABELS = useRegionLabels()
   const [expanded, setExpanded] = useState(false)
   const pricing = course.pricing || {}
   const availableRegions = Object.keys(pricing)
@@ -103,7 +110,7 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
 
   const minPrice = useMemo(() => {
     try {
-      const prices = Object.values(pricing).flatMap(r => Object.values(r).map(t => t.full || Infinity))
+      const prices = Object.values(pricing).flatMap(r => Object.values(r).map(v => v.full || Infinity))
       return prices.length > 0 ? Math.min(...prices) : 0
     } catch { return 0 }
   }, [pricing])
@@ -124,10 +131,10 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
                 <BookOpen size={12} /> {course.duration || '—'}
               </span>
               <span className="flex items-center gap-1 text-xs text-slate-500">
-                <Users size={12} /> {studentCount} учеников
+                <Users size={12} /> {studentCount} {t('courses.students_count')}
               </span>
               <span className="flex items-center gap-1 text-xs text-slate-500">
-                <GraduationCap size={12} /> {groupCount} групп
+                <GraduationCap size={12} /> {groupCount} {t('courses.groups_count')}
               </span>
               <div className="flex gap-1">
                 {availableRegions.map(r => (
@@ -142,7 +149,7 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
           {minPrice > 0 && (
             <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-lg hidden sm:block">
-              от {formatPrice(minPrice)} сум
+              от {formatPrice(minPrice)} {t('courses.sum')}
             </span>
           )}
           {isAdmin && (
@@ -150,14 +157,14 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
               <button
                 onClick={() => onEdit(course)}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                title="Редактировать"
+                title={t('courses.tooltip_edit')}
               >
                 <Pencil size={16} />
               </button>
               <button
                 onClick={() => onDelete(course)}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                title="Удалить"
+                title={t('courses.tooltip_delete')}
               >
                 <Trash2 size={16} />
               </button>
@@ -183,7 +190,7 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
           {/* Course features */}
           {course.features?.length > 0 && (
             <div className="mb-4">
-              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Программа курса</h4>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{t('courses.program_title')}</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5">
                 {course.features.map((f, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
@@ -226,6 +233,7 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
 }
 
 export default function Courses() {
+  const { t } = useLanguage()
   const { courses, addCourse, updateCourse, deleteCourse, groups, students } = useData()
   const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
@@ -310,13 +318,13 @@ export default function Courses() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900">Курсы и тарифы</h2>
-          <p className="text-slate-500 mt-1">{courses.length} курсов · {totalGroups} групп · {totalStudents} учеников</p>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900">{t('courses.heading')}</h2>
+          <p className="text-slate-500 mt-1">{courses.length} {t('courses.stat_courses')} · {totalGroups} {t('courses.groups_count')} · {totalStudents} {t('courses.students_count')}</p>
         </div>
         <div className="flex items-center gap-2">
           <input
             type="text"
-            placeholder="Поиск курса..."
+            placeholder={t('courses.search_placeholder')}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="px-4 py-2 bg-white/70 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-56"
@@ -326,7 +334,7 @@ export default function Courses() {
               onClick={() => { setEditingCourse(null); setShowForm(true) }}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors whitespace-nowrap"
             >
-              <Plus size={16} /> Новый курс
+              <Plus size={16} /> {t('courses.btn_new')}
             </button>
           )}
         </div>
@@ -339,40 +347,40 @@ export default function Courses() {
             <BookOpen size={16} className="text-blue-600" />
           </div>
           <p className="text-2xl font-bold text-slate-900">{courses.length}</p>
-          <p className="text-xs text-slate-500">Курсов</p>
+          <p className="text-xs text-slate-500">{t('courses.stat_courses')}</p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center mb-1">
             <Tag size={16} className="text-purple-600" />
           </div>
           <p className="text-2xl font-bold text-slate-900">4</p>
-          <p className="text-xs text-slate-500">Тарифа</p>
+          <p className="text-xs text-slate-500">{t('courses.stat_tariffs')}</p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center mb-1">
             <MapPin size={16} className="text-emerald-600" />
           </div>
           <p className="text-2xl font-bold text-slate-900">3</p>
-          <p className="text-xs text-slate-500">Региона</p>
+          <p className="text-xs text-slate-500">{t('courses.stat_regions')}</p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center mb-1">
             <Users size={16} className="text-amber-600" />
           </div>
           <p className="text-2xl font-bold text-slate-900">{totalStudents}</p>
-          <p className="text-xs text-slate-500">Учеников</p>
+          <p className="text-xs text-slate-500">{t('courses.stat_students')}</p>
         </div>
       </div>
 
       {/* Quick price comparison — Tashkent */}
       {comparisonData.length > 0 && (
         <div className="glass-card rounded-2xl p-4 md:p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Сравнение тарифов — Ташкент (полная цена)</h3>
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">{t('courses.comparison_title')}</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200">
-                  <th className="text-left py-2 px-3 text-slate-500 font-medium">Тариф</th>
+                  <th className="text-left py-2 px-3 text-slate-500 font-medium">{t('courses.th_tariff')}</th>
                   {courses.filter(c => c.pricing?.tashkent).map(c => (
                     <th key={c.id} className="text-right py-2 px-3 text-slate-500 font-medium text-xs">{c.icon} {c.name}</th>
                   ))}
@@ -385,10 +393,10 @@ export default function Courses() {
                       <span className={`text-xs font-medium px-2 py-1 rounded-lg border ${TARIFF_COLORS[row.tariff] || ''}`}>{row.label}</span>
                     </td>
                     {courses.filter(c => c.pricing?.tashkent).map(c => {
-                      const t = row.prices[c.name]
+                      const tp = row.prices[c.name]
                       return (
                         <td key={c.id} className="py-2.5 px-3 text-right font-semibold text-slate-900 text-xs">
-                          {t ? `${formatPrice(t.full)}${t.monthly ? ' / мес' : ''}` : <span className="text-slate-300">—</span>}
+                          {tp ? `${formatPrice(tp.full)}${tp.monthly ? ' ' + t('courses.per_month') : ''}` : <span className="text-slate-300">—</span>}
                         </td>
                       )
                     })}
@@ -402,7 +410,7 @@ export default function Courses() {
 
       {/* Course list with expandable pricing */}
       <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-slate-900">Все курсы</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t('courses.all_courses')}</h3>
         {filteredCourses.map(course => (
           <CourseCard
             key={course.id}
@@ -416,7 +424,7 @@ export default function Courses() {
         ))}
         {filteredCourses.length === 0 && (
           <div className="glass-card rounded-2xl p-8 text-center text-slate-400">
-            Курс не найден
+            {t('courses.empty')}
           </div>
         )}
       </div>
@@ -427,7 +435,7 @@ export default function Courses() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <h3 className="text-lg font-bold text-slate-900">
-                {editingCourse ? 'Редактировать курс' : 'Новый курс'}
+                {editingCourse ? t('courses.modal_edit') : t('courses.modal_new')}
               </h3>
               <button onClick={() => { setShowForm(false); setEditingCourse(null) }} className="p-1.5 rounded-lg hover:bg-slate-100">
                 <X size={20} className="text-slate-500" />
@@ -448,20 +456,20 @@ export default function Courses() {
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Удалить курс?</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{t('courses.delete_title')}</h3>
             <p className="text-sm text-slate-500 mb-1">
               <span className="text-lg mr-1">{confirmDelete.icon}</span>
               <strong>{confirmDelete.name}</strong>
             </p>
             <p className="text-xs text-red-500 mb-4">
-              Это действие нельзя отменить. Группы и ученики, привязанные к этому курсу, сохранятся.
+              {t('courses.delete_warning')}
             </p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
-                Отмена
+                {t('courses.btn_cancel')}
               </button>
               <button onClick={handleDelete} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
-                Удалить
+                {t('courses.btn_delete')}
               </button>
             </div>
           </div>

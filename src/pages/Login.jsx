@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
 import Logo from '../components/Logo'
 
 export default function Login() {
+  const { t } = useLanguage()
   const { login, error, setError } = useAuth()
   const [form, setForm] = useState({ login: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -27,8 +29,8 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="glass-strong rounded-3xl shadow-2xl shadow-black/20 p-8 space-y-6">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Вход в систему</h2>
-            <p className="text-sm text-slate-500 mt-1">Введите ваши данные для входа</p>
+            <h2 className="text-xl font-bold text-slate-900">{t('login.heading')}</h2>
+            <p className="text-sm text-slate-500 mt-1">{t('login.subtitle')}</p>
           </div>
 
           {error && (
@@ -39,24 +41,24 @@ export default function Login() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Логин</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('login.label_login')}</label>
               <input
                 type="text"
                 value={form.login}
                 onChange={(e) => { setForm({ ...form, login: e.target.value }); setError('') }}
-                placeholder="Введите логин"
+                placeholder={t('login.placeholder_login')}
                 className="w-full px-4 py-3 glass-input rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 placeholder:text-slate-400"
                 autoFocus
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Пароль</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('login.label_password')}</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={(e) => { setForm({ ...form, password: e.target.value }); setError('') }}
-                  placeholder="Введите пароль"
+                  placeholder={t('login.placeholder_password')}
                   className="w-full px-4 py-3 glass-input rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 pr-12 placeholder:text-slate-400"
                 />
                 <button
@@ -75,27 +77,27 @@ export default function Login() {
             className="w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3 rounded-xl font-medium hover:from-blue-700 hover:to-violet-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
           >
             <LogIn size={18} />
-            Войти
+            {t('login.btn_submit')}
           </button>
 
           <div className="border-t border-slate-200/50 pt-4">
-            <p className="text-xs text-slate-400 mb-3">Тестовые аккаунты:</p>
+            <p className="text-xs text-slate-400 mb-3">{t('login.test_accounts')}</p>
             <div className="grid grid-cols-1 gap-2 text-xs">
               <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
-                <span className="text-slate-600"><strong className="text-slate-800">Админ:</strong> admin / admin123</span>
-                <span className="text-blue-600 font-medium">Полный доступ</span>
+                <span className="text-slate-600"><strong className="text-slate-800">{t('login.test_admin')}</strong> admin / admin123</span>
+                <span className="text-blue-600 font-medium">{t('login.test_admin_access')}</span>
               </div>
               <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
-                <span className="text-slate-600"><strong className="text-slate-800">Продажи:</strong> sales1 / sales123</span>
-                <span className="text-emerald-600 font-medium">Ученики + оплаты</span>
+                <span className="text-slate-600"><strong className="text-slate-800">{t('login.test_sales')}</strong> sales1 / sales123</span>
+                <span className="text-emerald-600 font-medium">{t('login.test_sales_access')}</span>
               </div>
               <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
-                <span className="text-slate-600"><strong className="text-slate-800">Учитель:</strong> teacher1 / teach123</span>
-                <span className="text-purple-600 font-medium">Группы + посещаемость</span>
+                <span className="text-slate-600"><strong className="text-slate-800">{t('login.test_teacher')}</strong> teacher1 / teach123</span>
+                <span className="text-purple-600 font-medium">{t('login.test_teacher_access')}</span>
               </div>
               <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
-                <span className="text-slate-600"><strong className="text-slate-800">Студент:</strong> номер телефона</span>
-                <span className="text-slate-500 font-medium">LMS кабинет</span>
+                <span className="text-slate-600"><strong className="text-slate-800">{t('login.test_student')}</strong> {t('login.test_student_note')}</span>
+                <span className="text-slate-500 font-medium">{t('login.test_student_access')}</span>
               </div>
             </div>
           </div>

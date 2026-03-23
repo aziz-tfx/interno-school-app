@@ -8,19 +8,20 @@ import { pushSaleToAmo } from '../utils/amocrm'
 import { db } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 import Logo from './Logo'
+import { useLanguage } from '../contexts/LanguageContext'
 
 const METHODS = ['Наличные', 'Payme', 'Click', 'Uzum']
 const TARIFF_OPTIONS = [
-  { label: 'Стандарт', value: 'standard' },
-  { label: 'VIP', value: 'vip' },
-  { label: 'Премиум', value: 'premium' },
-  { label: 'Индивидуальный', value: 'individual' },
+  { tKey: 'paymentForm.tariff_standard', value: 'standard' },
+  { tKey: 'paymentForm.tariff_vip', value: 'vip' },
+  { tKey: 'paymentForm.tariff_premium', value: 'premium' },
+  { tKey: 'paymentForm.tariff_individual', value: 'individual' },
 ]
 const DISCOUNT_OPTIONS = [
-  { label: 'Без скидки', value: 'full' },
-  { label: 'Скидка 10%', value: 'd10' },
-  { label: 'Скидка 15%', value: 'd15' },
-  { label: 'Скидка 20%', value: 'd20' },
+  { tKey: 'paymentForm.discount_none', value: 'full' },
+  { tKey: 'paymentForm.discount_10', value: 'd10' },
+  { tKey: 'paymentForm.discount_15', value: 'd15' },
+  { tKey: 'paymentForm.discount_20', value: 'd20' },
 ]
 const BRANCH_TO_REGION = {
   tashkent: 'tashkent',
@@ -29,12 +30,16 @@ const BRANCH_TO_REGION = {
   bukhara: 'fergana',
   online: 'online',
 }
-const FORMAT_OPTIONS = ['Оффлайн', 'Онлайн']
+const FORMAT_OPTIONS = [
+  { value: 'Оффлайн', tKey: 'paymentForm.format_offline' },
+  { value: 'Онлайн', tKey: 'paymentForm.format_online' },
+]
 
 export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new' }) {
   const isDoplata = mode === 'doplata'
   const { branches, students, payments, addPayment, addStudent, updateStudent, groups, courses } = useData()
   const { user, hasPermission } = useAuth()
+  const { t } = useLanguage()
 
   const canExpenses = hasPermission('finance', 'expenses')
   const fileInputRef = useRef(null)
@@ -141,7 +146,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     const selectedFiles = Array.from(e.target.files)
     selectedFiles.forEach(file => {
       if (file.size > 10 * 1024 * 1024) {
-        alert(`Файл "${file.name}" слишком большой (макс. 10MB)`)
+        alert(t('paymentForm.file_too_large').replace('{name}', file.name))
         return
       }
       const reader = new FileReader()
@@ -183,7 +188,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     // ─── Auto-create student if new client (no studentId selected) ───
     if (form.type === 'income' && !studentId && form.clientName) {
       try {
-        const tariffLabel = TARIFF_OPTIONS.find(t => t.value === form.tariff)?.label || form.tariff
+        const tariffOption = TARIFF_OPTIONS.find(to => to.value === form.tariff)
+        const tariffLabel = tariffOption ? t(tariffOption.tKey) : form.tariff
         const newStudent = await addStudent({
           name: form.clientName,
           phone: form.phone || '',
@@ -224,8 +230,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       }
     }
 
-    const tariffLbl = TARIFF_OPTIONS.find(t => t.value === form.tariff)?.label || form.tariff
-    const discountLbl = DISCOUNT_OPTIONS.find(d => d.value === form.discount)?.label || ''
+    const tariffOpt = TARIFF_OPTIONS.find(to => to.value === form.tariff)
+    const tariffLbl = tariffOpt ? t(tariffOpt.tKey) : form.tariff
+    const discountOpt = DISCOUNT_OPTIONS.find(d => d.value === form.discount)
+    const discountLbl = discountOpt ? t(discountOpt.tKey) : ''
     const paymentData = {
       type: form.type,
       student: form.type === 'income' ? form.clientName : form.expenseDescription,
@@ -344,7 +352,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       })
     } catch (err) {
       console.error('Contract generation failed:', err)
-      alert('Ошибка при генерации договора')
+      alert(t('paymentForm.error_contract'))
     }
     setGeneratingContract(false)
   }
@@ -355,113 +363,113 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-emerald-600 mb-2">
           <Receipt size={20} />
-          <span className="font-semibold">Оплата записана успешно!</span>
+          <span className="font-semibold">{t('paymentForm.receipt_success')}</span>
         </div>
 
         <div id="payment-receipt" className="border border-slate-200 rounded-xl p-6 bg-white space-y-3 text-sm">
           <div className="text-center border-b border-slate-200 pb-3 mb-3">
             <Logo size="md" variant="dark" />
-            <p className="text-slate-500 text-xs mt-1">{branches.find(b => b.id === savedPayment.branch)?.name} — Квитанция об оплате</p>
+            <p className="text-slate-500 text-xs mt-1">{branches.find(b => b.id === savedPayment.branch)?.name} — {t('paymentForm.receipt_title')}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div className="text-slate-500">Дата оплаты:</div>
+            <div className="text-slate-500">{t('paymentForm.receipt_payment_date')}</div>
             <div className="font-medium">{savedPayment.date}</div>
 
             {savedPayment.courseStartDate && (
               <>
-                <div className="text-slate-500">Старт курса:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_course_start')}</div>
                 <div className="font-medium">{savedPayment.courseStartDate}</div>
               </>
             )}
 
-            <div className="text-slate-500">Имя клиента:</div>
+            <div className="text-slate-500">{t('paymentForm.receipt_client_name')}</div>
             <div className="font-medium">{savedPayment.student}</div>
 
-            <div className="text-slate-500">Группа:</div>
+            <div className="text-slate-500">{t('paymentForm.receipt_group')}</div>
             <div className="font-medium">{savedPayment.group || '—'}</div>
 
-            <div className="text-slate-500">Курс:</div>
+            <div className="text-slate-500">{t('paymentForm.receipt_course')}</div>
             <div className="font-medium">{savedPayment.course}</div>
 
-            <div className="text-slate-500">Вид оплаты:</div>
+            <div className="text-slate-500">{t('paymentForm.receipt_method')}</div>
             <div className="font-medium">{savedPayment.method}</div>
 
-            <div className="text-slate-500">Транш №:</div>
+            <div className="text-slate-500">{t('paymentForm.receipt_tranche')}</div>
             <div className="font-medium">{savedPayment.trancheNumber}</div>
 
-            <div className="text-slate-500">Сумма:</div>
+            <div className="text-slate-500">{t('paymentForm.receipt_amount')}</div>
             <div className="font-bold text-emerald-600">{formatCurrency(savedPayment.amount)}</div>
 
             {totalCoursePrice > 0 && (
               <>
-                <div className="text-slate-500">Стоимость курса:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_course_price')}</div>
                 <div className="font-medium">{formatCurrency(totalCoursePrice)}</div>
 
-                <div className="text-slate-500">Всего оплачено:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_total_paid')}</div>
                 <div className="font-medium">{formatCurrency(totalPaid + savedPayment.amount)}</div>
               </>
             )}
 
             {savedPayment.debt > 0 && (
               <>
-                <div className="text-slate-500">Остаток долга:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_remaining')}</div>
                 <div className="font-bold text-red-500">{formatCurrency(savedPayment.debt)}</div>
               </>
             )}
 
             {savedPayment.nextPaymentDate && (
               <>
-                <div className="text-slate-500">Следующая оплата:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_next_payment')}</div>
                 <div className="font-medium text-blue-600">{savedPayment.nextPaymentDate}</div>
               </>
             )}
 
             {savedPayment.contractNumber && (
               <>
-                <div className="text-slate-500">Номер договора:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_contract')}</div>
                 <div className="font-medium">{savedPayment.contractNumber}</div>
               </>
             )}
 
             {savedPayment.phone && (
               <>
-                <div className="text-slate-500">Номер телефона:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_phone')}</div>
                 <div className="font-medium">{savedPayment.phone}</div>
               </>
             )}
 
             {(savedPayment.learningFormat || savedPayment.tariff) && (
               <>
-                <div className="text-slate-500">Формат:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_format')}</div>
                 <div className="font-medium">{savedPayment.learningFormat} ({savedPayment.tariff})</div>
               </>
             )}
 
-            {savedPayment.discount && savedPayment.discount !== 'Без скидки' && (
+            {savedPayment.discount && savedPayment.discount !== t('paymentForm.discount_none') && (
               <>
-                <div className="text-slate-500">Скидка:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_discount')}</div>
                 <div className="font-medium text-emerald-600">{savedPayment.discount}</div>
               </>
             )}
 
             {savedPayment.totalCoursePrice > 0 && (
               <>
-                <div className="text-slate-500">Стоимость курса:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_course_price')}</div>
                 <div className="font-bold text-blue-600">{formatCurrency(savedPayment.totalCoursePrice)}</div>
               </>
             )}
 
             {savedPayment.debt > 0 && (
               <>
-                <div className="text-slate-500">Остаток долга:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_remaining')}</div>
                 <div className="font-bold text-red-500">{formatCurrency(savedPayment.debt)}</div>
               </>
             )}
 
             {savedPayment.comment && (
               <>
-                <div className="text-slate-500">Комментарий:</div>
+                <div className="text-slate-500">{t('paymentForm.receipt_comment')}</div>
                 <div className="font-medium">{savedPayment.comment}</div>
               </>
             )}
@@ -469,7 +477,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
           {savedPayment.files && savedPayment.files.length > 0 && (
             <div className="border-t border-slate-200 pt-3 mt-3">
-              <p className="text-xs text-slate-500 mb-2">Прикреплённые файлы: {savedPayment.files.length}</p>
+              <p className="text-xs text-slate-500 mb-2">{t('paymentForm.receipt_files')} {savedPayment.files.length}</p>
               <div className="flex flex-wrap gap-1">
                 {savedPayment.files.map(f => (
                   <span key={f.id} className="text-xs bg-slate-100 px-2 py-1 rounded">{f.name}</span>
@@ -483,16 +491,16 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             <div className="border-t border-blue-200 bg-blue-50 rounded-xl p-4 mt-3">
               <div className="flex items-center gap-2 mb-2">
                 <Monitor size={16} className="text-blue-600" />
-                <p className="text-sm font-bold text-blue-800">Данные для входа в LMS</p>
+                <p className="text-sm font-bold text-blue-800">{t('paymentForm.lms_credentials_title')}</p>
               </div>
-              <p className="text-xs text-blue-600 mb-3">Передайте эти данные студенту для доступа к личному кабинету</p>
+              <p className="text-xs text-blue-600 mb-3">{t('paymentForm.lms_credentials_note')}</p>
               <div className="grid grid-cols-2 gap-2 bg-white rounded-lg p-3 border border-blue-200">
-                <div className="text-slate-500 text-sm">Логин:</div>
+                <div className="text-slate-500 text-sm">{t('paymentForm.lms_login')}</div>
                 <div className="font-bold text-slate-900 text-sm font-mono">{savedPayment.lmsCredentials.login}</div>
-                <div className="text-slate-500 text-sm">Пароль:</div>
+                <div className="text-slate-500 text-sm">{t('paymentForm.lms_password')}</div>
                 <div className="font-bold text-slate-900 text-sm font-mono">{savedPayment.lmsCredentials.password}</div>
               </div>
-              <p className="text-[10px] text-blue-400 mt-2">Студент может войти на сайт используя эти данные</p>
+              <p className="text-[10px] text-blue-400 mt-2">{t('paymentForm.lms_student_note')}</p>
             </div>
           )}
 
@@ -505,14 +513,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           <button onClick={handleGenerateContract} disabled={generatingContract}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50">
             <FileDown size={16} />
-            {generatingContract ? 'Генерация...' : 'Скачать договор'}
+            {generatingContract ? t('paymentForm.btn_generating') : t('paymentForm.btn_generate_contract')}
           </button>
           <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
             <Printer size={16} />
-            Печать
+            {t('paymentForm.btn_print')}
           </button>
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-            Готово
+            {t('paymentForm.btn_done')}
           </button>
         </div>
       </div>
@@ -525,22 +533,22 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       {/* Type selector — only show expense tab if user has permission & not doplata */}
       {isDoplata ? (
         <div className="bg-blue-50 rounded-lg py-2.5 px-4 text-sm font-medium text-blue-700 text-center">
-          Доплата по существующей продаже
+          {t('paymentForm.doplata_title')}
         </div>
       ) : canExpenses ? (
         <div className="flex gap-2">
           <button type="button" onClick={() => set('type', 'income')}
             className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${form.type === 'income' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600'}`}>
-            Оплата от ученика
+            {t('paymentForm.type_income')}
           </button>
           <button type="button" onClick={() => set('type', 'expense')}
             className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${form.type === 'expense' ? 'bg-red-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600'}`}>
-            Расход
+            {t('paymentForm.type_expense')}
           </button>
         </div>
       ) : (
         <div className="bg-emerald-50 rounded-lg py-2.5 px-4 text-sm font-medium text-emerald-700 text-center">
-          Оплата от ученика
+          {t('paymentForm.type_income')}
         </div>
       )}
 
@@ -552,10 +560,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             <>
               {/* Student selector — required */}
               <div className="bg-blue-50 rounded-lg p-4 space-y-3">
-                <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Выберите ученика для доплаты</h4>
+                <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{t('paymentForm.select_student_doplata')}</h4>
                 <select value={form.studentId} onChange={(e) => set('studentId', e.target.value)} required
                   className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">— Выберите ученика —</option>
+                  <option value="">{t('paymentForm.select_student')}</option>
                   {branchStudents.map(s => (
                     <option key={s.id} value={s.id}>{s.name} — {s.course} ({s.group})</option>
                   ))}
@@ -564,10 +572,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                 {/* Student info card */}
                 {selectedStudent && (
                   <div className="bg-white rounded-lg p-3 border border-blue-100 text-sm space-y-1">
-                    <div className="flex justify-between"><span className="text-slate-500">Ученик:</span><span className="font-semibold">{selectedStudent.name}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-500">Курс:</span><span className="font-medium">{selectedStudent.course}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-500">Группа:</span><span className="font-medium">{selectedStudent.group || '—'}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-500">Телефон:</span><span className="font-medium">{selectedStudent.phone || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.student_label')}</span><span className="font-semibold">{selectedStudent.name}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.course_label')}</span><span className="font-medium">{selectedStudent.course}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.group_label')}</span><span className="font-medium">{selectedStudent.group || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.phone_label')}</span><span className="font-medium">{selectedStudent.phone || '—'}</span></div>
                   </div>
                 )}
               </div>
@@ -576,7 +584,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               {form.studentId && (
                 <div className="bg-slate-50 rounded-lg p-4 space-y-3">
                   <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    История оплат ({studentPayments.length} {studentPayments.length === 1 ? 'транш' : studentPayments.length < 5 ? 'транша' : 'траншей'})
+                    {t('paymentForm.payment_history')} ({studentPayments.length} {studentPayments.length === 1 ? t('paymentForm.tranche') : studentPayments.length < 5 ? t('paymentForm.tranches_few') : t('paymentForm.tranches_many')})
                   </h4>
 
                   {studentPayments.length > 0 ? (
@@ -601,23 +609,23 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-400 italic">Оплат пока нет</p>
+                    <p className="text-sm text-slate-400 italic">{t('paymentForm.no_payments_yet')}</p>
                   )}
 
                   {/* Summary */}
                   <div className="bg-white rounded-lg p-3 border border-emerald-200 space-y-1">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Всего оплачено:</span>
+                      <span className="text-slate-500">{t('paymentForm.total_paid')}</span>
                       <span className="font-bold text-emerald-600">{formatCurrency(totalPaid)}</span>
                     </div>
                     {totalCoursePrice > 0 && (
                       <>
                         <div className="flex justify-between text-sm">
-                          <span className="text-slate-500">Стоимость курса:</span>
+                          <span className="text-slate-500">{t('paymentForm.course_price')}</span>
                           <span className="font-medium">{formatCurrency(totalCoursePrice)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-slate-500">Остаток долга:</span>
+                          <span className="text-slate-500">{t('paymentForm.remaining_debt')}</span>
                           <span className={`font-bold ${totalCoursePrice - totalPaid > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
                             {formatCurrency(Math.max(0, totalCoursePrice - totalPaid))}
                           </span>
@@ -629,7 +637,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                               style={{ width: `${Math.min(100, (totalPaid / totalCoursePrice) * 100)}%` }} />
                           </div>
                           <div className="text-xs text-slate-400 mt-1 text-right">
-                            {Math.round((totalPaid / totalCoursePrice) * 100)}% оплачено
+                            {Math.round((totalPaid / totalCoursePrice) * 100)}% {t('paymentForm.paid_percent')}
                           </div>
                         </div>
                       </>
@@ -643,28 +651,28 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               {/* ═══ NEW SALE MODE: full form ═══ */}
               {/* Section: Client Info */}
               <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Информация о клиенте</h4>
+                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('paymentForm.client_info')}</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Выбрать из базы</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.select_from_db')}</label>
                     <select value={form.studentId} onChange={(e) => set('studentId', e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">— Новый клиент —</option>
+                      <option value="">{t('paymentForm.or_new_client')}</option>
                       {branchStudents.map(s => (
                         <option key={s.id} value={s.id}>{s.name} — {s.course} ({s.group})</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Имя клиента *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_fullname')}</label>
                     <input type="text" value={form.clientName} onChange={(e) => set('clientName', e.target.value)} required
-                      placeholder="Малика"
+                      placeholder={t('paymentForm.placeholder_fullname')}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Номер телефона *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_phone')}</label>
                     <input type="tel" value={form.phone} onChange={(e) => set('phone', e.target.value)} required
-                      placeholder="+998 95 387 79 27"
+                      placeholder={t('paymentForm.placeholder_phone')}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -672,11 +680,11 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
               {/* Section: Course & Group */}
               <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Курс и группа</h4>
+                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('paymentForm.payment_details')}</h4>
                 <div className="grid grid-cols-2 gap-3">
                   {/* Course selection */}
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Курс *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_course')} *</label>
                     <select value={form.course} onChange={(e) => {
                       set('course', e.target.value)
                       // Reset tariff if not available for this course
@@ -697,45 +705,45 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
                   {/* Format */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Формат обучения</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_format')}</label>
                     <select value={form.learningFormat} onChange={(e) => set('learningFormat', e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {FORMAT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                      {FORMAT_OPTIONS.map(f => <option key={f.value} value={f.value}>{t(f.tKey)}</option>)}
                     </select>
                   </div>
 
                   {/* Tariff */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Тариф</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_tariff')}</label>
                     <select value={form.tariff} onChange={(e) => set('tariff', e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {availableTariffs.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      {availableTariffs.map(tf => <option key={tf.value} value={tf.value}>{t(tf.tKey)}</option>)}
                     </select>
                   </div>
 
                   {/* Discount */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Скидка</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_discount')}</label>
                     <select value={form.discount} onChange={(e) => set('discount', e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {availableDiscounts.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                      {availableDiscounts.map(d => <option key={d.value} value={d.value}>{t(d.tKey)}</option>)}
                     </select>
                   </div>
 
                   {/* Auto-calculated price display */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Стоимость курса</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.calculated_price')}</label>
                     <div className={`w-full px-3 py-2 rounded-lg text-sm font-bold ${courseFullPrice > 0 ? 'bg-blue-50 border border-blue-200 text-blue-700' : 'bg-slate-100 border border-slate-200 text-slate-400'}`}>
-                      {courseFullPrice > 0 ? formatCurrency(courseFullPrice) : 'Выберите курс и тариф'}
+                      {courseFullPrice > 0 ? formatCurrency(courseFullPrice) : t('paymentForm.calculated_price')}
                     </div>
                   </div>
 
                   {/* Group selection */}
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Группа *</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_group')} *</label>
                     <select value={form.groupId} onChange={(e) => set('groupId', e.target.value)} required
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">— Выберите группу —</option>
+                      <option value="">{t('paymentForm.select_group')}</option>
                       {branchGroups
                         .filter(g => !form.course || g.course === form.course)
                         .map(g => (
@@ -748,9 +756,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                     const selectedGroup = groups.find(g => g.id === form.groupId)
                     return selectedGroup ? (
                       <div className="col-span-2 bg-white rounded-lg p-3 border border-blue-100 text-sm space-y-1">
-                        <div className="flex justify-between"><span className="text-slate-500">Курс:</span><span className="font-medium">{selectedGroup.course}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Расписание:</span><span className="font-medium">{selectedGroup.schedule || '—'}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Филиал:</span><span className="font-medium">{branches.find(b => b.id === selectedGroup.branch)?.name || selectedGroup.branch}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.course_label')}</span><span className="font-medium">{selectedGroup.course}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.label_schedule')}:</span><span className="font-medium">{selectedGroup.schedule || '—'}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.label_branch')}:</span><span className="font-medium">{branches.find(b => b.id === selectedGroup.branch)?.name || selectedGroup.branch}</span></div>
                       </div>
                     ) : null
                   })()}
@@ -769,21 +777,21 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                 <h4 className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Данные для договора (Шартнома)</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Паспорт клиента</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_passport')}</label>
                     <input type="text" value={form.passport} onChange={(e) => set('passport', e.target.value)}
                       placeholder="AD 1234567"
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Срок обучения (мес.)</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_duration_months')}</label>
                     <input type="number" min="1" max="24" value={form.durationMonths} onChange={(e) => set('durationMonths', e.target.value)}
                       placeholder="3"
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Расписание</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_schedule')}</label>
                     <input type="text" value={form.schedule} onChange={(e) => set('schedule', e.target.value)}
-                      placeholder="16:00 - 18:00, Пн/Ср/Пт"
+                      placeholder={t('paymentForm.placeholder_schedule')}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
                   </div>
                 </div>
@@ -813,31 +821,31 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Дата оплаты *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_payment_date')} *</label>
                 <input type="date" value={form.paymentDate} onChange={(e) => set('paymentDate', e.target.value)} required
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Вид оплаты *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_method')} *</label>
                 <select value={form.method} onChange={(e) => set('method', e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   {METHODS.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Сумма оплаты (сум) *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_amount')}</label>
                 <input type="number" min="0" value={form.amount} onChange={(e) => set('amount', e.target.value)} required
                   placeholder="1 200 000"
                   className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Остаток долга (авто)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.debt_after')}</label>
                 <div className={`w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-semibold ${autoDebt > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                  {totalCoursePrice > 0 ? formatCurrency(autoDebt) : 'Выберите курс и тариф'}
+                  {totalCoursePrice > 0 ? formatCurrency(autoDebt) : t('paymentForm.calculated_price')}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Дата след. оплаты</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_next_payment')}</label>
                 <input type="date" value={form.nextPaymentDate} onChange={(e) => set('nextPaymentDate', e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
@@ -853,9 +861,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           {/* ═══ SHARED: File Attachments — MANDATORY ═══ */}
           <div className={`rounded-lg p-4 space-y-3 ${files.length === 0 ? 'bg-red-50 border border-red-200' : 'bg-slate-50'}`}>
             <h4 className={`text-xs font-semibold uppercase tracking-wide ${files.length === 0 ? 'text-red-600' : 'text-slate-500'}`}>
-              Чек об оплате * (обязательно)
+              {t('paymentForm.label_files')} *
             </h4>
-            <p className="text-xs text-slate-400">Приложите скриншот или фото чека: Payme, Click, Uzum или наличные (макс. 10MB)</p>
+            <p className="text-xs text-slate-400">{t('paymentForm.max_file_size')}</p>
 
             <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx" onChange={handleFileAdd}
               className="hidden" />
@@ -863,7 +871,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             <button type="button" onClick={() => fileInputRef.current?.click()}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-dashed border-slate-300 rounded-lg text-sm text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors w-full justify-center">
               <Paperclip size={16} />
-              Добавить файл
+              {t('paymentForm.attach_files')}
             </button>
 
             {files.length > 0 && (
@@ -886,7 +894,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
           {/* Comment */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_comment')}</label>
             <textarea value={form.comment} onChange={(e) => set('comment', e.target.value)}
               rows={2} placeholder="Дополнительная информация..."
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
@@ -896,7 +904,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         /* Expense form — admin only */
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Филиал</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_branch')}</label>
             <select value={form.branch} onChange={(e) => set('branch', e.target.value)}
               disabled={user?.branch !== 'all'}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -904,14 +912,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Метод оплаты</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_method')}</label>
             <select value={form.method} onChange={(e) => set('method', e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               {METHODS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div className="col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Описание расхода *</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_expense_desc')}</label>
             <input type="text" value={form.expenseDescription} onChange={(e) => set('expenseDescription', e.target.value)} required
               placeholder="Аренда, зарплата, оборудование..."
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -922,7 +930,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Сумма (сум) *</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_amount')}</label>
             <input type="number" min="1000" value={form.amount} onChange={(e) => set('amount', e.target.value)} required
               placeholder="1 500 000"
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -935,20 +943,20 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           <button type="button" onClick={handleGenerateContract} disabled={generatingContract || !form.clientName}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-40">
             <FileDown size={16} />
-            {generatingContract ? 'Генерация...' : 'Договор'}
+            {generatingContract ? t('paymentForm.btn_generating') : t('paymentForm.btn_generate_contract')}
           </button>
         )}
         {(form.type !== 'income' || isDoplata) && <div />}
         <div className="flex gap-3">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
-            Отмена
+            {t('paymentForm.btn_cancel')}
           </button>
           <button type="submit" disabled={form.type === 'income' && (files.length === 0 || (isDoplata && !form.studentId))}
             className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
             <Receipt size={16} />
             {form.type === 'income'
-              ? (isDoplata && !form.studentId ? 'Выберите ученика' : files.length === 0 ? 'Приложите чек' : isDoplata ? 'Записать доплату' : 'Принять оплату')
-              : 'Записать расход'}
+              ? (isDoplata && !form.studentId ? t('paymentForm.select_student') : files.length === 0 ? t('paymentForm.attach_files') : isDoplata ? t('paymentForm.btn_submit') : t('paymentForm.btn_submit'))
+              : t('paymentForm.btn_submit_expense')}
           </button>
         </div>
       </div>
