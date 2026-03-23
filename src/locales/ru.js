@@ -532,6 +532,7 @@ export default {
   "sidebar.reports": "Отчёты",
   "sidebar.lms": "LMS",
   "sidebar.attendance": "Посещаемость",
+  "sidebar.integrations": "Интеграции",
   "sidebar.logout": "Выйти",
 
   // ─── Header ───────────────────────────────────────────────────────────────────

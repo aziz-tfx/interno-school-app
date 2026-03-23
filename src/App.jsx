@@ -14,6 +14,7 @@ import Profile from './pages/Profile'
 import Reports from './pages/Reports'
 import LMSDashboard from './pages/lms/LMSDashboard'
 import LMSGroupView from './pages/lms/LMSGroupView'
+import Integrations from './pages/Integrations'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -69,6 +70,9 @@ export default function App() {
         } />
         <Route path="lms/group/:groupId" element={
           <ProtectedRoute permission="lms"><LMSGroupView /></ProtectedRoute>
+        } />
+        <Route path="integrations" element={
+          <ProtectedRoute permission="settings"><Integrations /></ProtectedRoute>
         } />
         <Route path="profile" element={<Profile />} />
       </Route>

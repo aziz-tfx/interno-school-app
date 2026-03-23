@@ -532,6 +532,7 @@ export default {
   "sidebar.reports": "Hisobotlar",
   "sidebar.lms": "LMS",
   "sidebar.attendance": "Davomat",
+  "sidebar.integrations": "Integratsiyalar",
   "sidebar.logout": "Chiqish",
 
   // ─── Header ───────────────────────────────────────────────────────────────────

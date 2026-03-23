@@ -13,6 +13,7 @@ import {
   FileBarChart,
   X,
   Monitor,
+  Plug,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -35,6 +36,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/reports', icon: FileBarChart, label: t('sidebar.reports'), permission: 'finance' },
     { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
     { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: null },
+    { to: '/integrations', icon: Plug, label: t('sidebar.integrations'), permission: 'settings' },
   ]
 
   const navItems = allNavItems.filter(item => {
