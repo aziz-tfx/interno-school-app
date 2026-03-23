@@ -5,6 +5,7 @@ import { formatCurrency } from '../data/mockData'
 import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor } from 'lucide-react'
 import { generateContract } from '../utils/generateContract'
 import { pushSaleToAmo } from '../utils/amocrm'
+import { pushSaleToTelegram } from '../utils/telegram'
 import { db } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 import Logo from './Logo'
@@ -322,6 +323,34 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           console.log('Sale pushed to amoCRM:', result.leadId)
         } else {
           console.warn('amoCRM sync skipped:', result.error)
+        }
+      })
+
+      // Push to Telegram group (non-blocking)
+      pushSaleToTelegram({
+        clientName: form.clientName,
+        phone: form.phone,
+        course: form.course,
+        group: selectedGroup?.name || '',
+        amount: Number(form.amount),
+        method: form.method,
+        date: form.paymentDate,
+        courseStartDate: form.courseStartDate,
+        branch: form.branch,
+        tariff: tariffLbl,
+        discount: discountLbl,
+        contractNumber: form.contractNumber,
+        debt: autoDebt,
+        totalCoursePrice: courseFullPrice || 0,
+        trancheNumber: studentPayments.length + 1,
+        managerName: user?.name || '',
+        comment: form.comment,
+        learningFormat: form.learningFormat,
+      }).then(result => {
+        if (result.success) {
+          console.log('Sale notification sent to Telegram:', result.messageId)
+        } else {
+          console.warn('Telegram notification skipped:', result.error)
         }
       })
     }
