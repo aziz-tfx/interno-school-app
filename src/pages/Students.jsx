@@ -2,12 +2,16 @@ import { useState } from 'react'
 import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
-import { useLanguage } from '../contexts/LanguageContext'
 import { formatCurrency } from '../data/mockData'
 import Modal from '../components/Modal'
 import StudentForm from '../components/StudentForm'
 import StudentProfile from '../components/StudentProfile'
 import GroupForm from '../components/GroupForm'
+
+const TABS = [
+  { id: 'students', label: 'Ученики' },
+  { id: 'groups', label: 'Группы' },
+]
 
 export default function Students() {
   const { user, hasPermission } = useAuth()
@@ -17,12 +21,6 @@ export default function Students() {
     getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
     getBranchName,
   } = useData()
-  const { t } = useLanguage()
-
-  const TABS = [
-    { id: 'students', label: t('students.tabs.students') },
-    { id: 'groups', label: t('students.tabs.groups') },
-  ]
 
   const [activeTab, setActiveTab] = useState('students')
   const [search, setSearch] = useState('')
@@ -78,9 +76,9 @@ export default function Students() {
     frozen: 'bg-slate-100 text-slate-700',
   }
   const statusLabels = {
-    active: t('students.status.active'),
-    debtor: t('students.status.debtor'),
-    frozen: t('students.status.frozen'),
+    active: 'Активен',
+    debtor: 'Должник',
+    frozen: 'Заморожен',
   }
 
   // ── Handlers ──
@@ -115,7 +113,7 @@ export default function Students() {
     if (grp) {
       const studentsInGroup = getGroupStudents(grp.name)
       if (studentsInGroup.length > 0) {
-        alert(t('students.cannotDeleteGroup', { count: studentsInGroup.length }))
+        alert(`Невозможно удалить группу: в ней ${studentsInGroup.length} учеников. Сначала переведите их в другую группу.`)
         setConfirmDeleteGroup(null)
         return
       }
@@ -187,7 +185,7 @@ export default function Students() {
         }
       }
     }
-    setSyncResult(t('students.syncResult', { created, total: clientMap.size }))
+    setSyncResult(`Создано ${created} учеников из ${clientMap.size} уникальных клиентов`)
     setSyncing(false)
   }
 
@@ -195,14 +193,14 @@ export default function Students() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900">{t('students.title')}</h2>
-          <p className="text-slate-500 mt-1">{allStudents.length} {t('students.studentsCount')} · {allGroups.length} {t('students.groupsCount')}</p>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900">Ученики и группы</h2>
+          <p className="text-slate-500 mt-1">{allStudents.length} учеников · {allGroups.length} групп</p>
         </div>
         <div className="flex gap-2">
           {canAdd && activeTab === 'groups' && (
             <button onClick={handleAddGroup}
               className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-purple-700 shadow-lg shadow-purple-500/25 transition-colors flex items-center gap-2">
-              <Plus size={16} /> {t('students.newGroup')}
+              <Plus size={16} /> Новая группа
             </button>
           )}
           {canAdd && activeTab === 'students' && (
@@ -210,12 +208,12 @@ export default function Students() {
               {orphanPayments.length > 0 && (
                 <button onClick={handleSync} disabled={syncing}
                   className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors flex items-center gap-2 disabled:opacity-50">
-                  <Users size={16} /> {syncing ? t('students.syncing') : `${t('students.sync')} (${orphanPayments.length})`}
+                  <Users size={16} /> {syncing ? 'Синхронизация...' : `Синхронизировать (${orphanPayments.length})`}
                 </button>
               )}
               <button onClick={handleAdd}
                 className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
-                <Plus size={16} /> {t('students.addStudent')}
+                <Plus size={16} /> Добавить ученика
               </button>
             </>
           )}
@@ -253,7 +251,7 @@ export default function Students() {
           <div className="glass-card rounded-2xl p-4 flex flex-wrap gap-4 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder={t('students.searchPlaceholder')} value={search}
+              <input type="text" placeholder="Поиск по имени, курсу, группе..." value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-white/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
@@ -262,21 +260,21 @@ export default function Students() {
               {user.branch === 'all' && (
                 <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
                   className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="all">{t('students.allBranches')}</option>
+                  <option value="all">Все филиалы</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               )}
               <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}
                 className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">{t('students.allGroups')}</option>
+                <option value="all">Все группы</option>
                 {uniqueGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
                 className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">{t('students.allStatuses')}</option>
-                <option value="active">{t('students.filter.active')}</option>
-                <option value="debtor">{t('students.filter.debtors')}</option>
-                <option value="frozen">{t('students.filter.frozen')}</option>
+                <option value="all">Все статусы</option>
+                <option value="active">Активные</option>
+                <option value="debtor">Должники</option>
+                <option value="frozen">Замороженные</option>
               </select>
             </div>
           </div>
@@ -287,15 +285,15 @@ export default function Students() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-white/40 border-b border-white/30">
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('students.table.name')}</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('students.table.branch')}</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('students.table.group')}</th>
-                    <th className="text-center py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">{t('students.table.format')}</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">{t('students.table.phone')}</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('students.table.paid')}</th>
-                    <th className="text-right py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('students.table.debt')}</th>
-                    <th className="text-center py-3 px-4 text-slate-500 font-medium">{t('students.table.status')}</th>
-                    <th className="text-center py-3 px-4 text-slate-500 font-medium">{t('students.table.actions')}</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Имя</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Филиал</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium">Группа</th>
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">Формат</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">Телефон</th>
+                    <th className="text-right py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Оплачено</th>
+                    <th className="text-right py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Дебиторка</th>
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium">Статус</th>
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -310,7 +308,7 @@ export default function Students() {
                           <p className="font-medium text-slate-900">{student.name}</p>
                           <p className="text-xs text-slate-400">
                             {student.course || '—'}
-                            {info.trancheCount > 0 && <span className="ml-1 text-emerald-500">· {info.trancheCount} {t('students.tranches')}</span>}
+                            {info.trancheCount > 0 && <span className="ml-1 text-emerald-500">· {info.trancheCount} транш(ей)</span>}
                           </p>
                         </td>
                         <td className="py-3 px-4 text-slate-600 hidden md:table-cell">{getBranchName(student.branch)}</td>
@@ -320,11 +318,11 @@ export default function Students() {
                         <td className="py-3 px-4 text-center hidden lg:table-cell">
                           {isOnline ? (
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-                              <Wifi size={10} /> {t('students.format.online')}
+                              <Wifi size={10} /> Онлайн
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                              <Users size={10} /> {t('students.format.offline')}
+                              <Users size={10} /> Оффлайн
                             </span>
                           )}
                         </td>
@@ -339,7 +337,7 @@ export default function Students() {
                               {info.isOverdue && (
                                 <div className="flex items-center justify-end gap-1 mt-0.5">
                                   <AlertTriangle size={11} className="text-amber-500" />
-                                  <span className="text-xs text-amber-500">{t('students.overdue')}</span>
+                                  <span className="text-xs text-amber-500">Просрочено</span>
                                 </div>
                               )}
                             </div>
@@ -353,7 +351,7 @@ export default function Students() {
                               {statusLabels[student.status]}
                             </span>
                             {student.lmsAccess && (
-                              <span title={t('students.lmsActive')} className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                              <span title="LMS доступ активен" className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                                 <Monitor size={10} className="text-blue-600" />
                               </span>
                             )}
@@ -362,18 +360,18 @@ export default function Students() {
                         <td className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={(e) => { e.stopPropagation(); setProfileStudent(student) }}
-                              className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title={t('students.profile')}>
+                              className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title="Профиль">
                               <Eye size={15} className="text-blue-600" />
                             </button>
                             {canEdit && (
                               <button onClick={(e) => handleEdit(e, student)}
-                                className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title={t('students.edit')}>
+                                className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title="Редактировать">
                                 <Pencil size={15} className="text-slate-500" />
                               </button>
                             )}
                             {canDelete && (
                               <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(student.id) }}
-                                className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title={t('students.delete')}>
+                                className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="Удалить">
                                 <Trash2 size={15} className="text-red-500" />
                               </button>
                             )}
@@ -386,7 +384,7 @@ export default function Students() {
               </table>
             </div>
             {filtered.length === 0 && (
-              <div className="text-center py-12 text-slate-400">{t('students.notFound')}</div>
+              <div className="text-center py-12 text-slate-400">Ученики не найдены</div>
             )}
           </div>
         </>
@@ -399,14 +397,14 @@ export default function Students() {
           <div className="glass-card rounded-2xl p-4 flex flex-wrap gap-4 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder={t('students.searchGroupPlaceholder')} value={groupSearch}
+              <input type="text" placeholder="Поиск по названию группы или курсу..." value={groupSearch}
                 onChange={(e) => setGroupSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-white/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             {user.branch === 'all' && (
               <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
                 className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">{t('students.allBranches')}</option>
+                <option value="all">Все филиалы</option>
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
@@ -456,28 +454,28 @@ export default function Students() {
                           <Users size={13} className="text-blue-600" />
                         </div>
                         <p className="text-lg font-bold text-slate-900">{offlineCount}</p>
-                        <p className="text-[10px] text-slate-500">{t('students.format.offline')}</p>
+                        <p className="text-[10px] text-slate-500">Оффлайн</p>
                       </div>
                       <div className="bg-purple-50 rounded-lg p-2.5">
                         <div className="flex items-center justify-center gap-1 mb-1">
                           <Wifi size={13} className="text-purple-600" />
                         </div>
                         <p className="text-lg font-bold text-slate-900">{onlineCount}</p>
-                        <p className="text-[10px] text-slate-500">{t('students.format.online')}</p>
+                        <p className="text-[10px] text-slate-500">Онлайн</p>
                       </div>
                       <div className="bg-emerald-50 rounded-lg p-2.5">
                         <p className="text-lg font-bold text-slate-900">{totalCount}</p>
-                        <p className="text-[10px] text-slate-500">{t('students.total')}</p>
+                        <p className="text-[10px] text-slate-500">Всего</p>
                       </div>
                     </div>
 
                     {/* Offline capacity bar */}
                     <div>
                       <div className="flex justify-between text-xs text-slate-500 mb-1">
-                        <span>{t('students.offlineSeats')}</span>
+                        <span>Оффлайн места</span>
                         <span className={`font-semibold ${isFull ? 'text-red-500' : 'text-slate-700'}`}>
                           {offlineCount}/{group.maxOffline}
-                          {isFull && ` ${t('students.full')}`}
+                          {isFull && ' ПОЛНАЯ'}
                         </span>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-2.5">
@@ -514,10 +512,10 @@ export default function Students() {
                         group.status === 'full' ? 'bg-amber-50 text-amber-700' :
                         'bg-slate-100 text-slate-500'
                       }`}>
-                        {group.status === 'active' ? t('students.groupStatus.active') : group.status === 'full' ? t('students.groupStatus.full') : t('students.groupStatus.archived')}
+                        {group.status === 'active' ? 'Активная' : group.status === 'full' ? 'Набор закрыт' : 'Архивная'}
                       </span>
                       <span className="text-xs text-slate-400">
-                        {t('students.onlineNoLimit')}
+                        Онлайн: без лимита
                       </span>
                     </div>
                   </div>
@@ -528,7 +526,7 @@ export default function Students() {
 
           {filteredGroups.length === 0 && (
             <div className="text-center py-12 text-slate-400 glass-card rounded-2xl">
-              {t('students.groupsNotFound')}
+              Группы не найдены
             </div>
           )}
         </>
@@ -538,21 +536,21 @@ export default function Students() {
 
       {/* Add/Edit Student */}
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}
-        title={editingStudent ? t('students.modal.editStudent') : t('students.modal.newStudent')} size="lg">
+        title={editingStudent ? 'Редактировать ученика' : 'Новый ученик'} size="lg">
         <StudentForm student={editingStudent} onClose={() => setModalOpen(false)} />
       </Modal>
 
       {/* Confirm Delete Student */}
-      <Modal isOpen={!!confirmDelete} onClose={() => setConfirmDelete(null)} title={t('students.modal.confirmDelete')} size="sm">
-        <p className="text-sm text-slate-600 mb-4">{t('students.modal.confirmDeleteText')}</p>
+      <Modal isOpen={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Подтвердите удаление" size="sm">
+        <p className="text-sm text-slate-600 mb-4">Вы уверены, что хотите удалить этого ученика?</p>
         <div className="flex justify-end gap-3">
-          <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('students.modal.cancel')}</button>
-          <button onClick={() => handleDelete(confirmDelete)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">{t('students.modal.delete')}</button>
+          <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">Отмена</button>
+          <button onClick={() => handleDelete(confirmDelete)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Удалить</button>
         </div>
       </Modal>
 
       {/* Student Profile */}
-      <Modal isOpen={!!profileStudent} onClose={() => setProfileStudent(null)} title={t('students.modal.profile')} size="xl">
+      <Modal isOpen={!!profileStudent} onClose={() => setProfileStudent(null)} title="Профиль ученика" size="xl">
         {profileStudent && (
           <StudentProfile
             student={students.find(s => s.id === profileStudent.id) || profileStudent}
@@ -563,16 +561,16 @@ export default function Students() {
 
       {/* Add/Edit Group */}
       <Modal isOpen={groupModalOpen} onClose={() => setGroupModalOpen(false)}
-        title={editingGroup ? t('students.modal.editGroup') : t('students.modal.newGroup')} size="lg">
+        title={editingGroup ? 'Редактировать группу' : 'Новая группа'} size="lg">
         <GroupForm group={editingGroup} onClose={() => setGroupModalOpen(false)} />
       </Modal>
 
       {/* Confirm Delete Group */}
-      <Modal isOpen={!!confirmDeleteGroup} onClose={() => setConfirmDeleteGroup(null)} title={t('students.modal.deleteGroup')} size="sm">
-        <p className="text-sm text-slate-600 mb-4">{t('students.modal.confirmDeleteGroupText')}</p>
+      <Modal isOpen={!!confirmDeleteGroup} onClose={() => setConfirmDeleteGroup(null)} title="Удаление группы" size="sm">
+        <p className="text-sm text-slate-600 mb-4">Вы уверены, что хотите удалить эту группу?</p>
         <div className="flex justify-end gap-3">
-          <button onClick={() => setConfirmDeleteGroup(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('students.modal.cancel')}</button>
-          <button onClick={() => handleDeleteGroup(confirmDeleteGroup)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">{t('students.modal.delete')}</button>
+          <button onClick={() => setConfirmDeleteGroup(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">Отмена</button>
+          <button onClick={() => handleDeleteGroup(confirmDeleteGroup)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Удалить</button>
         </div>
       </Modal>
     </div>

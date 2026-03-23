@@ -2,12 +2,10 @@ import { useState, useMemo } from 'react'
 import { Check, X, Clock, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
-import { useLanguage } from '../contexts/LanguageContext'
 
 export default function Attendance() {
   const { user } = useAuth()
   const { students, teachers, branches, markAttendance, getAttendanceByGroup, getAttendanceStats } = useData()
-  const { t } = useLanguage()
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedGroup, setSelectedGroup] = useState('')
 
@@ -46,9 +44,9 @@ export default function Attendance() {
   }
 
   const statusIcons = {
-    present: { icon: Check, color: 'bg-emerald-100 text-emerald-700 border-emerald-300', label: t('attendance.present') },
-    absent: { icon: X, color: 'bg-red-100 text-red-700 border-red-300', label: t('attendance.absent') },
-    late: { icon: Clock, color: 'bg-yellow-100 text-yellow-700 border-yellow-300', label: t('attendance.late') },
+    present: { icon: Check, color: 'bg-emerald-100 text-emerald-700 border-emerald-300', label: 'Был' },
+    absent: { icon: X, color: 'bg-red-100 text-red-700 border-red-300', label: 'Нет' },
+    late: { icon: Clock, color: 'bg-yellow-100 text-yellow-700 border-yellow-300', label: 'Опоздал' },
   }
 
   const summary = {
@@ -62,14 +60,14 @@ export default function Attendance() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl md:text-2xl font-bold text-slate-900">{t('attendance.title')}</h2>
-        <p className="text-slate-500 mt-1">{t('attendance.subtitle')}</p>
+        <h2 className="text-xl md:text-2xl font-bold text-slate-900">Посещаемость</h2>
+        <p className="text-slate-500 mt-1">Отметьте присутствие учеников на занятии</p>
       </div>
 
       {/* Controls */}
       <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row flex-wrap gap-4 items-start md:items-center">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">{t('attendance.date')}</label>
+          <label className="block text-xs text-slate-500 mb-1">Дата</label>
           <input
             type="date"
             value={selectedDate}
@@ -78,13 +76,13 @@ export default function Attendance() {
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">{t('attendance.group')}</label>
+          <label className="block text-xs text-slate-500 mb-1">Группа</label>
           <select
             value={activeGroup}
             onChange={(e) => setSelectedGroup(e.target.value)}
             className="px-3 py-2 bg-white/50 border border-white/30 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {availableGroups.length === 0 && <option value="">{t('attendance.noGroups')}</option>}
+            {availableGroups.length === 0 && <option value="">Нет групп</option>}
             {availableGroups.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
@@ -114,10 +112,10 @@ export default function Attendance() {
               <thead>
                 <tr className="bg-white/40 border-b border-white/30">
                   <th className="text-left py-3 px-4 text-slate-500 font-medium w-8">#</th>
-                  <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('attendance.student')}</th>
-                  <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('attendance.course')}</th>
-                  <th className="text-center py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('attendance.totalAttendance')}</th>
-                  <th className="text-center py-3 px-4 text-slate-500 font-medium">{t('attendance.mark')}</th>
+                  <th className="text-left py-3 px-4 text-slate-500 font-medium">Ученик</th>
+                  <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Курс</th>
+                  <th className="text-center py-3 px-4 text-slate-500 font-medium hidden md:table-cell">Общая посещаемость</th>
+                  <th className="text-center py-3 px-4 text-slate-500 font-medium">Отметка</th>
                 </tr>
               </thead>
               <tbody>
@@ -174,8 +172,8 @@ export default function Attendance() {
           <Users size={48} className="text-slate-300 mx-auto mb-4" />
           <p className="text-slate-500">
             {availableGroups.length === 0
-              ? t('attendance.noGroupsAvailable')
-              : t('attendance.selectGroup')
+              ? 'Нет доступных групп'
+              : 'Выберите группу для отметки посещаемости'
             }
           </p>
         </div>

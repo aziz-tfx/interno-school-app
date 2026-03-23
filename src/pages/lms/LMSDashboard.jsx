@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useData } from '../../contexts/DataContext'
-import { useLanguage } from '../../contexts/LanguageContext'
 import { useNavigate } from 'react-router-dom'
 import {
   BookOpen, Clock, CheckCircle2, FileText, Users, Bell,
@@ -12,7 +11,6 @@ import {
 
 // ─── LMS Course Form (Constructor) ─────────────────────────────────
 function LMSCourseForm({ course, onSave, onClose }) {
-  const { t } = useLanguage()
   const [form, setForm] = useState({
     name: course?.name || '',
     icon: course?.icon || '📚',
@@ -42,15 +40,15 @@ function LMSCourseForm({ course, onSave, onClose }) {
 
   const ICONS = ['📚', '🎨', '💻', '📊', '🇬🇧', '🧮', '📐', '🎭', '🧠', '📸', '🎬', '🏗️', '🎯', '🔬', '✏️', '🌐']
   const REGIONS = [
-    { id: 'tashkent', label: t('courses.region.tashkent') },
-    { id: 'fergana', label: t('courses.region.fergana') },
-    { id: 'online', label: t('courses.region.online') },
+    { id: 'tashkent', label: 'Ташкент' },
+    { id: 'fergana', label: 'Фергана / Самарканд' },
+    { id: 'online', label: 'Онлайн' },
   ]
   const TARIFFS = [
-    { id: 'standard', label: t('courses.tariffName.standard') },
-    { id: 'vip', label: t('courses.tariffName.vip') },
-    { id: 'premium', label: t('courses.tariffName.premium') },
-    { id: 'individual', label: t('courses.tariffName.individual') },
+    { id: 'standard', label: 'Стандарт' },
+    { id: 'vip', label: 'VIP' },
+    { id: 'premium', label: 'Премиум' },
+    { id: 'individual', label: 'Индивидуальный' },
   ]
 
   const handleSubmit = (e) => {
@@ -96,7 +94,7 @@ function LMSCourseForm({ course, onSave, onClose }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl z-10">
           <h3 className="text-lg font-bold text-slate-900">
-            {course ? t('lms.editCourse') : t('lms.createCourse')}
+            {course ? 'Редактировать курс' : 'Создать курс'}
           </h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
             <X size={20} className="text-slate-500" />
@@ -107,13 +105,13 @@ function LMSCourseForm({ course, onSave, onClose }) {
           {/* Name + Icon */}
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.namePlaceholder')} *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Название курса *</label>
               <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
-                required placeholder={t('courseForm.namePlaceholder')}
+                required placeholder="Например: Английский язык"
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.icon')}</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Иконка</label>
               <div className="flex flex-wrap gap-1">
                 {ICONS.map(icon => (
                   <button key={icon} type="button" onClick={() => set('icon', icon)}
@@ -127,30 +125,30 @@ function LMSCourseForm({ course, onSave, onClose }) {
 
           {/* Duration */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.duration')}</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Длительность</label>
             <select value={form.duration} onChange={e => set('duration', e.target.value)}
               className="w-full sm:w-48 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm">
               {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                <option key={m} value={`${m} мес`}>{t('courseForm.months', { m })}</option>
+                <option key={m} value={`${m} мес`}>{m} мес</option>
               ))}
             </select>
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.description')}</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Описание курса</label>
             <textarea value={form.description} onChange={e => set('description', e.target.value)}
-              rows={3} placeholder={t('courseForm.descPlaceholder')}
+              rows={3} placeholder="Краткое описание курса..."
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm resize-none" />
           </div>
 
           {/* Features */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              {t('courseForm.program')} <span className="text-slate-400 font-normal">({t('lms.program')})</span>
+              Программа курса <span className="text-slate-400 font-normal">(каждый пункт с новой строки)</span>
             </label>
             <textarea value={form.featuresText} onChange={e => set('featuresText', e.target.value)}
-              rows={4} placeholder={t('courseForm.programPlaceholder')}
+              rows={4} placeholder={"Планировка и зонирование\n3D-визуализация\nРабота с заказчиком"}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm resize-none font-mono" />
             {form.featuresText && (
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
@@ -169,7 +167,7 @@ function LMSCourseForm({ course, onSave, onClose }) {
               <input type="checkbox" checked={form.pricingEnabled}
                 onChange={e => set('pricingEnabled', e.target.checked)}
                 className="w-4 h-4 text-blue-600 rounded" />
-              <span className="text-sm font-medium text-slate-700">{t('lms.configureTariffs')}</span>
+              <span className="text-sm font-medium text-slate-700">Настроить тарифы и цены</span>
             </label>
           </div>
 
@@ -185,16 +183,16 @@ function LMSCourseForm({ course, onSave, onClose }) {
                 ))}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {TARIFFS.map(tf => (
-                  <div key={tf.id}>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">{tf.label}</label>
+                {TARIFFS.map(t => (
+                  <div key={t.id}>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{t.label}</label>
                     <div className="relative">
                       <input type="number" min="0"
-                        value={form[`${activeRegion}_${tf.id}`]}
-                        onChange={e => set(`${activeRegion}_${tf.id}`, e.target.value)}
+                        value={form[`${activeRegion}_${t.id}`]}
+                        onChange={e => set(`${activeRegion}_${t.id}`, e.target.value)}
                         placeholder="0"
                         className="w-full px-3 py-2 pr-16 bg-white border border-slate-200 rounded-lg text-sm" />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{t('common.sum')}</span>
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">сум</span>
                     </div>
                   </div>
                 ))}
@@ -206,11 +204,11 @@ function LMSCourseForm({ course, onSave, onClose }) {
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose}
               className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">
-              {t('common.cancel')}
+              Отмена
             </button>
             <button type="submit"
               className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 flex items-center gap-2">
-              <Save size={14} /> {course ? t('common.save') : t('lms.createCourse')}
+              <Save size={14} /> {course ? 'Сохранить' : 'Создать курс'}
             </button>
           </div>
         </form>
@@ -226,7 +224,6 @@ export default function LMSDashboard() {
     groups, students, courses, lmsLessons, lmsAssignments, lmsSubmissions, lmsAnnouncements,
     addCourse, updateCourse, deleteCourse,
   } = useData()
-  const { t } = useLanguage()
   const navigate = useNavigate()
   const isTeacher = user?.role === 'teacher'
   const isStudent = user?.role === 'student'
@@ -340,8 +337,8 @@ export default function LMSDashboard() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-900">{t('lms.myLearning')}</h2>
-          <p className="text-slate-500 mt-1">{t('lms.accessRestricted')}</p>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900">Мое обучение</h2>
+          <p className="text-slate-500 mt-1">Доступ ограничен</p>
         </div>
 
         <div className="max-w-lg mx-auto text-center py-12">
@@ -358,51 +355,55 @@ export default function LMSDashboard() {
           </div>
 
           <h3 className="text-xl font-bold text-slate-900 mb-2">
-            {blockReason === 'debtor' ? t('lms.accessSuspended') :
-             blockReason === 'frozen' ? t('lms.learningFrozen') :
-             t('lms.accessNotActivated')}
+            {blockReason === 'debtor' ? 'Доступ приостановлен' :
+             blockReason === 'frozen' ? 'Обучение заморожено' :
+             'Доступ не активирован'}
           </h3>
 
           <p className="text-slate-500 mb-6 leading-relaxed">
-            {blockReason === 'debtor' ? t('lms.suspendedDesc') :
-             blockReason === 'frozen' ? t('lms.frozenDesc') :
-             t('lms.notActivatedDesc')}
+            {blockReason === 'debtor' ? (
+              <>Ваш доступ к LMS приостановлен из-за задолженности по оплате. Пожалуйста, свяжитесь с менеджером для оплаты.</>
+            ) : blockReason === 'frozen' ? (
+              <>Ваше обучение временно заморожено. Для возобновления свяжитесь с администрацией.</>
+            ) : (
+              <>Для активации доступа к LMS необходимо произвести первую оплату за курс. Обратитесь к менеджеру.</>
+            )}
           </p>
 
           <div className="glass-card rounded-2xl p-5 text-left space-y-3">
-            <h4 className="text-sm font-semibold text-slate-700">{t('lms.info')}</h4>
+            <h4 className="text-sm font-semibold text-slate-700">Информация</h4>
             {myStudent && (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">{t('lms.studentLabel')}</span>
+                  <span className="text-slate-500">Ученик:</span>
                   <span className="font-medium">{myStudent.name}</span>
                 </div>
                 {myStudent.course && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">{t('lms.courseLabel')}</span>
+                    <span className="text-slate-500">Курс:</span>
                     <span className="font-medium">{myStudent.course}</span>
                   </div>
                 )}
                 {myStudent.group && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">{t('lms.groupLabel')}</span>
+                    <span className="text-slate-500">Группа:</span>
                     <span className="font-medium">{myStudent.group}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-slate-500">{t('lms.statusLabel')}</span>
+                  <span className="text-slate-500">Статус:</span>
                   <span className={`font-semibold px-2 py-0.5 rounded-full text-xs ${
                     myStudent.status === 'debtor' ? 'bg-red-100 text-red-600' :
                     myStudent.status === 'frozen' ? 'bg-blue-100 text-blue-600' :
                     'bg-amber-100 text-amber-600'
                   }`}>
-                    {myStudent.status === 'debtor' ? t('lms.statusDebtor') :
-                     myStudent.status === 'frozen' ? t('lms.statusFrozen') : t('lms.statusAwaitingPayment')}
+                    {myStudent.status === 'debtor' ? 'Должник' :
+                     myStudent.status === 'frozen' ? 'Заморожен' : 'Ожидает оплаты'}
                   </span>
                 </div>
                 {myStudent.nextPaymentDate && (
                   <div className="flex justify-between">
-                    <span className="text-slate-500">{t('lms.nextPaymentDate')}</span>
+                    <span className="text-slate-500">Дата след. оплаты:</span>
                     <span className="font-medium text-red-500">{myStudent.nextPaymentDate}</span>
                   </div>
                 )}
@@ -411,7 +412,7 @@ export default function LMSDashboard() {
           </div>
 
           <p className="text-xs text-slate-400 mt-6">
-            {t('lms.errorContact')} <span className="font-medium text-slate-600">+998 95 387 79 27</span>
+            Если вы считаете что это ошибка, свяжитесь с администрацией: <span className="font-medium text-slate-600">+998 95 387 79 27</span>
           </p>
         </div>
       </div>
@@ -424,14 +425,14 @@ export default function LMSDashboard() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900">
-            {isTeacher ? t('lms.teacherPanel') : isStudent ? t('lms.myLearning') : t('lms.title')}
+            {isTeacher ? 'Панель учителя' : isStudent ? 'Мое обучение' : 'LMS — Управление обучением'}
           </h2>
           <p className="text-slate-500 mt-1">
             {isTeacher
-              ? t('lms.teacherGroupsLessons', { groups: myGroups.length, lessons: myLessons.length })
+              ? `${myGroups.length} групп · ${myLessons.length} уроков`
               : isStudent
-                ? `${myGroups.length} ${t('lms.coursesCount')} · ${t('lms.pendingCount', { count: pendingAssignments.length })}`
-                : `${groups.filter(g => g.status === 'active').length} ${t('lms.activeGroups')}`
+                ? `${myGroups.length} курсов · ${pendingAssignments.length} заданий ожидают`
+                : `${groups.filter(g => g.status === 'active').length} активных групп`
             }
           </p>
         </div>
@@ -445,7 +446,7 @@ export default function LMSDashboard() {
                   activeView === 'groups' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 }`}>
                 <div className="flex items-center gap-1.5">
-                  <Layers size={14} /> {t('lms.groups')}
+                  <Layers size={14} /> Группы
                 </div>
               </button>
               <button onClick={() => setActiveView('courses')}
@@ -453,14 +454,14 @@ export default function LMSDashboard() {
                   activeView === 'courses' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 }`}>
                 <div className="flex items-center gap-1.5">
-                  <GraduationCap size={14} /> {t('lms.courses')}
+                  <GraduationCap size={14} /> Курсы
                 </div>
               </button>
             </div>
             {activeView === 'courses' && canManage && (
               <button onClick={() => { setEditingCourse(null); setShowCourseForm(true) }}
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700">
-                <Plus size={14} /> {t('lms.createCourse')}
+                <Plus size={14} /> Создать курс
               </button>
             )}
           </div>
@@ -474,14 +475,14 @@ export default function LMSDashboard() {
             <BookOpen size={16} className="text-blue-600" />
           </div>
           <p className="text-2xl font-bold text-slate-900">{activeView === 'courses' ? courses.length : myGroups.length}</p>
-          <p className="text-xs text-slate-500">{activeView === 'courses' ? t('lms.coursesCount') : isTeacher ? t('lms.myGroups') : t('lms.coursesCount')}</p>
+          <p className="text-xs text-slate-500">{activeView === 'courses' ? 'Курсов' : isTeacher ? 'Моих групп' : 'Курсов'}</p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center mb-2">
             <FileText size={16} className="text-purple-600" />
           </div>
           <p className="text-2xl font-bold text-slate-900">{totalLessons}</p>
-          <p className="text-xs text-slate-500">{t('lms.lessonsCount')}</p>
+          <p className="text-xs text-slate-500">Уроков</p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center mb-2">
@@ -490,7 +491,7 @@ export default function LMSDashboard() {
           <p className="text-2xl font-bold text-slate-900">
             {isStudent ? pendingAssignments.length : totalAssignments}
           </p>
-          <p className="text-xs text-slate-500">{isStudent ? t('lms.pendingSubmissions') : t('lms.assignments')}</p>
+          <p className="text-xs text-slate-500">{isStudent ? 'Ожидают сдачи' : 'Заданий'}</p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center mb-2">
@@ -499,7 +500,7 @@ export default function LMSDashboard() {
           <p className="text-2xl font-bold text-slate-900">
             {isStudent ? completedSubmissions : myAnnouncements.length}
           </p>
-          <p className="text-xs text-slate-500">{isStudent ? t('lms.graded') : t('lms.announcements')}</p>
+          <p className="text-xs text-slate-500">{isStudent ? 'Оценено' : 'Объявлений'}</p>
         </div>
       </div>
 
@@ -510,7 +511,7 @@ export default function LMSDashboard() {
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" value={searchCourse} onChange={e => setSearchCourse(e.target.value)}
-              placeholder={t('lms.searchCourses')}
+              placeholder="Поиск курсов..."
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm" />
           </div>
 
@@ -518,10 +519,10 @@ export default function LMSDashboard() {
           {filteredCourses.length === 0 ? (
             <div className="glass-card rounded-2xl p-12 text-center">
               <GraduationCap size={40} className="mx-auto mb-3 text-slate-300" />
-              <p className="text-slate-400">{t('lms.coursesNotFound')}</p>
+              <p className="text-slate-400">Курсы не найдены</p>
               {canManage && (
                 <button onClick={() => { setEditingCourse(null); setShowCourseForm(true) }}
-                  className="mt-3 text-sm text-blue-600 hover:underline">{t('lms.createFirstCourse')}</button>
+                  className="mt-3 text-sm text-blue-600 hover:underline">+ Создать первый курс</button>
               )}
             </div>
           ) : (
@@ -565,14 +566,14 @@ export default function LMSDashboard() {
                       {/* Stats */}
                       <div className="flex items-center gap-4 text-xs text-slate-400">
                         <span className="flex items-center gap-1">
-                          <Layers size={12} /> {courseGroups.length} {t('lms.groupsCount')}
+                          <Layers size={12} /> {courseGroups.length} групп
                         </span>
                         <span className="flex items-center gap-1">
-                          <Users size={12} /> {courseStudents.length} {t('lms.studentsCount')}
+                          <Users size={12} /> {courseStudents.length} учеников
                         </span>
                         {course.pricing && (
                           <span className="flex items-center gap-1">
-                            <DollarSign size={12} /> {t('lms.tariffs')}
+                            <DollarSign size={12} /> Тарифы
                           </span>
                         )}
                       </div>
@@ -580,7 +581,7 @@ export default function LMSDashboard() {
                       {/* Expand */}
                       <button onClick={() => setExpandedCourse(isExpanded ? null : course.id)}
                         className="w-full mt-3 text-xs text-blue-600 hover:text-blue-700 flex items-center justify-center gap-1">
-                        <Eye size={12} /> {isExpanded ? t('lms.hideDetails') : t('lms.showDetails')}
+                        <Eye size={12} /> {isExpanded ? 'Скрыть детали' : 'Подробнее'}
                       </button>
                     </div>
 
@@ -590,7 +591,7 @@ export default function LMSDashboard() {
                         {/* Features */}
                         {course.features?.length > 0 && (
                           <div>
-                            <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5">{t('lms.program')}</p>
+                            <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5">Программа курса</p>
                             <div className="space-y-1">
                               {course.features.map((f, i) => (
                                 <div key={i} className="flex items-center gap-2 text-xs text-slate-600">
@@ -604,21 +605,21 @@ export default function LMSDashboard() {
                         {/* Pricing Preview */}
                         {course.pricing && (
                           <div>
-                            <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5">{t('lms.tariffs')}</p>
+                            <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5">Тарифы</p>
                             <div className="grid grid-cols-1 gap-2">
                               {Object.entries(course.pricing).map(([region, tariffs]) => (
                                 <div key={region} className="bg-white rounded-lg p-2">
                                   <p className="text-[10px] font-semibold text-slate-400 uppercase mb-1">
-                                    {t('courses.region.' + region)}
+                                    {region === 'tashkent' ? 'Ташкент' : region === 'fergana' ? 'Фергана' : 'Онлайн'}
                                   </p>
                                   <div className="space-y-0.5">
                                     {Object.entries(tariffs).map(([tariff, prices]) => (
                                       <div key={tariff} className="flex justify-between text-xs">
                                         <span className="text-slate-500 capitalize">
-                                          {t('courses.tariffName.' + tariff)}
+                                          {tariff === 'standard' ? 'Стандарт' : tariff === 'vip' ? 'VIP' : tariff === 'premium' ? 'Премиум' : 'Индивидуальный'}
                                         </span>
                                         <span className="font-semibold text-slate-800">
-                                          {new Intl.NumberFormat('ru-RU').format(prices.full)} {t('common.sum')}
+                                          {new Intl.NumberFormat('ru-RU').format(prices.full)} сум
                                         </span>
                                       </div>
                                     ))}
@@ -632,7 +633,7 @@ export default function LMSDashboard() {
                         {/* Groups list */}
                         {courseGroups.length > 0 && (
                           <div>
-                            <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5">{t('lms.groupsSection')} ({courseGroups.length})</p>
+                            <p className="text-xs font-semibold text-slate-500 uppercase mb-1.5">Группы ({courseGroups.length})</p>
                             <div className="space-y-1">
                               {courseGroups.map(g => (
                                 <button key={g.id} onClick={() => navigate(`/lms/group/${g.id}`)}
@@ -653,12 +654,12 @@ export default function LMSDashboard() {
                     {/* Delete Confirmation */}
                     {deleteConfirm === course.id && (
                       <div className="border-t border-red-100 bg-red-50 p-3 flex items-center justify-between">
-                        <p className="text-xs text-red-600">{t('lms.deleteCourse')}</p>
+                        <p className="text-xs text-red-600">Удалить курс?</p>
                         <div className="flex gap-2">
                           <button onClick={() => setDeleteConfirm(null)}
-                            className="px-3 py-1 text-xs bg-white rounded-lg hover:bg-slate-50 text-slate-600">{t('lms.deleteNo')}</button>
+                            className="px-3 py-1 text-xs bg-white rounded-lg hover:bg-slate-50 text-slate-600">Нет</button>
                           <button onClick={() => handleDeleteCourse(course.id)}
-                            className="px-3 py-1 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700">{t('lms.deleteYes')}</button>
+                            className="px-3 py-1 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700">Да, удалить</button>
                         </div>
                       </div>
                     )}
@@ -676,11 +677,11 @@ export default function LMSDashboard() {
           {/* My Groups / Courses */}
           <div className="lg:col-span-2 space-y-4">
             <h3 className="text-lg font-semibold text-slate-900">
-              {isTeacher ? t('lms.myGroups') : t('lms.myCourses')}
+              {isTeacher ? 'Мои группы' : 'Мои курсы'}
             </h3>
             {myGroups.length === 0 ? (
               <div className="glass-card rounded-2xl p-8 text-center text-slate-400">
-                {isStudent ? t('lms.notEnrolled') : t('lms.noAssignedGroups')}
+                {isStudent ? 'Вы пока не записаны на курсы' : 'Нет назначенных групп'}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -701,13 +702,13 @@ export default function LMSDashboard() {
                         <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                       </div>
                       <h4 className="font-bold text-slate-900 text-sm mb-0.5">{group.course}</h4>
-                      <p className="text-xs text-slate-500 mb-3">{group.name} · {group.schedule || t('lms.noSchedule')}</p>
+                      <p className="text-xs text-slate-500 mb-3">{group.name} · {group.schedule || 'Нет расписания'}</p>
                       <div className="flex items-center gap-3 text-xs text-slate-400">
                         <span className="flex items-center gap-1">
-                          <FileText size={12} /> {groupLessons.length} {t('lms.lessons')}
+                          <FileText size={12} /> {groupLessons.length} уроков
                         </span>
                         <span className="flex items-center gap-1">
-                          <CheckCircle2 size={12} /> {groupAssignments.length} {t('lms.assignmentsCount')}
+                          <CheckCircle2 size={12} /> {groupAssignments.length} заданий
                         </span>
                         {(isTeacher || canEdit) && (
                           <span className="flex items-center gap-1">
@@ -724,7 +725,7 @@ export default function LMSDashboard() {
             {/* Recent Lessons */}
             {myLessons.length > 0 && (
               <>
-                <h3 className="text-lg font-semibold text-slate-900 mt-6">{t('lms.recentLessons')}</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mt-6">Последние уроки</h3>
                 <div className="space-y-2">
                   {myLessons.slice(0, 5).map(lesson => {
                     const group = groups.find(g => g.id === lesson.groupId)
@@ -757,7 +758,7 @@ export default function LMSDashboard() {
               <div className="glass-card rounded-2xl p-4">
                 <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <AlertCircle size={16} className="text-amber-500" />
-                  {t('lms.needToSubmit')}
+                  Нужно сдать
                 </h4>
                 <div className="space-y-2">
                   {pendingAssignments.slice(0, 5).map(a => {
@@ -773,7 +774,7 @@ export default function LMSDashboard() {
                           <span className="text-xs text-slate-400">{group?.name}</span>
                           {a.deadline && (
                             <span className="text-xs text-red-500 flex items-center gap-0.5">
-                              <Calendar size={10} /> {a.deadline}
+                              <Calendar size={10} /> до {a.deadline}
                             </span>
                           )}
                         </div>
@@ -788,10 +789,10 @@ export default function LMSDashboard() {
             <div className="glass-card rounded-2xl p-4">
               <h4 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                 <Bell size={16} className="text-blue-500" />
-                {t('lms.announcementsSection')}
+                Объявления
               </h4>
               {myAnnouncements.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-4">{t('lms.noAnnouncements')}</p>
+                <p className="text-sm text-slate-400 text-center py-4">Нет объявлений</p>
               ) : (
                 <div className="space-y-3">
                   {myAnnouncements.map(a => (
@@ -808,25 +809,25 @@ export default function LMSDashboard() {
             {/* Quick Actions (for teachers) */}
             {isTeacher && myGroups.length > 0 && (
               <div className="glass-card rounded-2xl p-4">
-                <h4 className="font-semibold text-slate-900 mb-3">{t('lms.quickActions')}</h4>
+                <h4 className="font-semibold text-slate-900 mb-3">Быстрые действия</h4>
                 <div className="space-y-2">
                   <button
                     onClick={() => navigate(`/lms/group/${myGroups[0]?.id}?action=newLesson`)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
                   >
-                    <Plus size={14} /> {t('lms.addLesson')}
+                    <Plus size={14} /> Добавить урок
                   </button>
                   <button
                     onClick={() => navigate(`/lms/group/${myGroups[0]?.id}?action=newAssignment`)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
                   >
-                    <Plus size={14} /> {t('lms.createAssignment')}
+                    <Plus size={14} /> Создать задание
                   </button>
                   <button
                     onClick={() => navigate(`/lms/group/${myGroups[0]?.id}?action=newAnnouncement`)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors"
                   >
-                    <Bell size={14} /> {t('lms.announcement')}
+                    <Bell size={14} /> Объявление
                   </button>
                 </div>
               </div>
