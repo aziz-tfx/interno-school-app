@@ -546,6 +546,7 @@ export default {
   "sidebar.lms": "LMS",
   "sidebar.attendance": "Посещаемость",
   "sidebar.integrations": "Интеграции",
+  "sidebar.student_home": "Личный кабинет",
   "sidebar.logout": "Выйти",
 
   // ─── Header ───────────────────────────────────────────────────────────────────

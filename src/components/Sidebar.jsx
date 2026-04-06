@@ -14,6 +14,7 @@ import {
   X,
   Monitor,
   Plug,
+  Home,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -24,6 +25,11 @@ export default function Sidebar({ open, onClose }) {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const location = useLocation()
+
+  const studentNavItems = [
+    { to: '/', icon: Home, label: t('sidebar.student_home') || 'Личный кабинет' },
+    { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
+  ]
 
   const allNavItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard'), permission: 'dashboard' },
@@ -39,10 +45,12 @@ export default function Sidebar({ open, onClose }) {
     { to: '/integrations', icon: Plug, label: t('sidebar.integrations'), permission: 'settings' },
   ]
 
-  const navItems = allNavItems.filter(item => {
-    if (item.permission === null) return true
-    return hasPermission(item.permission)
-  })
+  const navItems = user?.role === 'student'
+    ? studentNavItems.filter(item => !item.permission || hasPermission(item.permission))
+    : allNavItems.filter(item => {
+        if (item.permission === null) return true
+        return hasPermission(item.permission)
+      })
 
   const roleColors = {
     owner: 'bg-rose-600',

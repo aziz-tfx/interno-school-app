@@ -18,6 +18,7 @@ import LMSCourseView from './pages/lms/LMSCourseView'
 import LMSLessonView from './pages/lms/LMSLessonView'
 import Integrations from './pages/Integrations'
 import ContractSign from './pages/ContractSign'
+import StudentCabinet from './pages/StudentCabinet'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -39,7 +40,7 @@ export default function App() {
     )
   }
 
-  const homePage = user.role === 'student' ? <LMSDashboard /> : user.role === 'teacher' ? <Attendance /> : <Dashboard />
+  const homePage = user.role === 'student' ? <StudentCabinet /> : user.role === 'teacher' ? <Attendance /> : <Dashboard />
 
   return (
     <Routes>

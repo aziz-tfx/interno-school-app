@@ -546,6 +546,7 @@ export default {
   "sidebar.lms": "LMS",
   "sidebar.attendance": "Davomat",
   "sidebar.integrations": "Integratsiyalar",
+  "sidebar.student_home": "Shaxsiy kabinet",
   "sidebar.logout": "Chiqish",
 
   // ─── Header ───────────────────────────────────────────────────────────────────
