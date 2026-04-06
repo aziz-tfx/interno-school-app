@@ -242,12 +242,14 @@ export function AuthProvider({ children }) {
     const unsubscribe = onSnapshot(permissionsDocRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data()
-        // Merge with defaults: Firestore overrides, defaults fill gaps
-        const merged = { ...JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS)) }
+        // Deep merge: Firestore overrides per-section, defaults fill new sections
+        const merged = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
         Object.keys(data).forEach(role => {
           if (role === '_id') return
           if (merged[role]) {
-            merged[role] = data[role]
+            Object.keys(data[role]).forEach(section => {
+              merged[role][section] = data[role][section]
+            })
           }
         })
         PERMISSIONS = merged
