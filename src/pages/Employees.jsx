@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Filter, Plus, Pencil, Trash2, Shield, Users, ShieldCheck } from 'lucide-react'
+import { Search, Filter, Plus, Pencil, Trash2, Shield, Users, ShieldCheck, CheckSquare, Square, X } from 'lucide-react'
 import { useAuth, ROLE_LABELS, ROLE_COLORS } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -19,6 +19,12 @@ export default function Employees() {
   const [editingEmp, setEditingEmp] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [activeTab, setActiveTab] = useState('employees')
+
+  // Bulk actions
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkAction, setBulkAction] = useState(null) // 'role' | 'branch' | 'delete'
+  const [bulkTarget, setBulkTarget] = useState('')
+  const [bulkProcessing, setBulkProcessing] = useState(false)
 
   const canAdd = hasPermission('employees', 'add')
   const canEdit = hasPermission('employees', 'edit')
@@ -56,6 +62,47 @@ export default function Employees() {
     }
     await deleteEmployee(id)
     setConfirmDelete(null)
+  }
+
+  // ─── Bulk Actions ───
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map(e => e.id)))
+    }
+  }
+  const clearSelection = () => { setSelectedIds(new Set()); setBulkAction(null); setBulkTarget('') }
+
+  const executeBulkAction = async () => {
+    if (selectedIds.size === 0) return
+    setBulkProcessing(true)
+    const ids = [...selectedIds]
+    try {
+      if (bulkAction === 'delete') {
+        for (const id of ids) {
+          const emp = employees.find(e => e.id === id)
+          if (emp && emp.id !== user.id && emp.role !== 'owner') {
+            if (emp.role === 'teacher') {
+              const linkedTeacher = teachers.find(t => t.employeeId === emp.id || t.name === emp.name)
+              if (linkedTeacher) await deleteTeacher(linkedTeacher.id)
+            }
+            await deleteEmployee(id)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Bulk action error:', err)
+    }
+    setBulkProcessing(false)
+    clearSelection()
   }
 
   const usedRoles = [...new Set(visibleEmployees.map(e => e.role))]
@@ -133,12 +180,51 @@ export default function Employees() {
             </div>
           </div>
 
+          {/* Bulk Actions Bar */}
+          {selectedIds.size > 0 && canDelete && (
+            <div className="glass-card rounded-2xl p-3 flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200">
+              <div className="flex items-center gap-2">
+                <CheckSquare size={16} className="text-blue-600" />
+                <span className="text-sm font-semibold text-blue-800">
+                  {t('employees.selected') || 'Выбрано'}: {selectedIds.size}
+                </span>
+                <button onClick={clearSelection} className="text-blue-400 hover:text-blue-600">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="h-5 w-px bg-blue-200" />
+              {bulkAction !== 'delete' ? (
+                <button onClick={() => setBulkAction('delete')}
+                  className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 font-medium">
+                  <Trash2 size={14} /> {t('employees.btn_delete') || 'Удалить'}
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-red-600 font-medium">Удалить {selectedIds.size} сотрудник(ов)?</span>
+                  <button onClick={executeBulkAction} disabled={bulkProcessing}
+                    className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
+                    {bulkProcessing ? '...' : 'Да, удалить'}
+                  </button>
+                  <button onClick={() => setBulkAction(null)}
+                    className="text-sm text-slate-500 hover:text-slate-700">Отмена</button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Table */}
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-white/40 border-b border-white/30">
+                    {canDelete && (
+                      <th className="py-3 px-2 w-10">
+                        <button onClick={toggleSelectAll} className="text-slate-400 hover:text-slate-600">
+                          {selectedIds.size === filtered.length && filtered.length > 0 ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
+                        </button>
+                      </th>
+                    )}
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('employees.th_employee')}</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('employees.th_role')}</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('employees.th_branch')}</th>
@@ -149,7 +235,14 @@ export default function Employees() {
                 </thead>
                 <tbody>
                   {filtered.map(emp => (
-                    <tr key={emp.id} className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
+                    <tr key={emp.id} className={`border-b border-slate-50 hover:bg-blue-50/30 transition-colors ${selectedIds.has(emp.id) ? 'bg-blue-50/50' : ''}`}>
+                      {canDelete && (
+                        <td className="py-3 px-2">
+                          <button onClick={() => toggleSelect(emp.id)} className="text-slate-400 hover:text-slate-600">
+                            {selectedIds.has(emp.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
+                          </button>
+                        </td>
+                      )}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 ${ROLE_COLORS[emp.role] || 'bg-slate-500'} rounded-full flex items-center justify-center text-white text-xs font-bold`}>

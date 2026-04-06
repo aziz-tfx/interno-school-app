@@ -50,6 +50,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: true, edit: true },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: { view: true, add: true, edit: true, delete: true },
+    attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: true, grade: true, manage: true },
     settings: true,
   },
@@ -60,6 +61,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: true, edit: true },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: { view: true, add: true, edit: true, delete: true },
+    attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: true, grade: true, manage: true },
     settings: true,
   },
@@ -70,6 +72,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: true, edit: true },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: { view: true, add: true, edit: true, delete: false },
+    attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: true, grade: true, manage: true },
     settings: false,
   },
@@ -80,6 +83,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   { view: true, fullPnL: false, expenses: false, payments: true },
     employees: { view: true, add: false, edit: false, delete: false },
+    attendance: { view: true, mark: true, edit: false },
     lms:       { view: true, create_content: false, grade: false, manage: false },
     settings: false,
   },
@@ -90,6 +94,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   { view: true, fullPnL: false, expenses: false, payments: true },
     employees: false,
+    attendance: { view: true, mark: false, edit: false },
     lms:       false,
     settings: false,
   },
@@ -100,6 +105,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: false,
+    attendance: { view: true, mark: false, edit: false },
     lms:       false,
     settings: false,
   },
@@ -110,6 +116,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   { view: true, fullPnL: true, expenses: true, payments: true },
     employees: false,
+    attendance: false,
     lms:       false,
     settings: false,
   },
@@ -120,6 +127,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   false,
     employees: { view: true, add: true, edit: true, delete: false },
+    attendance: false,
     lms:       false,
     settings: false,
   },
@@ -130,6 +138,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   false,
     employees: false,
+    attendance: false,
     lms:       false,
     settings: false,
   },
@@ -140,6 +149,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   { view: true, add: false, edit: false },
     finance:   false,
     employees: false,
+    attendance: { view: true, mark: true, edit: false },
     lms:       { view: true, create_content: true, grade: true, manage: false },
     settings: false,
   },
@@ -150,6 +160,7 @@ export const DEFAULT_PERMISSIONS = {
     courses:   false,
     finance:   false,
     employees: false,
+    attendance: false,
     lms:       { view: true, create_content: false, grade: false, manage: false },
     settings: false,
   },
@@ -201,6 +212,9 @@ const DEFAULT_EMPLOYEES = [
   { id: 26, login: 'teacher1', password: 'teach123', name: 'Смирнова Елена',       role: 'teacher', branch: 'tashkent',  teacherId: 1, avatar: 'Е', phone: '' },
   { id: 27, login: 'teacher2', password: 'teach123', name: 'Эргашев Бобур',        role: 'teacher', branch: 'samarkand', teacherId: 5, avatar: 'Б', phone: '' },
   { id: 28, login: 'teacher3', password: 'teach123', name: 'Холматова Наргиза',    role: 'teacher', branch: 'fergana',   teacherId: 8, avatar: 'Н', phone: '' },
+
+  // Student test account
+  { id: 50, login: 'student1', password: 'student123', name: 'Иванов Алексей',     role: 'student', branch: 'tashkent', avatar: 'И', phone: '+998 90 123-45-67' },
 ]
 
 const employeesRef = collection(db, 'employees')
@@ -261,6 +275,21 @@ export function AuthProvider({ children }) {
       }
 
       const list = snapshot.docs.map((d) => d.data())
+
+      // Auto-add missing default employees (e.g. student1 test account)
+      const missingDefaults = DEFAULT_EMPLOYEES.filter(
+        def => !list.some(e => e.login === def.login)
+      )
+      if (missingDefaults.length > 0) {
+        const batch = writeBatch(db)
+        missingDefaults.forEach(emp => {
+          const docRef = doc(employeesRef, String(emp.id))
+          batch.set(docRef, emp)
+        })
+        await batch.commit()
+        return // onSnapshot will re-fire with updated data
+      }
+
       setEmployees(list)
       setLoading(false)
     })

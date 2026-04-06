@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 
 export default function GroupForm({ group, onClose }) {
-  const { branches, teachers, courses, addGroup, updateGroup } = useData()
+  const { branches, teachers, courses, rooms, addGroup, updateGroup } = useData()
   const { user } = useAuth()
   const { t } = useLanguage()
   const isEdit = !!group
@@ -22,6 +22,8 @@ export default function GroupForm({ group, onClose }) {
     status: 'active',
     startDate: '',
     room: '',
+    format: 'offline',
+    language: 'ru',
   })
 
   useEffect(() => {
@@ -36,6 +38,8 @@ export default function GroupForm({ group, onClose }) {
         status: group.status || 'active',
         startDate: group.startDate || '',
         room: group.room || '',
+        format: group.format || 'offline',
+        language: group.language || 'ru',
       })
     }
   }, [group])
@@ -53,8 +57,9 @@ export default function GroupForm({ group, onClose }) {
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
-  // Filter teachers by selected branch
+  // Filter teachers and rooms by selected branch
   const branchTeachers = teachers.filter(t => t.branch === form.branch)
+  const branchRooms = rooms.filter(r => r.branchId === form.branch)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -131,11 +136,40 @@ export default function GroupForm({ group, onClose }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Кабинет</label>
-          <input type="text" value={form.room} onChange={e => set('room', e.target.value)}
-            placeholder="Кабинет 1"
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_format')}</label>
+          <select value={form.format} onChange={e => set('format', e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="offline">{t('groupForm.format_offline')}</option>
+            <option value="online">{t('groupForm.format_online')}</option>
+            <option value="hybrid">{t('groupForm.format_hybrid')}</option>
+          </select>
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_language')}</label>
+          <select value={form.language} onChange={e => set('language', e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="ru">{t('groupForm.lang_ru')}</option>
+            <option value="uz">{t('groupForm.lang_uz')}</option>
+            <option value="en">{t('groupForm.lang_en')}</option>
+          </select>
+        </div>
+
+        {form.format !== 'online' && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_room')}</label>
+            <select value={form.room} onChange={e => set('room', e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">{t('groupForm.no_room')}</option>
+              {branchRooms.map(r => (
+                <option key={r.id} value={r.id}>{r.name} ({t('groupForm.capacity')}: {r.capacity})</option>
+              ))}
+            </select>
+            {branchRooms.length === 0 && (
+              <p className="text-[10px] text-amber-500 mt-1">{t('groupForm.no_rooms_hint')}</p>
+            )}
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_schedule')}</label>

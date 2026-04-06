@@ -38,7 +38,7 @@ const FORMAT_OPTIONS = [
 
 export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new' }) {
   const isDoplata = mode === 'doplata'
-  const { branches, students, payments, addPayment, addStudent, updateStudent, groups, courses } = useData()
+  const { branches, students, payments, addPayment, updatePayment, addStudent, updateStudent, groups, courses } = useData()
   const { user, hasPermission } = useAuth()
   const { t } = useLanguage()
 
@@ -73,6 +73,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const [showReceipt, setShowReceipt] = useState(false)
   const [savedPayment, setSavedPayment] = useState(null)
   const [generatingContract, setGeneratingContract] = useState(false)
+  const [signatureData, setSignatureData] = useState(null)
+  const [signing, setSigning] = useState(false)
+  const canvasRef = useRef(null)
+  const isDrawingRef = useRef(false)
 
   const branchStudents = students.filter(s =>
     user?.branch !== 'all' ? s.branch === user.branch : s.branch === form.branch
@@ -86,10 +90,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const totalPaid = studentPayments.reduce((sum, p) => sum + p.amount, 0)
   const currentAmount = Number(form.amount) || 0
 
-  // Filter groups by branch
-  const branchGroups = groups.filter(g =>
-    g.status !== 'archived' && (user?.branch !== 'all' ? g.branch === user.branch : g.branch === form.branch)
-  )
+  // Show all groups (not filtered by branch)
+  const branchGroups = groups.filter(g => g.status !== 'archived')
 
   // ─── Auto-calculate course price from course + tariff + discount + region ───
   const selectedCourse = courses.find(c => c.name === form.course)
@@ -126,20 +128,43 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
   }, [form.studentId, students, groups])
 
-  // Auto-fill from selected group
+  // Auto-fill from selected group (course, schedule, startDate, duration)
   useEffect(() => {
     if (form.groupId) {
       const group = groups.find(g => g.id === form.groupId)
       if (group) {
+        const groupCourse = courses.find(c => c.name === group.course)
+        const courseDuration = groupCourse?.duration ? parseInt(groupCourse.duration) : null
         setForm(prev => ({
           ...prev,
           course: group.course,
           schedule: group.schedule || prev.schedule,
           branch: group.branch || prev.branch,
+          courseStartDate: group.startDate || prev.courseStartDate,
+          ...(courseDuration ? { durationMonths: String(courseDuration) } : {}),
         }))
       }
     }
-  }, [form.groupId, groups])
+  }, [form.groupId, groups, courses])
+
+  // Auto-generate unique contract number
+  useEffect(() => {
+    if (!form.contractNumber) {
+      const now = new Date()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const year = String(now.getFullYear()).slice(-2)
+      // Count existing contracts this month to get next sequential number
+      const prefix = `${month}/${year}`
+      const existingThisMonth = payments.filter(p =>
+        p.contractNumber && p.contractNumber.includes(`/${year}`)
+      )
+      const maxNum = existingThisMonth.reduce((max, p) => {
+        const match = p.contractNumber.match(/^(\d+)\//)
+        return match ? Math.max(max, parseInt(match[1])) : max
+      }, 0)
+      setForm(prev => prev.contractNumber ? prev : { ...prev, contractNumber: `${maxNum + 1}/${prefix}` })
+    }
+  }, [payments])
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
@@ -255,6 +280,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       comment: form.comment,
       phone: form.phone,
       nextPaymentDate: form.nextPaymentDate,
+      durationMonths: Number(form.durationMonths) || 3,
+      schedule: form.schedule || '',
+      passport: form.passport || '',
       files: files.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size, data: f.data })),
       trancheNumber: studentPayments.length + 1,
       managerId: user?.managerId || null,
@@ -370,7 +398,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         phone: payment.phone || form.phone,
         course: payment.course || form.course,
         courseDetails: '',
-        amount: payment.amount || Number(form.amount) || 0,
+        amount: payment.totalCoursePrice || totalCoursePrice || payment.amount || Number(form.amount) || 0,
         tariff: payment.tariff || form.tariff,
         contractNumber: payment.contractNumber || form.contractNumber,
         contractDate: payment.date || form.paymentDate,
@@ -461,6 +489,19 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               </>
             )}
 
+            {savedPayment.contractNumber && savedPayment.id && (
+              <>
+                <div className="text-slate-500">Ссылка на договор</div>
+                <div className="font-medium">
+                  <a href={`${window.location.origin}/contract/${savedPayment.id}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 underline text-xs break-all">
+                    {window.location.origin}/contract/{savedPayment.id}
+                  </a>
+                </div>
+              </>
+            )}
+
             {savedPayment.phone && (
               <>
                 <div className="text-slate-500">{t('paymentForm.receipt_phone')}</div>
@@ -537,6 +578,126 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             Квитанция #{savedPayment.id} &middot; {new Date().toLocaleString('ru-RU')}
           </div>
         </div>
+
+        {/* Contract Link */}
+        {savedPayment.contractNumber && savedPayment.id && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <p className="text-sm font-semibold text-blue-800 mb-2">📋 Ссылка для подписания договора</p>
+            <p className="text-xs text-blue-600 mb-3">Отправьте эту ссылку клиенту для электронного подписания договора:</p>
+            <div className="flex items-center gap-2">
+              <input type="text" readOnly
+                value={`${window.location.origin}/contract/${savedPayment.id}`}
+                className="flex-1 bg-white border border-blue-300 rounded-lg px-3 py-2 text-xs text-slate-700 font-mono"
+              />
+              <button onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/contract/${savedPayment.id}`)
+                const btn = document.getElementById('copy-link-btn')
+                if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = 'Копировать' }, 1500) }
+              }}
+                id="copy-link-btn"
+                className="px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
+                Копировать
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Signature Pad */}
+        {savedPayment.contractNumber && !signatureData && (
+          <div className="border-t border-slate-200 pt-3 mt-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Электронная подпись клиента</p>
+            {!signing ? (
+              <button onClick={() => {
+                setSigning(true)
+                setTimeout(() => {
+                  const canvas = canvasRef.current
+                  if (canvas) {
+                    const ctx = canvas.getContext('2d')
+                    ctx.lineWidth = 2
+                    ctx.lineCap = 'round'
+                    ctx.strokeStyle = '#1e40af'
+                  }
+                }, 100)
+              }}
+                className="w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-sm text-blue-600 font-medium hover:bg-blue-50 transition-colors">
+                ✍ Нажмите для подписи
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <canvas ref={canvasRef} width={400} height={120}
+                  className="w-full border border-blue-300 rounded-lg bg-white cursor-crosshair touch-none"
+                  onMouseDown={(e) => {
+                    isDrawingRef.current = true
+                    const canvas = canvasRef.current
+                    const rect = canvas.getBoundingClientRect()
+                    const ctx = canvas.getContext('2d')
+                    ctx.beginPath()
+                    ctx.moveTo((e.clientX - rect.left) * (canvas.width / rect.width), (e.clientY - rect.top) * (canvas.height / rect.height))
+                  }}
+                  onMouseMove={(e) => {
+                    if (!isDrawingRef.current) return
+                    const canvas = canvasRef.current
+                    const rect = canvas.getBoundingClientRect()
+                    const ctx = canvas.getContext('2d')
+                    ctx.lineTo((e.clientX - rect.left) * (canvas.width / rect.width), (e.clientY - rect.top) * (canvas.height / rect.height))
+                    ctx.stroke()
+                  }}
+                  onMouseUp={() => { isDrawingRef.current = false }}
+                  onMouseLeave={() => { isDrawingRef.current = false }}
+                  onTouchStart={(e) => {
+                    isDrawingRef.current = true
+                    const canvas = canvasRef.current
+                    const rect = canvas.getBoundingClientRect()
+                    const ctx = canvas.getContext('2d')
+                    const touch = e.touches[0]
+                    ctx.beginPath()
+                    ctx.moveTo((touch.clientX - rect.left) * (canvas.width / rect.width), (touch.clientY - rect.top) * (canvas.height / rect.height))
+                  }}
+                  onTouchMove={(e) => {
+                    if (!isDrawingRef.current) return
+                    e.preventDefault()
+                    const canvas = canvasRef.current
+                    const rect = canvas.getBoundingClientRect()
+                    const ctx = canvas.getContext('2d')
+                    const touch = e.touches[0]
+                    ctx.lineTo((touch.clientX - rect.left) * (canvas.width / rect.width), (touch.clientY - rect.top) * (canvas.height / rect.height))
+                    ctx.stroke()
+                  }}
+                  onTouchEnd={() => { isDrawingRef.current = false }}
+                />
+                <div className="flex gap-2">
+                  <button onClick={() => {
+                    const canvas = canvasRef.current
+                    const ctx = canvas.getContext('2d')
+                    ctx.clearRect(0, 0, canvas.width, canvas.height)
+                  }}
+                    className="px-3 py-1.5 text-xs text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">Очистить</button>
+                  <button onClick={async () => {
+                    const canvas = canvasRef.current
+                    const data = canvas.toDataURL('image/png')
+                    setSignatureData(data)
+                    setSigning(false)
+                    if (savedPayment?.id) {
+                      try {
+                        await updatePayment(savedPayment.id, { signatureData: data, contractSigned: true })
+                      } catch (err) { console.error('Failed to save signature:', err) }
+                    }
+                  }}
+                    className="px-3 py-1.5 text-xs text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 font-medium">✓ Подтвердить подпись</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {signatureData && (
+          <div className="border-t border-emerald-200 bg-emerald-50 rounded-lg p-3 mt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-emerald-600 text-sm font-medium">✓ Договор подписан электронно</span>
+            </div>
+            <img src={signatureData} alt="Подпись" className="h-12 object-contain" />
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-2 flex-wrap">
           <button onClick={handleGenerateContract} disabled={generatingContract}
@@ -783,10 +944,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
                   {form.groupId && (() => {
                     const selectedGroup = groups.find(g => g.id === form.groupId)
+                    const groupCourse = selectedGroup ? courses.find(c => c.name === selectedGroup.course) : null
                     return selectedGroup ? (
                       <div className="col-span-2 bg-white rounded-lg p-3 border border-blue-100 text-sm space-y-1">
                         <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.course_label')}</span><span className="font-medium">{selectedGroup.course}</span></div>
                         <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.label_schedule')}:</span><span className="font-medium">{selectedGroup.schedule || '—'}</span></div>
+                        {selectedGroup.startDate && <div className="flex justify-between"><span className="text-slate-500">Дата старта:</span><span className="font-medium">{selectedGroup.startDate}</span></div>}
+                        {groupCourse?.duration && <div className="flex justify-between"><span className="text-slate-500">Длительность:</span><span className="font-medium">{groupCourse.duration} мес</span></div>}
                         <div className="flex justify-between"><span className="text-slate-500">{t('paymentForm.label_branch')}:</span><span className="font-medium">{branches.find(b => b.id === selectedGroup.branch)?.name || selectedGroup.branch}</span></div>
                       </div>
                     ) : null
@@ -815,6 +979,11 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_duration_months')}</label>
                     <input type="number" min="1" max="24" value={form.durationMonths} onChange={(e) => set('durationMonths', e.target.value)}
                       placeholder="3"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Дата старта курса</label>
+                    <input type="date" value={form.courseStartDate} onChange={(e) => set('courseStartDate', e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
                   </div>
                   <div className="col-span-2">

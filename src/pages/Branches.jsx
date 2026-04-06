@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MapPin, Phone, User, Calendar, Users, GraduationCap, BookOpen, TrendingUp, Plus, Pencil, Trash2 } from 'lucide-react'
+import { MapPin, Phone, User, Calendar, Users, GraduationCap, BookOpen, TrendingUp, Plus, Pencil, Trash2, DoorOpen, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
@@ -11,10 +11,14 @@ import BranchForm from '../components/BranchForm'
 export default function Branches() {
   const { t } = useLanguage()
   const { hasPermission } = useAuth()
-  const { branches, students, teachers, addBranch, updateBranch, deleteBranch } = useData()
+  const { branches, students, teachers, groups, rooms, addBranch, updateBranch, deleteBranch, addRoom, updateRoom, deleteRoom } = useData()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingBranch, setEditingBranch] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [expandedRooms, setExpandedRooms] = useState(null)
+  const [roomForm, setRoomForm] = useState(null) // { branchId, room? }
+  const [roomFormData, setRoomFormData] = useState({ name: '', capacity: 20 })
+  const [deleteRoomConfirm, setDeleteRoomConfirm] = useState(null)
 
   const canAdd = hasPermission('branches') // owner/admin
   const canEdit = hasPermission('branches')
@@ -49,6 +53,36 @@ export default function Branches() {
     }
     deleteBranch(id)
     setConfirmDelete(null)
+  }
+
+  const handleAddRoom = (branchId) => {
+    setRoomForm({ branchId })
+    setRoomFormData({ name: '', capacity: 20 })
+  }
+
+  const handleEditRoom = (branchId, room) => {
+    setRoomForm({ branchId, room })
+    setRoomFormData({ name: room.name, capacity: room.capacity || 20 })
+  }
+
+  const handleSaveRoom = async () => {
+    const data = { ...roomFormData, capacity: Number(roomFormData.capacity) || 20, branchId: roomForm.branchId }
+    if (roomForm.room) {
+      await updateRoom(roomForm.room.id, data)
+    } else {
+      await addRoom(data)
+    }
+    setRoomForm(null)
+  }
+
+  const handleDeleteRoom = async (id) => {
+    await deleteRoom(id)
+    setDeleteRoomConfirm(null)
+  }
+
+  const getRoomOccupancy = (room) => {
+    const roomGroups = groups.filter(g => g.room === room.id && g.status === 'active')
+    return roomGroups.length
   }
 
   // Dynamic expense chart data — use actual branches
@@ -201,11 +235,101 @@ export default function Branches() {
                     />
                   </div>
                 </div>
+
+                {/* Rooms section */}
+                <div className="border-t border-slate-100 pt-3">
+                  <button onClick={() => setExpandedRooms(expandedRooms === branch.id ? null : branch.id)}
+                    className="flex items-center justify-between w-full text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors">
+                    <span className="flex items-center gap-2">
+                      <DoorOpen size={16} className="text-slate-400" />
+                      {t('branches.rooms')} ({rooms.filter(r => r.branchId === branch.id).length})
+                    </span>
+                    {expandedRooms === branch.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+
+                  {expandedRooms === branch.id && (
+                    <div className="mt-3 space-y-2">
+                      {rooms.filter(r => r.branchId === branch.id).map(room => {
+                        const occupancy = getRoomOccupancy(room)
+                        return (
+                          <div key={room.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <DoorOpen size={14} className="text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-slate-800">{room.name}</p>
+                                <p className="text-[11px] text-slate-400">
+                                  {t('branches.room_capacity')}: {room.capacity} · {t('branches.room_groups')}: {occupancy}
+                                </p>
+                              </div>
+                            </div>
+                            {canEdit && (
+                              <div className="flex gap-1">
+                                <button onClick={() => handleEditRoom(branch.id, room)}
+                                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                  <Pencil size={13} />
+                                </button>
+                                <button onClick={() => setDeleteRoomConfirm(room.id)}
+                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {rooms.filter(r => r.branchId === branch.id).length === 0 && (
+                        <p className="text-xs text-slate-400 text-center py-2">{t('branches.no_rooms')}</p>
+                      )}
+                      {canEdit && (
+                        <button onClick={() => handleAddRoom(branch.id)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
+                          <Plus size={14} /> {t('branches.add_room')}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )
         })}
       </div>
+
+      {/* Room Form Modal */}
+      <Modal isOpen={!!roomForm} onClose={() => setRoomForm(null)}
+        title={roomForm?.room ? t('branches.edit_room') : t('branches.add_room')} size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('branches.room_name')}</label>
+            <input type="text" value={roomFormData.name} onChange={e => setRoomFormData(p => ({ ...p, name: e.target.value }))}
+              placeholder={t('branches.room_name_placeholder')}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('branches.room_capacity')}</label>
+            <input type="number" min="1" max="200" value={roomFormData.capacity}
+              onChange={e => setRoomFormData(p => ({ ...p, capacity: e.target.value }))}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+            <button onClick={() => setRoomForm(null)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('branches.btn_cancel')}</button>
+            <button onClick={handleSaveRoom} disabled={!roomFormData.name.trim()}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">{t('branches.btn_save_room')}</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Confirm Delete Room Modal */}
+      <Modal isOpen={!!deleteRoomConfirm} onClose={() => setDeleteRoomConfirm(null)} title={t('branches.delete_room_title')} size="sm">
+        <p className="text-sm text-slate-600 mb-4">{t('branches.delete_room_confirm')}</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={() => setDeleteRoomConfirm(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('branches.btn_cancel')}</button>
+          <button onClick={() => handleDeleteRoom(deleteRoomConfirm)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">{t('branches.btn_delete')}</button>
+        </div>
+      </Modal>
 
       {/* Expense Comparison */}
       {branches.length > 0 && (

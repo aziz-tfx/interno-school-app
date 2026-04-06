@@ -80,31 +80,6 @@ export default function Login() {
             {t('login.btn_submit')}
           </button>
 
-          <div className="border-t border-slate-200/50 pt-4">
-            <p className="text-xs text-slate-400 mb-3">{t('login.test_accounts')}</p>
-            <div className="grid grid-cols-1 gap-2 text-xs">
-              <div className="flex justify-between glass-input px-3 py-2 rounded-xl bg-amber-50 border-amber-200">
-                <span className="text-amber-800"><strong className="text-amber-900">DEMO:</strong> demo / demo123</span>
-                <span className="text-amber-600 font-medium">{t('login.test_admin_access')}</span>
-              </div>
-              <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
-                <span className="text-slate-600"><strong className="text-slate-800">{t('login.test_admin')}</strong> admin / admin123</span>
-                <span className="text-blue-600 font-medium">{t('login.test_admin_access')}</span>
-              </div>
-              <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
-                <span className="text-slate-600"><strong className="text-slate-800">{t('login.test_sales')}</strong> sales1 / sales123</span>
-                <span className="text-emerald-600 font-medium">{t('login.test_sales_access')}</span>
-              </div>
-              <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
-                <span className="text-slate-600"><strong className="text-slate-800">{t('login.test_teacher')}</strong> teacher1 / teach123</span>
-                <span className="text-purple-600 font-medium">{t('login.test_teacher_access')}</span>
-              </div>
-              <div className="flex justify-between glass-input px-3 py-2 rounded-xl">
-                <span className="text-slate-600"><strong className="text-slate-800">{t('login.test_student')}</strong> {t('login.test_student_note')}</span>
-                <span className="text-slate-500 font-medium">{t('login.test_student_access')}</span>
-              </div>
-            </div>
-          </div>
         </form>
       </div>
     </div>

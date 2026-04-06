@@ -6,10 +6,12 @@ import {
   User, Phone, BookOpen, Calendar, CreditCard, FileText,
   Image, Download, AlertTriangle, CheckCircle, Clock, Plus,
   ChevronDown, ChevronUp, Paperclip, Eye, Monitor, ToggleLeft, ToggleRight,
+  FileDown, ExternalLink,
 } from 'lucide-react'
 import Modal from './Modal'
 import PaymentForm from './PaymentForm'
 import { useLanguage } from '../contexts/LanguageContext'
+import { generateContract } from '../utils/generateContract'
 
 export default function StudentProfile({ student, onClose }) {
   const { payments, branches, updateStudent } = useData()
@@ -20,6 +22,8 @@ export default function StudentProfile({ student, onClose }) {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [expandedPayment, setExpandedPayment] = useState(null)
   const [viewingFile, setViewingFile] = useState(null)
+  const [viewingContract, setViewingContract] = useState(null)
+  const [generatingDocx, setGeneratingDocx] = useState(false)
   const [editingPrice, setEditingPrice] = useState(false)
   const [coursePrice, setCoursePrice] = useState(student.totalCoursePrice || '')
 
@@ -50,6 +54,9 @@ export default function StudentProfile({ student, onClose }) {
     if (type && type.startsWith('image/')) return <Image size={16} className="text-blue-500" />
     return <FileText size={16} className="text-orange-500" />
   }
+
+  // Payments with contracts
+  const contractPayments = studentPayments.filter(p => p.contractNumber)
 
   const branchName = branches.find(b => b.id === student.branch)?.name || student.branch
 
@@ -350,6 +357,60 @@ export default function StudentProfile({ student, onClose }) {
         </div>
       )}
 
+      {/* Signed Contracts */}
+      {contractPayments.length > 0 && (
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 mb-3">Договоры ({contractPayments.length})</h4>
+          <div className="space-y-2">
+            {contractPayments.map(p => (
+              <div key={p.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-3 border border-slate-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <FileText size={18} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">Шартнома №{p.contractNumber}</p>
+                    <p className="text-xs text-slate-500">{p.date} · {p.course} · {formatCurrency(p.amount)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {p.signatureData && (
+                    <button onClick={() => setViewingContract(p)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors">
+                      <ExternalLink size={12} /> Открыть
+                    </button>
+                  )}
+                  <button onClick={async () => {
+                    setGeneratingDocx(true)
+                    try {
+                      await generateContract({
+                        clientName: p.student,
+                        passport: p.passport || '',
+                        phone: p.phone || '',
+                        course: p.course,
+                        amount: p.totalCoursePrice || p.amount,
+                        tariff: p.tariff,
+                        contractNumber: p.contractNumber,
+                        contractDate: p.date,
+                        courseStartDate: p.courseStartDate,
+                        durationMonths: Number(p.durationMonths) || 3,
+                        schedule: p.schedule || '',
+                        learningFormat: p.learningFormat || '',
+                      })
+                    } catch (err) { console.error(err) }
+                    setGeneratingDocx(false)
+                  }}
+                    disabled={generatingDocx}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                    <FileDown size={12} /> .docx
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Close */}
       <div className="flex justify-end pt-4 border-t border-slate-100">
         <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
@@ -370,6 +431,116 @@ export default function StudentProfile({ student, onClose }) {
         {viewingFile && viewingFile.type && viewingFile.type.startsWith('image/') && (
           <div className="flex justify-center">
             <img src={viewingFile.data} alt={viewingFile.name} className="max-w-full max-h-[70vh] rounded-lg" />
+          </div>
+        )}
+      </Modal>
+
+      {/* Contract View Modal */}
+      <Modal isOpen={!!viewingContract} onClose={() => setViewingContract(null)} title={`Шартнома №${viewingContract?.contractNumber || ''}`} size="xl">
+        {viewingContract && (
+          <div className="bg-white p-6 space-y-3 text-sm leading-relaxed" style={{ fontFamily: 'Times New Roman, serif' }}>
+            <h2 className="text-center font-bold text-base">SHARTNOMA №{viewingContract.contractNumber}</h2>
+            <p className="text-center text-sm">Pullik ta'lim xizmatlari ko'rsatish to'g'risida</p>
+            <div className="flex justify-between text-sm">
+              <span>Toshkent shahri</span>
+              <span>{viewingContract.date}</span>
+            </div>
+            <p className="text-justify">
+              "Interno Edu" MCHJ, Ustav asosida faoliyat yuritayotgan bosh direktor Toshpulatov A.A. (keyingi o'rinlarda – <b>"Bajaruvchi"</b>), bir tomondan, <b>{viewingContract.student}</b> va pasport <b>{viewingContract.passport || '___'}</b> (keyingi o'rinlarda – <b>"Buyurtmachi"</b>) ikkinchi tomondan, quyidagicha shartnoma tuzdilar:
+            </p>
+
+            <p><b>Shartnoma predmeti</b></p>
+            <p className="text-justify">Bajaruvchi "{viewingContract.course}" yo'nalishi bo'yicha guruhli mashg'ulotlar tarzida o'quv kurslarini taqdim etadi, Buyurtmachi esa ushbu xizmatlar uchun to'lovni amalga oshiradi.</p>
+            <p>Ta'lim dasturining davomiyligi – {viewingContract.durationMonths || 3} oy</p>
+            {viewingContract.courseStartDate && <p>Kurs boshlanish sanasi: {viewingContract.courseStartDate}{viewingContract.schedule ? ` ( ${viewingContract.schedule} )` : ''}</p>}
+
+            <p className="pt-1"><b>Bajaruvchi va Buyurtmachining huquqlari</b></p>
+            <p className="text-justify">Bajaruvchi ta'lim jarayonini mustaqil ravishda olib borish, baholash tizimi, shakli, tartibi va oraliq hamda yakuniy attestatsiya (baholash) muddatlarini belgilash huquqiga ega.</p>
+            <p className="text-justify">Buyurtmachi quyidagi o'quv shartlarini bajarmagan taqdirda: uyga vazifa topshiriqlarini bajarmaslik, ta'lim jarayonida ishtirok etishga istak bildirmaslik, asosli sabablarsiz darslarni qoldirish – Bajaruvchi mazkur shartnoma bo'yicha o'z majburiyatlarini bajarishni to'xtatish huquqiga ega.</p>
+            <p className="text-justify">Buyurtmachi Bajaruvchidan ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlarni to'g'ri va sifatli bajarilishiga doir masalalar bo'yicha o'z vaqtida axborot berilishini talab qilish huquqiga ega.</p>
+            <p className="text-justify">Shuningdek, Buyurtmachi quyidagi huquqlarga ega:</p>
+            <p className="text-justify">-Kursdagi o'quv jarayoni bo'yicha Bajaruvchining xodimlariga murojaat qilish;</p>
+            <p className="text-justify">-O'rganilayotgan dastur doirasidagi bilim darajasi haqida to'liq va ishonchli ma'lumot olish;</p>
+            <p className="text-justify">-O'quv jadvalida belgilangan darslar davomida ta'lim jarayonini amalga oshirish uchun zarur bo'lgan Bajaruvchiga tegishli ashyolar va jihozlardan foydalanish;</p>
+            <p className="text-justify">-Bajaruvchi tomonidan tashkil etilgan madaniy va jamoaviy tadbirlarda ishtirok etish.</p>
+
+            <p className="pt-1"><b>Bajaruvchining majburiyatlari:</b></p>
+            <p className="text-justify">Bajaruvchi quyidagilarga majbur:</p>
+            <p className="text-justify">Bajaruvchi tomonidan belgilangan qabul shartlarini bajargan Buyurtmachini Kurslarga qabul qilish.</p>
+            <p className="text-justify">Ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlarni ta'lim dasturi, o'quv rejasi va Bajaruvchi tomonidan ishlab chiqilgan dars jadvaliga muvofiq ravishda tashkil qilish va sifatli bajarilishini ta'minlash.</p>
+            <p className="text-justify">Buyurtmachi tanlagan ta'lim dasturini o'zlashtirishi uchun zarur sharoitlarni yaratish:</p>
+            <p className="text-justify">-o'quv dasturi, o'tilgan soatlar soni va dasturni egallash darajasi ko'rsatilgan namunadagi sertifikatni Buyurtmachiga topshirish;</p>
+            <p className="text-justify">-agar Buyurtmachi o'qishni belgilangan muddatdan oldin tugatsa — o'tilgan soatlar to'g'risida ma'lumotnoma berish.</p>
+            <p className="text-justify">-3.4. Bajaruvchi kurs boshlanish sanasini o'zgartirish huquqiga ega, bu haqda Buyurtmachini oldindan xabardor qilgan holda.</p>
+            <p className="text-justify">-3.5. Ta'lim samaradorligini oshirish maqsadida zamonaviy o'qitish uslublari, o'quv materiallari va texnik vositalardan foydalanish.</p>
+
+            <p className="pt-1"><b>Buyurtmachining majburiyatlari Buyurtmachi quyidagilarga majbur:</b></p>
+            <p className="text-justify">Ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlar uchun to'lovni o'z vaqtida amalga oshirish.</p>
+            <p className="text-justify">Kurslarga qabul qilinishda Bajaruvchiga zarur hujjatlarni o'z vaqtida taqdim etish.</p>
+            <p className="text-justify">Darslarga qatnashmaslik sabablari jiddiy bo'lsa, bu haqda Bajaruvchini xabardor qilish.</p>
+            <p className="text-justify">Bajaruvchining o'qituvchilari va o'quv yordamchi xodimlariga hurmat bilan munosabatda bo'lish.</p>
+            <p className="text-justify">Dars jadvalida ko'rsatilgan mashg'ulotlarda muntazam qatnashish.</p>
+            <p className="text-justify mt-1">Bajaruvchining ichki tartib-qoidalariga, o'quv intizomiga va umumiy odob-axloq me'yorlariga rioya qilish, kurs ishtirokchilariga nisbatan hurmatni saqlash.</p>
+            <p className="text-justify">Bajaruvchiga tegishli bo'lgan mol-mulkning yo'qolishi yoki shikastlanishi uchun to'liq javobgarlikni o'z zimmasiga olish.</p>
+
+            <p className="pt-1"><b>Xizmatlar qiymati</b></p>
+            <p className="text-justify">Ushbu shartnoma bo'yicha ta'lim xizmatlarining qiymati kelishilgan tartibda belgilanadi.</p>
+            <p className="text-justify">Shartnoma bo'yicha umumiy to'lov summasi: <b>{formatCurrency(viewingContract.totalCoursePrice || viewingContract.amount)}</b> so'mni tashkil qiladi {viewingContract.tariff ? `( ${viewingContract.tariff} )` : ''}</p>
+            <p className="text-justify">To'lov buyurtmachi tomonidan bank orqali yoki o'quv markazi kassasiga amalga oshiriladi.</p>
+            <p className="text-justify">To'lov amalga oshirilgani Bajaruvchi tomonidan berilgan kvitansiya bilan tasdiqlanadi.</p>
+
+            <p className="pt-1"><b>Xizmatlarni topshirish va qabul qilish tartibi</b></p>
+            <p className="text-justify">To'lov qilingan o'quv davri yakunlangandan so'ng va loyiha taqdimotidan keyin Bajaruvchi Buyurtmachiga o'quv kursini tamomlaganligi haqida sertifikat topshiradi.</p>
+
+            <p className="pt-1"><b>Tomonlarning nizolarni hal etish tartibi va javobgarligi</b></p>
+            <p className="text-justify">Tomonlar o'rtasida yuzaga kelgan nizolar va kelishmovchiliklar muzokaralar orqali hal qilinadi.</p>
+            <p className="text-justify">Muzokaralar natijasida hal etilmagan nizolar Bajaruvchi joylashgan hududdagi arbitraj sudiga ko'rib chiqishga yuboriladi.</p>
+            <p className="text-justify">Shartnoma shartlariga amal qilinmasa yoki noto'g'ri bajarilsa, tomonlar O'zbekiston Respublikasi amaldagi qonunchiligiga muvofiq javobgar bo'ladi.</p>
+
+            <p className="pt-1"><b>Shartnomaning amal qilish muddati</b></p>
+            <p className="text-justify">Ushbu shartnoma ikki tomon tomonidan imzolangan paytdan kuchga kiradi va tomonlar o'z majburiyatlarini to'liq bajargunga qadar amal qiladi.</p>
+            <p className="text-justify">Buyurtmachi to'langan o'quv davri tugagach, istalgan vaqtda shartnomani bekor qilish huquqiga ega. Agar Buyurtmachi o'qishni belgilangan muddat tugamasidan oldin o'z ixtiyori bilan to'xtatsa, to'langan mablag' qaytarilmaydi.</p>
+
+            <p className="pt-1"><b>Yakuniy qoidalar</b></p>
+            <p className="text-justify">Ushbu shartnoma ikki nusxada tuzilgan bo'lib, har bir tomon uchun bittadan nusxasi mavjud. Har ikkala nusxa teng yuridik kuchga ega.</p>
+
+            {/* Signature Section */}
+            <div className="grid grid-cols-2 gap-6 mt-8 pt-4 border-t border-slate-200">
+              <div className="border border-slate-200 rounded-lg p-3">
+                <p className="font-bold text-center mb-3">Bajaruvchi "Interno Edu"</p>
+                <p className="text-xs text-slate-600">Manzil: Toshkent shahri, Mirzo Ulug'bek tumani, Xirmontepa ko'chasi, 34B-uy</p>
+                <p className="text-xs text-slate-600">Hisob raqami: 2020 8000 7053 5951 4001</p>
+                <p className="text-xs text-slate-600">Bank: ATB "Orient Finans", MFO: 01071</p>
+                <p className="text-xs text-slate-600">STIR (INN): 308 290 853</p>
+                <p className="text-xs text-slate-600">SOEID (OKED): 85590</p>
+                <p className="text-xs text-slate-600 mt-1">Telefon: +998 94 676 88 58</p>
+                <div className="mt-3 pt-2 border-t border-slate-100">
+                  <p className="text-xs text-slate-600">Bosh direktor</p>
+                  <p className="text-xs text-slate-600 font-medium">Toshpulatov A.A.</p>
+                </div>
+              </div>
+              <div className="border border-slate-200 rounded-lg p-3">
+                <p className="font-bold text-center mb-3">Buyurtmachi</p>
+                <p className="text-xs font-medium">{viewingContract.student}</p>
+                <p className="text-xs text-slate-600">Manzil: Toshkent</p>
+                <p className="text-xs text-slate-600">Pasport: {viewingContract.passport || '___'}</p>
+                <p className="text-xs text-slate-600">Tel: {viewingContract.phone || '___'}</p>
+                {viewingContract.signatureData ? (
+                  <div className="mt-3 p-2 bg-emerald-50 rounded-lg border border-emerald-200">
+                    <img src={viewingContract.signatureData} alt="Imzo" className="h-14 object-contain mx-auto" />
+                    <p className="text-xs text-emerald-600 font-semibold text-center mt-1">✓ Elektron imzo qo'yilgan</p>
+                    {viewingContract.signedAt && (
+                      <p className="text-[10px] text-emerald-500 text-center">{new Date(viewingContract.signedAt).toLocaleString('ru-RU')}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-3 pt-2 border-t border-slate-100">
+                    <p className="text-xs text-slate-400">_______________________</p>
+                    <p className="text-xs">{viewingContract.student}</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </Modal>

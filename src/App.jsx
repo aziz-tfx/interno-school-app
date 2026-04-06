@@ -14,7 +14,10 @@ import Profile from './pages/Profile'
 import Reports from './pages/Reports'
 import LMSDashboard from './pages/lms/LMSDashboard'
 import LMSGroupView from './pages/lms/LMSGroupView'
+import LMSCourseView from './pages/lms/LMSCourseView'
+import LMSLessonView from './pages/lms/LMSLessonView'
 import Integrations from './pages/Integrations'
+import ContractSign from './pages/ContractSign'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -30,6 +33,7 @@ export default function App() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/contract/:paymentId" element={<ContractSign />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     )
@@ -40,6 +44,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Navigate to="/" />} />
+      <Route path="/contract/:paymentId" element={<ContractSign />} />
       <Route path="/" element={<Layout />}>
         <Route index element={homePage} />
         <Route path="dashboard" element={
@@ -63,13 +68,21 @@ export default function App() {
         <Route path="employees" element={
           <ProtectedRoute permission="employees"><Employees /></ProtectedRoute>
         } />
-        <Route path="attendance" element={<Attendance />} />
+        <Route path="attendance" element={
+          <ProtectedRoute permission="attendance"><Attendance /></ProtectedRoute>
+        } />
         <Route path="reports" element={<Reports />} />
         <Route path="lms" element={
           <ProtectedRoute permission="lms"><LMSDashboard /></ProtectedRoute>
         } />
         <Route path="lms/group/:groupId" element={
           <ProtectedRoute permission="lms"><LMSGroupView /></ProtectedRoute>
+        } />
+        <Route path="lms/course/:courseId" element={
+          <ProtectedRoute permission="lms"><LMSCourseView /></ProtectedRoute>
+        } />
+        <Route path="lms/lesson/:lessonId" element={
+          <ProtectedRoute permission="lms"><LMSLessonView /></ProtectedRoute>
         } />
         <Route path="integrations" element={
           <ProtectedRoute permission="settings"><Integrations /></ProtectedRoute>

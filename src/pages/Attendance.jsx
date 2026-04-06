@@ -6,8 +6,10 @@ import { useLanguage } from '../contexts/LanguageContext'
 
 export default function Attendance() {
   const { t } = useLanguage()
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const { students, teachers, branches, markAttendance, getAttendanceByGroup, getAttendanceStats } = useData()
+  const canMark = hasPermission('attendance', 'mark')
+  const canEdit = hasPermission('attendance', 'edit')
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedGroup, setSelectedGroup] = useState('')
 
@@ -146,20 +148,27 @@ export default function Attendance() {
                       </td>
                       <td className="py-4 px-4">
                         <div className="flex items-center justify-center gap-2">
-                          {Object.entries(statusIcons).map(([status, { icon: Icon, color, label }]) => (
-                            <button
-                              key={status}
-                              onClick={() => handleMark(student.id, status)}
-                              className={`flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                                currentStatus === status
-                                  ? `${color} border-current shadow-sm scale-105`
-                                  : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
-                              }`}
-                            >
-                              <Icon size={14} />
-                              <span className="hidden md:inline">{label}</span>
-                            </button>
-                          ))}
+                          {Object.entries(statusIcons).map(([status, { icon: Icon, color, label }]) => {
+                            const isMarked = currentStatus === status
+                            const canChange = isMarked ? canEdit : canMark
+                            return (
+                              <button
+                                key={status}
+                                onClick={() => canChange && handleMark(student.id, status)}
+                                disabled={!canChange}
+                                className={`flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                  isMarked
+                                    ? `${color} border-current shadow-sm scale-105`
+                                    : canChange
+                                      ? 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'
+                                      : 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                                }`}
+                              >
+                                <Icon size={14} />
+                                <span className="hidden md:inline">{label}</span>
+                              </button>
+                            )
+                          })}
                         </div>
                       </td>
                     </tr>

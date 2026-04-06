@@ -35,7 +35,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/employees', icon: UserCog, label: t('sidebar.employees'), permission: 'employees' },
     { to: '/reports', icon: FileBarChart, label: t('sidebar.reports'), permission: 'finance' },
     { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
-    { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: null },
+    { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: 'attendance' },
     { to: '/integrations', icon: Plug, label: t('sidebar.integrations'), permission: 'settings' },
   ]
 

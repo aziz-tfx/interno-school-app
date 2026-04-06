@@ -14,7 +14,7 @@ export default function Students() {
   const { user, hasPermission } = useAuth()
   const {
     students, branches, payments, groups, teachers, courses,
-    addStudent, updateStudent, deleteStudent, deleteGroup,
+    addStudent, updateStudent, deleteStudent, deleteGroup, updateGroup,
     getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
     getBranchName,
   } = useData()
@@ -34,14 +34,21 @@ export default function Students() {
   const [editingGroup, setEditingGroup] = useState(null)
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null)
   const [groupSearch, setGroupSearch] = useState('')
+  const [groupStatusFilter, setGroupStatusFilter] = useState('all')
   const [expandedGroup, setExpandedGroup] = useState(null)
   const [groupView, setGroupView] = useState('cards') // 'cards' | 'timeline'
 
-  // Bulk actions state
+  // Bulk actions state (students)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkAction, setBulkAction] = useState(null) // 'status' | 'group' | 'delete' | 'lms'
   const [bulkTarget, setBulkTarget] = useState('')
   const [bulkProcessing, setBulkProcessing] = useState(false)
+
+  // Bulk actions state (groups)
+  const [selectedGroupIds, setSelectedGroupIds] = useState(new Set())
+  const [groupBulkAction, setGroupBulkAction] = useState(null) // 'status' | 'delete'
+  const [groupBulkTarget, setGroupBulkTarget] = useState('')
+  const [groupBulkProcessing, setGroupBulkProcessing] = useState(false)
 
   const canAdd = hasPermission('students', 'add')
   const canEdit = hasPermission('students', 'edit')
@@ -72,8 +79,17 @@ export default function Students() {
     const matchSearch = g.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
       (g.course || '').toLowerCase().includes(groupSearch.toLowerCase())
     const matchBranch = branchFilter === 'all' || g.branch === branchFilter
-    return matchSearch && matchBranch
+    const matchStatus = groupStatusFilter === 'all' || g.status === groupStatusFilter
+    return matchSearch && matchBranch && matchStatus
   })
+
+  // Group status counts
+  const groupStatusCounts = {
+    all: allGroups.length,
+    active: allGroups.filter(g => g.status === 'active').length,
+    full: allGroups.filter(g => g.status === 'full').length,
+    archived: allGroups.filter(g => g.status === 'archived').length,
+  }
 
   const TABS = [
     { id: 'students', label: t('students.tab_students') },
@@ -216,6 +232,46 @@ export default function Students() {
   }
   const clearSelection = () => { setSelectedIds(new Set()); setBulkAction(null) }
 
+  // ─── Group Bulk Actions ───
+  const toggleGroupSelect = (id) => {
+    setSelectedGroupIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAllGroups = () => {
+    if (selectedGroupIds.size === filteredGroups.length) {
+      setSelectedGroupIds(new Set())
+    } else {
+      setSelectedGroupIds(new Set(filteredGroups.map(g => g.id)))
+    }
+  }
+  const clearGroupSelection = () => { setSelectedGroupIds(new Set()); setGroupBulkAction(null); setGroupBulkTarget('') }
+
+  const executeGroupBulkAction = async () => {
+    if (selectedGroupIds.size === 0) return
+    setGroupBulkProcessing(true)
+    const ids = [...selectedGroupIds]
+    try {
+      if (groupBulkAction === 'status' && groupBulkTarget) {
+        for (const id of ids) await updateGroup(id, { status: groupBulkTarget })
+      } else if (groupBulkAction === 'delete') {
+        for (const id of ids) {
+          const grp = groups.find(g => g.id === id)
+          const studentsInGroup = grp ? getGroupStudents(grp.name) : []
+          if (studentsInGroup.length === 0) {
+            await deleteGroup(id)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Group bulk action error:', err)
+    }
+    setGroupBulkProcessing(false)
+    clearGroupSelection()
+  }
+
   const executeBulkAction = async () => {
     if (selectedIds.size === 0) return
     setBulkProcessing(true)
@@ -232,7 +288,7 @@ export default function Students() {
       } else if (bulkAction === 'lms') {
         const val = bulkTarget === 'on'
         for (const id of ids) await updateStudent(id, { lmsAccess: val })
-      } else if (bulkAction === 'delete' && (bulkTarget === 'confirmed' || bulkTarget === 'confirm')) {
+      } else if (bulkAction === 'delete') {
         for (const id of ids) await deleteStudent(id)
       }
     } catch (err) {
@@ -401,7 +457,7 @@ export default function Students() {
               {bulkAction === 'delete' && bulkTarget === 'pending' && (
                 <div className="flex items-center gap-2 bg-red-100 border border-red-300 rounded-lg px-3 py-1.5">
                   <span className="text-xs text-red-700 font-medium">Удалить {selectedIds.size} учеников?</span>
-                  <button onClick={() => { setBulkTarget('confirmed'); executeBulkAction() }} disabled={bulkProcessing}
+                  <button onClick={() => executeBulkAction()} disabled={bulkProcessing}
                     className="text-xs bg-red-600 text-white rounded px-3 py-1 hover:bg-red-700 disabled:opacity-50 font-medium">
                     {bulkProcessing ? '...' : 'Да, удалить'}
                   </button>
@@ -557,6 +613,13 @@ export default function Students() {
                 {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
+            {canEdit && (
+              <button onClick={toggleSelectAllGroups}
+                className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg hover:bg-white/50 transition-colors">
+                {selectedGroupIds.size === filteredGroups.length && filteredGroups.length > 0 ? <CheckSquare size={16} className="text-purple-600" /> : <Square size={16} />}
+                <span className="hidden sm:inline">{selectedGroupIds.size === filteredGroups.length && filteredGroups.length > 0 ? 'Снять все' : 'Выбрать все'}</span>
+              </button>
+            )}
             <div className="flex rounded-xl overflow-hidden border border-slate-200">
               <button onClick={() => setGroupView('cards')}
                 className={`px-3 py-2 text-xs font-medium flex items-center gap-1.5 transition-colors ${groupView === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
@@ -568,6 +631,77 @@ export default function Students() {
               </button>
             </div>
           </div>
+
+          {/* ── Group Status Filter Tabs ── */}
+          <div className="flex gap-2 flex-wrap">
+            {[
+              { id: 'all', label: 'Все группы', color: 'bg-slate-100 text-slate-700', activeColor: 'bg-slate-700 text-white' },
+              { id: 'active', label: 'Активные', color: 'bg-emerald-50 text-emerald-700', activeColor: 'bg-emerald-600 text-white' },
+              { id: 'full', label: 'Набор закрыт', color: 'bg-amber-50 text-amber-700', activeColor: 'bg-amber-500 text-white' },
+              { id: 'archived', label: 'Архив', color: 'bg-slate-50 text-slate-500', activeColor: 'bg-slate-500 text-white' },
+            ].map(s => (
+              <button key={s.id} onClick={() => setGroupStatusFilter(s.id)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${groupStatusFilter === s.id ? s.activeColor : s.color + ' hover:opacity-80'}`}>
+                {s.label} ({groupStatusCounts[s.id]})
+              </button>
+            ))}
+          </div>
+
+          {/* ── Group Bulk Actions Bar ── */}
+          {selectedGroupIds.size > 0 && canEdit && (
+            <div className="glass-card rounded-2xl p-3 flex flex-wrap items-center gap-3 bg-purple-50 border border-purple-200">
+              <div className="flex items-center gap-2">
+                <CheckSquare size={16} className="text-purple-600" />
+                <span className="text-sm font-semibold text-purple-800">
+                  Выбрано: {selectedGroupIds.size}
+                </span>
+                <button onClick={clearGroupSelection} className="text-purple-400 hover:text-purple-600">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="h-5 w-px bg-purple-200" />
+
+              {/* Status change */}
+              {groupBulkAction !== 'delete' && (
+                <div className="flex items-center gap-2">
+                  <select value={groupBulkAction === 'status' ? groupBulkTarget : ''}
+                    onChange={(e) => { setGroupBulkAction('status'); setGroupBulkTarget(e.target.value) }}
+                    className="text-sm rounded-lg px-2 py-1.5 border border-purple-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <option value="">Сменить статус...</option>
+                    <option value="active">{t('students.group_status_active')}</option>
+                    <option value="full">{t('students.group_status_full')}</option>
+                    <option value="archived">{t('students.group_status_archived')}</option>
+                  </select>
+                  {groupBulkAction === 'status' && groupBulkTarget && (
+                    <button onClick={executeGroupBulkAction} disabled={groupBulkProcessing}
+                      className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                      {groupBulkProcessing ? '...' : 'Применить'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="h-5 w-px bg-purple-200" />
+
+              {/* Delete */}
+              {groupBulkAction !== 'delete' ? (
+                <button onClick={() => setGroupBulkAction('delete')}
+                  className="flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 font-medium">
+                  <Trash2 size={14} /> Удалить
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-red-600 font-medium">Удалить {selectedGroupIds.size} групп(ы)?</span>
+                  <button onClick={executeGroupBulkAction} disabled={groupBulkProcessing}
+                    className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
+                    {groupBulkProcessing ? '...' : 'Да, удалить'}
+                  </button>
+                  <button onClick={() => setGroupBulkAction(null)}
+                    className="text-sm text-slate-500 hover:text-slate-700">Отмена</button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── CARDS VIEW ── */}
           {groupView === 'cards' && (
@@ -599,9 +733,17 @@ export default function Students() {
                     <div className={`px-5 py-4 ${isFull ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'} text-white cursor-pointer`}
                       onClick={() => setExpandedGroup(isExpanded ? null : group.id)}>
                       <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-bold text-lg">{group.name}</h3>
-                          <p className="text-sm opacity-90">{group.course}</p>
+                        <div className="flex items-center gap-2">
+                          {canEdit && (
+                            <button onClick={(e) => { e.stopPropagation(); toggleGroupSelect(group.id) }}
+                              className="text-white/80 hover:text-white transition-colors">
+                              {selectedGroupIds.has(group.id) ? <CheckSquare size={18} /> : <Square size={18} />}
+                            </button>
+                          )}
+                          <div>
+                            <h3 className="font-bold text-lg">{group.name}</h3>
+                            <p className="text-sm opacity-90">{group.course}</p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1">
                           {canEdit && (

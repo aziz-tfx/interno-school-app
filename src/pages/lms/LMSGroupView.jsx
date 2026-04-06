@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 
 // ─── Lesson Form ─────────────────────────────────────────────────────
-function LessonForm({ lesson, groupId, onSave, onClose }) {
+function LessonForm({ lesson, groupId, courseId, onSave, onClose }) {
   const { t } = useLanguage()
   const [form, setForm] = useState({
     title: lesson?.title || '',
@@ -39,7 +39,7 @@ function LessonForm({ lesson, groupId, onSave, onClose }) {
     e.preventDefault()
     onSave({
       ...form,
-      groupId,
+      courseId: courseId || lesson?.courseId || '',
       order: Number(form.order),
       updatedAt: new Date().toISOString(),
       ...(!lesson ? { createdAt: new Date().toISOString() } : {}),
@@ -630,10 +630,14 @@ export default function LMSGroupView() {
   const [expandedLesson, setExpandedLesson] = useState(searchParams.get('lesson') || null)
   const [expandedAssignment, setExpandedAssignment] = useState(null)
 
-  const lessons = useMemo(() =>
-    lmsLessons.filter(l => l.groupId === groupId).sort((a, b) => (a.order || 0) - (b.order || 0)),
-    [lmsLessons, groupId]
-  )
+  // Lessons belong to the COURSE level (shared across all groups of the same course)
+  const lessons = useMemo(() => {
+    if (course) {
+      return lmsLessons.filter(l => l.courseId === course.id).sort((a, b) => (a.order || 0) - (b.order || 0))
+    }
+    // Legacy fallback: lessons with groupId
+    return lmsLessons.filter(l => l.groupId === groupId).sort((a, b) => (a.order || 0) - (b.order || 0))
+  }, [lmsLessons, course, groupId])
 
   const assignments = useMemo(() =>
     lmsAssignments.filter(a => a.groupId === groupId).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')),
@@ -988,7 +992,7 @@ export default function LMSGroupView() {
             </div>
             <div className="p-5">
               {showModal === 'newLesson' && (
-                <LessonForm lesson={editingItem} groupId={groupId} onSave={handleSaveLesson} onClose={() => { setShowModal(null); setEditingItem(null) }} />
+                <LessonForm lesson={editingItem} groupId={groupId} courseId={course?.id} onSave={handleSaveLesson} onClose={() => { setShowModal(null); setEditingItem(null) }} />
               )}
               {showModal === 'newAssignment' && (
                 <AssignmentForm assignment={editingItem} groupId={groupId} onSave={handleSaveAssignment} onClose={() => { setShowModal(null); setEditingItem(null) }} />

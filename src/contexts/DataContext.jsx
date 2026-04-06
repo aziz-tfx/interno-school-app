@@ -9,318 +9,13 @@ import {
   onSnapshot,
   getDocs,
   setDoc,
-  writeBatch,
 } from 'firebase/firestore'
-import {
-  branches as defaultBranches,
-  students as defaultStudents,
-  teachers as defaultTeachers,
-  payments as defaultPayments,
-} from '../data/mockData'
 
 // Цвета для филиалов (используются в графиках и бейджах)
 const BRANCH_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16']
 
 const DataContext = createContext(null)
 
-// Группы по умолчанию
-const DEFAULT_GROUPS = [
-  { id: 'grp_1', name: 'ENG-A1-01', branch: 'tashkent', course: 'Английский', teacherId: 1, maxOffline: 15, schedule: 'Пн/Ср/Пт 09:00-10:30', status: 'active' },
-  { id: 'grp_2', name: 'ENG-B2-01', branch: 'samarkand', course: 'Английский', teacherId: 5, maxOffline: 12, schedule: 'Вт/Чт 14:00-15:30', status: 'active' },
-  { id: 'grp_3', name: 'ENG-C1-02', branch: 'tashkent', course: 'Английский', teacherId: 1, maxOffline: 10, schedule: 'Пн/Ср/Пт 11:00-12:30', status: 'active' },
-  { id: 'grp_4', name: 'ENG-B1-02', branch: 'samarkand', course: 'Английский', teacherId: 5, maxOffline: 12, schedule: 'Пн/Ср/Пт 10:00-11:30', status: 'active' },
-  { id: 'grp_5', name: 'ENG-A2-01', branch: 'fergana', course: 'Английский', teacherId: 8, maxOffline: 14, schedule: 'Вт/Чт/Сб 09:00-10:30', status: 'active' },
-  { id: 'grp_6', name: 'MATH-01', branch: 'tashkent', course: 'Математика', teacherId: 2, maxOffline: 20, schedule: 'Вт/Чт 09:00-10:30', status: 'active' },
-  { id: 'grp_7', name: 'MATH-02', branch: 'samarkand', course: 'Математика', teacherId: 6, maxOffline: 18, schedule: 'Пн/Ср/Пт 14:00-15:30', status: 'active' },
-  { id: 'grp_8', name: 'IT-B1-03', branch: 'tashkent', course: 'IT/Программирование', teacherId: 4, maxOffline: 12, schedule: 'Пн/Ср 16:00-18:00', status: 'active' },
-  { id: 'grp_9', name: 'IT-A1-01', branch: 'samarkand', course: 'IT/Программирование', teacherId: 7, maxOffline: 10, schedule: 'Вт/Чт 16:00-18:00', status: 'active' },
-  { id: 'grp_10', name: 'IELTS-01', branch: 'fergana', course: 'Подготовка к IELTS', teacherId: null, maxOffline: 8, schedule: 'Сб 10:00-13:00', status: 'active' },
-  { id: 'grp_11', name: 'IELTS-02', branch: 'tashkent', course: 'Подготовка к IELTS', teacherId: 3, maxOffline: 10, schedule: 'Сб/Вс 10:00-13:00', status: 'active' },
-  { id: 'grp_12', name: 'RUS-A2-01', branch: 'fergana', course: 'Русский язык', teacherId: 10, maxOffline: 16, schedule: 'Пн/Ср/Пт 15:00-16:30', status: 'active' },
-]
-
-// Helper: seed a collection with default data array
-async function seedCollection(collectionName, defaultData) {
-  const batch = writeBatch(db)
-  for (const item of defaultData) {
-    const docRef = doc(collection(db, collectionName))
-    // Filter out undefined values — Firestore rejects them
-    const cleanItem = Object.fromEntries(
-      Object.entries(item).filter(([, v]) => v !== undefined)
-    )
-    if (item.id) cleanItem._originalId = item.id
-    batch.set(docRef, cleanItem)
-  }
-  await batch.commit()
-}
-
-// Helper: seed a single-doc collection (for objects like salesPlans or arrays like attendance)
-async function seedDocCollection(collectionName, data) {
-  await setDoc(doc(db, collectionName, '_meta'), { data })
-}
-
-// Helper: delete all docs in a collection
-async function clearCollection(collectionName) {
-  const snapshot = await getDocs(collection(db, collectionName))
-  const batch = writeBatch(db)
-  snapshot.docs.forEach(d => batch.delete(d.ref))
-  await batch.commit()
-}
-
-// Migrate courses: update existing Firestore docs with new fields from DEFAULT_COURSES
-async function migrateCourses() {
-  try {
-    const snapshot = await getDocs(collection(db, 'courses'))
-    if (snapshot.empty) return
-
-    const batch = writeBatch(db)
-    let hasChanges = false
-
-    snapshot.docs.forEach(docSnap => {
-      const data = docSnap.data()
-      const defaultCourse = DEFAULT_COURSES.find(c => c.name === data.name)
-      if (!defaultCourse) return
-
-      const updates = {}
-      // Add missing fields from default
-      if (!data.description && defaultCourse.description) updates.description = defaultCourse.description
-      if ((!data.features || data.features.length === 0) && defaultCourse.features) updates.features = defaultCourse.features
-      if (!data.tariffFeatures && defaultCourse.tariffFeatures) updates.tariffFeatures = defaultCourse.tariffFeatures
-
-      if (Object.keys(updates).length > 0) {
-        batch.update(docSnap.ref, updates)
-        hasChanges = true
-      }
-    })
-
-    if (hasChanges) {
-      await batch.commit()
-      console.log('Courses migrated with descriptions and features')
-    }
-  } catch (err) {
-    console.error('Course migration error:', err)
-  }
-}
-
-// Default courses with pricing data
-const DEFAULT_COURSES = [
-  {
-    name: 'Интерьер Дизайн', icon: '🎨', duration: '6 мес',
-    description: 'Профессиональный курс по дизайну интерьеров. Изучение планировки, 3D-визуализации, подбора материалов, работы с клиентами и создания дизайн-проектов.',
-    features: ['Планировка и зонирование', '3D-визуализация (3ds Max, SketchUp)', 'Подбор материалов и мебели', 'Работа с заказчиком', 'Портфолио по итогам курса'],
-    tariffFeatures: {
-      standard: ['Групповые занятия', 'Базовая программа', 'Доступ к материалам'],
-      vip: ['Мини-группа до 8 чел.', 'Расширенная программа', 'Персональный ментор', 'Реальный проект'],
-      premium: ['Индивид. внимание в группе', 'Полная программа', 'Персональный ментор', 'Стажировка в студии', 'Помощь с трудоустройством'],
-      individual: ['Персональное обучение 1 на 1', 'Гибкий график', 'Индивидуальная программа'],
-    },
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'Английский', icon: '🇬🇧', duration: '6 мес',
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'Подготовка к IELTS', icon: '📝', duration: '4 мес',
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'Математика', icon: '📐', duration: '9 мес',
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'IT/Программирование', icon: '💻', duration: '8 мес',
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'Русский язык', icon: '🇷🇺', duration: '6 мес',
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'Корейский язык', icon: '🇰🇷', duration: '6 мес',
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'Подготовка к SAT', icon: '🎓', duration: '5 мес',
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'Робототехника', icon: '🤖', duration: '9 мес',
-    pricing: {
-      tashkent: {
-        standard: { full: 8000000, d10: 7200000, d15: 6800000, d20: 6400000 },
-        vip: { full: 12000000, d10: 10800000, d15: 10200000, d20: 9600000 },
-        premium: { full: 18000000, d10: 16200000, d15: 15300000, d20: 14400000 },
-        individual: { full: 6000000, d10: 5400000, monthly: true },
-      },
-      fergana: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6600000, d10: 5940000, d15: 5610000, d20: 5280000 },
-        premium: { full: 10500000, d10: 9450000, d15: 8925000, d20: 8400000 },
-        individual: { full: 4000000, d10: 3600000, monthly: true },
-      },
-      online: {
-        standard: { full: 4000000, d10: 3600000, d15: 3400000, d20: 3200000 },
-        vip: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-      },
-    },
-  },
-  {
-    name: 'Дата Аналитика', icon: '📊', duration: '6 мес',
-    description: 'Курс по анализу данных: от основ статистики и Excel до Python, SQL, Power BI и Machine Learning. Подготовка к карьере Data Analyst.',
-    features: ['Excel и Google Sheets (продвинутый)', 'SQL и базы данных', 'Python для анализа данных', 'Визуализация (Power BI / Tableau)', 'Основы Machine Learning'],
-    tariffFeatures: {
-      standard: ['Групповые занятия', 'Базовая программа', 'Доступ к материалам'],
-      vip: ['Мини-группа до 8 чел.', 'Расширенная программа', 'Персональный ментор', 'Реальные датасеты', 'Помощь с резюме'],
-    },
-    pricing: {
-      tashkent: {
-        standard: { full: 6000000, d10: 5400000, d15: 5100000, d20: 4800000 },
-        vip: { full: 9200000, d10: 8280000, d15: 7820000, d20: 7360000 },
-      },
-      online: {
-        standard: { full: 1000000, monthly: true },
-        vip: { full: 1500000, monthly: true },
-      },
-    },
-  },
-]
 
 export function DataProvider({ children }) {
   const [branches, setBranches] = useState([])
@@ -333,18 +28,23 @@ export function DataProvider({ children }) {
   const [salesPlans, setSalesPlansState] = useState({})
   const [loading, setLoading] = useState(true)
 
+  // Rooms collection
+  const [rooms, setRooms] = useState([])
+
   // LMS collections
   const [lmsLessons, setLmsLessons] = useState([])
   const [lmsAssignments, setLmsAssignments] = useState([])
   const [lmsSubmissions, setLmsSubmissions] = useState([])
   const [lmsAnnouncements, setLmsAnnouncements] = useState([])
+  const [lmsModules, setLmsModules] = useState([])
+  const [lmsProgress, setLmsProgress] = useState([])
 
   // Track whether initial load has resolved for each collection
-  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false })
+  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false })
 
   const checkAllLoaded = () => {
     const r = loadedRef.current
-    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements) {
+    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress) {
       setLoading(false)
     }
   }
@@ -352,83 +52,8 @@ export function DataProvider({ children }) {
   useEffect(() => {
     const unsubscribers = []
 
-    // Helper to subscribe to a Firestore collection and map docs to array with id
-    function subscribeCollection(collectionName, setter, defaultData, loadKey) {
-      const unsub = onSnapshot(collection(db, collectionName), async (snapshot) => {
-        if (snapshot.empty && defaultData?.length > 0) {
-          // Collection is empty — seed with defaults (works on first load AND after deletion)
-          if (!loadedRef.current[`${loadKey}_seeding`]) {
-            loadedRef.current[`${loadKey}_seeding`] = true
-            try {
-              await seedCollection(collectionName, defaultData)
-            } catch (err) {
-              console.error(`Failed to seed ${collectionName}:`, err)
-            }
-            loadedRef.current[`${loadKey}_seeding`] = false
-          }
-          if (!loadedRef.current[loadKey]) {
-            loadedRef.current[loadKey] = true
-            checkAllLoaded()
-          }
-          return
-        }
-        const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
-        setter(items)
-        if (!loadedRef.current[loadKey]) {
-          loadedRef.current[loadKey] = true
-          checkAllLoaded()
-        }
-      })
-      unsubscribers.push(unsub)
-    }
-
-    // Helper to subscribe to a single-doc meta collection (attendance, salesPlans)
-    function subscribeMetaDoc(collectionName, setter, defaultValue, loadKey) {
-      const unsub = onSnapshot(doc(db, collectionName, '_meta'), async (snapshot) => {
-        if (!snapshot.exists()) {
-          if (!loadedRef.current[loadKey]) {
-            await seedDocCollection(collectionName, defaultValue)
-            loadedRef.current[loadKey] = true
-            checkAllLoaded()
-          }
-          return
-        }
-        setter(snapshot.data().data)
-        if (!loadedRef.current[loadKey]) {
-          loadedRef.current[loadKey] = true
-          checkAllLoaded()
-        }
-      })
-      unsubscribers.push(unsub)
-    }
-
-    subscribeCollection('branches', setBranches, defaultBranches, 'branches')
-    // Courses: force-seed if empty, then subscribe
-    ;(async () => {
-      try {
-        const coursesSnap = await getDocs(collection(db, 'courses'))
-        if (coursesSnap.empty) {
-          console.log('Courses collection empty — seeding with defaults...')
-          await seedCollection('courses', DEFAULT_COURSES)
-          console.log('Courses seeded:', DEFAULT_COURSES.length, 'courses')
-        } else {
-          // Migrate existing courses with new fields
-          await migrateCourses()
-        }
-      } catch (err) {
-        console.error('Courses seed/migrate error:', err)
-      }
-    })()
-    subscribeCollection('courses', setCourses, DEFAULT_COURSES, 'courses')
-    subscribeCollection('groups', setGroups, DEFAULT_GROUPS, 'groups')
-    subscribeCollection('students', setStudents, defaultStudents, 'students')
-    subscribeCollection('teachers', setTeachers, defaultTeachers, 'teachers')
-    subscribeCollection('payments', setPaymentsList, defaultPayments, 'payments')
-    subscribeMetaDoc('attendance', setAttendance, [], 'attendance')
-    subscribeMetaDoc('salesPlans', setSalesPlansState, {}, 'salesPlans')
-
-    // LMS collections (no default data — starts empty)
-    function subscribeLmsCollection(collectionName, setter, loadKey) {
+    // Subscribe to a Firestore collection — no default seeding
+    function subscribeCollection(collectionName, setter, loadKey) {
       const unsub = onSnapshot(collection(db, collectionName), (snapshot) => {
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
         setter(items)
@@ -437,7 +62,7 @@ export function DataProvider({ children }) {
           checkAllLoaded()
         }
       }, (err) => {
-        console.error(`LMS collection ${collectionName} error:`, err)
+        console.error(`Collection ${collectionName} error:`, err)
         if (!loadedRef.current[loadKey]) {
           loadedRef.current[loadKey] = true
           checkAllLoaded()
@@ -446,10 +71,37 @@ export function DataProvider({ children }) {
       unsubscribers.push(unsub)
     }
 
-    subscribeLmsCollection('lmsLessons', setLmsLessons, 'lmsLessons')
-    subscribeLmsCollection('lmsAssignments', setLmsAssignments, 'lmsAssignments')
-    subscribeLmsCollection('lmsSubmissions', setLmsSubmissions, 'lmsSubmissions')
-    subscribeLmsCollection('lmsAnnouncements', setLmsAnnouncements, 'lmsAnnouncements')
+    // Subscribe to a single-doc meta collection (attendance, salesPlans)
+    function subscribeMetaDoc(collectionName, setter, loadKey) {
+      const unsub = onSnapshot(doc(db, collectionName, '_meta'), (snapshot) => {
+        if (snapshot.exists()) {
+          setter(snapshot.data().data)
+        }
+        if (!loadedRef.current[loadKey]) {
+          loadedRef.current[loadKey] = true
+          checkAllLoaded()
+        }
+      })
+      unsubscribers.push(unsub)
+    }
+
+    subscribeCollection('branches', setBranches, 'branches')
+    subscribeCollection('courses', setCourses, 'courses')
+    subscribeCollection('groups', setGroups, 'groups')
+    subscribeCollection('students', setStudents, 'students')
+    subscribeCollection('teachers', setTeachers, 'teachers')
+    subscribeCollection('payments', setPaymentsList, 'payments')
+    subscribeMetaDoc('attendance', setAttendance, 'attendance')
+    subscribeMetaDoc('salesPlans', setSalesPlansState, 'salesPlans')
+
+    // Additional collections
+    subscribeCollection('rooms', setRooms, 'rooms')
+    subscribeCollection('lmsLessons', setLmsLessons, 'lmsLessons')
+    subscribeCollection('lmsAssignments', setLmsAssignments, 'lmsAssignments')
+    subscribeCollection('lmsSubmissions', setLmsSubmissions, 'lmsSubmissions')
+    subscribeCollection('lmsAnnouncements', setLmsAnnouncements, 'lmsAnnouncements')
+    subscribeCollection('lmsModules', setLmsModules, 'lmsModules')
+    subscribeCollection('lmsProgress', setLmsProgress, 'lmsProgress')
 
     return () => {
       unsubscribers.forEach(unsub => unsub())
@@ -495,6 +147,20 @@ export function DataProvider({ children }) {
     const map = {}
     branches.forEach(b => { map[b.id] = b.name })
     return map
+  }
+
+  // --- Rooms CRUD ---
+  const addRoom = async (room) => {
+    const docRef = await addDoc(collection(db, 'rooms'), room)
+    return { ...room, id: docRef.id }
+  }
+
+  const updateRoom = async (id, updates) => {
+    await updateDoc(doc(db, 'rooms', id), updates)
+  }
+
+  const deleteRoom = async (id) => {
+    await deleteDoc(doc(db, 'rooms', id))
   }
 
   // --- Courses CRUD ---
@@ -663,6 +329,10 @@ export function DataProvider({ children }) {
     return { ...newPayment, id: docRef.id }
   }
 
+  const updatePayment = async (id, updates) => {
+    await updateDoc(doc(db, 'payments', id), updates)
+  }
+
   // --- Attendance ---
   const markAttendance = async (record) => {
     // record: { date, groupName, studentId, status: 'present'|'absent'|'late', teacherId }
@@ -765,6 +435,27 @@ export function DataProvider({ children }) {
     await deleteDoc(doc(db, 'lmsAnnouncements', id))
   }
 
+  // --- LMS Modules CRUD ---
+  const addLmsModule = async (mod) => {
+    const docRef = await addDoc(collection(db, 'lmsModules'), mod)
+    return { ...mod, id: docRef.id }
+  }
+  const updateLmsModule = async (id, updates) => {
+    await updateDoc(doc(db, 'lmsModules', id), updates)
+  }
+  const deleteLmsModule = async (id) => {
+    await deleteDoc(doc(db, 'lmsModules', id))
+  }
+
+  // --- LMS Progress CRUD ---
+  const addLmsProgress = async (progress) => {
+    const docRef = await addDoc(collection(db, 'lmsProgress'), progress)
+    return { ...progress, id: docRef.id }
+  }
+  const deleteLmsProgress = async (id) => {
+    await deleteDoc(doc(db, 'lmsProgress', id))
+  }
+
   // --- Sales Plans ---
   const setSalesPlan = async (managerId, amount, month) => {
     const key = month || new Date().toISOString().slice(0, 7)
@@ -842,38 +533,15 @@ export function DataProvider({ children }) {
     return students.filter(s => s.group === groupName)
   }
 
-  // Reset to defaults — delete all docs and re-seed
-  const resetData = async () => {
-    setLoading(true)
-    await Promise.all([
-      clearCollection('branches'),
-      clearCollection('courses'),
-      clearCollection('groups'),
-      clearCollection('students'),
-      clearCollection('teachers'),
-      clearCollection('payments'),
-    ])
-    await Promise.all([
-      seedCollection('branches', defaultBranches),
-      seedCollection('courses', DEFAULT_COURSES),
-      seedCollection('groups', DEFAULT_GROUPS),
-      seedCollection('students', defaultStudents),
-      seedCollection('teachers', defaultTeachers),
-      seedCollection('payments', defaultPayments),
-      seedDocCollection('attendance', []),
-      seedDocCollection('salesPlans', {}),
-    ])
-    setLoading(false)
-  }
-
   return (
     <DataContext.Provider value={{
       branches, addBranch, updateBranch, deleteBranch, getBranchName, getBranchNames,
+      rooms, addRoom, updateRoom, deleteRoom,
       courses, addCourse, updateCourse, deleteCourse,
       groups, addGroup, updateGroup, deleteGroup, getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
       students, addStudent, updateStudent, deleteStudent,
       teachers, addTeacher, updateTeacher, deleteTeacher,
-      payments: paymentsList, addPayment,
+      payments: paymentsList, addPayment, updatePayment,
       attendance, markAttendance, getAttendanceByGroup, getAttendanceStats,
       getStudentsByBranch, getTeachersByBranch, getPaymentsByBranch,
       getDebtors, getTotalRevenue, getTotalExpenses,
@@ -883,7 +551,8 @@ export function DataProvider({ children }) {
       lmsAssignments, addLmsAssignment, updateLmsAssignment, deleteLmsAssignment,
       lmsSubmissions, addLmsSubmission, updateLmsSubmission,
       lmsAnnouncements, addLmsAnnouncement, deleteLmsAnnouncement,
-      resetData,
+      lmsModules, addLmsModule, updateLmsModule, deleteLmsModule,
+      lmsProgress, addLmsProgress, deleteLmsProgress,
       loading,
     }}>
       {children}

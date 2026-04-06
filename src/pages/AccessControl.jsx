@@ -3,7 +3,7 @@ import {
   Shield, ShieldCheck, ShieldX, Save, RotateCcw, ChevronDown, ChevronRight,
   Eye, Plus, Pencil, Trash2, DollarSign, BarChart3, Building2, GraduationCap,
   Users, BookOpen, UserCog, Settings, CheckCircle2, XCircle, AlertTriangle,
-  Lock, Unlock,
+  Lock, Unlock, ClipboardCheck,
 } from 'lucide-react'
 import { useAuth, ROLE_LABELS, ROLE_COLORS, DEFAULT_PERMISSIONS } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -17,6 +17,7 @@ const SECTION_META = {
   courses:    { labelKey: 'access.section_courses',    icon: BookOpen,     type: 'object', actions: ['view', 'add', 'edit'] },
   finance:    { labelKey: 'access.section_finance',    icon: DollarSign,   type: 'object', actions: ['view', 'fullPnL', 'expenses', 'payments'] },
   employees:  { labelKey: 'access.section_employees',  icon: UserCog,      type: 'object', actions: ['view', 'add', 'edit', 'delete'] },
+  attendance: { labelKey: 'access.section_attendance', icon: ClipboardCheck, type: 'object', actions: ['view', 'mark', 'edit'] },
   lms:        { labelKey: 'access.section_lms',        icon: BookOpen,     type: 'object', actions: ['view', 'create_content', 'grade', 'manage'] },
   settings:   { labelKey: 'access.section_settings',   icon: Settings,     type: 'boolean' },
 }
@@ -30,6 +31,7 @@ const ACTION_LABEL_KEYS = {
   fullPnL: 'access.action_fullPnL',
   expenses: 'access.action_expenses',
   payments: 'access.action_payments',
+  mark: 'access.action_mark',
   create_content: 'access.action_create_content',
   grade: 'access.action_grade',
   manage: 'access.action_manage',

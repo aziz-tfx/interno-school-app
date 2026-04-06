@@ -36,7 +36,7 @@ export default function Header({ onMenuClick }) {
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder={t('header.searchPlaceholder')}
+            placeholder={t('header.search_placeholder')}
             className="pl-10 pr-4 py-2 glass-input rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 w-48 lg:w-64 placeholder:text-slate-400"
           />
         </div>
@@ -65,7 +65,7 @@ export default function Header({ onMenuClick }) {
           </button>
         </div>
 
-        <button className="relative p-2.5 glass-btn rounded-xl transition-all" title={`${debtorCount} ${t('header.debtorsTooltip')}`}>
+        <button className="relative p-2.5 glass-btn rounded-xl transition-all" title={`${debtorCount} ${t('header.debtors_tooltip')}`}>
           <Bell size={18} className="text-slate-600" />
           {debtorCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1 shadow-lg shadow-red-200">
