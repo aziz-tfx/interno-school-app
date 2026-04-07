@@ -19,6 +19,7 @@ import LMSLessonView from './pages/lms/LMSLessonView'
 import Integrations from './pages/Integrations'
 import ContractSign from './pages/ContractSign'
 import StudentCabinet from './pages/StudentCabinet'
+import Register from './pages/Register'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -34,6 +35,7 @@ export default function App() {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route path="/contract/:paymentId" element={<ContractSign />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>

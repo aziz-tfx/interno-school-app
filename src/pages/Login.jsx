@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
@@ -6,6 +7,7 @@ import Logo from '../components/Logo'
 
 export default function Login() {
   const { t } = useLanguage()
+  const navigate = useNavigate()
   const { login, error, setError } = useAuth()
   const [form, setForm] = useState({ login: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -79,6 +81,15 @@ export default function Login() {
             <LogIn size={18} />
             {t('login.btn_submit')}
           </button>
+
+          <div className="text-center mt-4 pt-4 border-t border-slate-200/40">
+            <p className="text-sm text-slate-500">
+              Нет аккаунта?{' '}
+              <button type="button" onClick={() => navigate('/register')} className="text-blue-600 font-medium hover:text-blue-700">
+                Зарегистрироваться
+              </button>
+            </p>
+          </div>
 
         </form>
       </div>
