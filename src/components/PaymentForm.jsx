@@ -141,6 +141,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           schedule: group.schedule || prev.schedule,
           branch: group.branch || prev.branch,
           courseStartDate: group.startDate || prev.courseStartDate,
+          contractLang: group.language || 'uz',
           ...(courseDuration ? { durationMonths: String(courseDuration) } : {}),
         }))
       }
@@ -283,6 +284,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       durationMonths: Number(form.durationMonths) || 3,
       schedule: form.schedule || '',
       passport: form.passport || '',
+      contractLang: form.contractLang || 'uz',
       files: files.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size, data: f.data })),
       trancheNumber: studentPayments.length + 1,
       managerId: user?.managerId || null,
@@ -406,6 +408,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         durationMonths: Number(form.durationMonths) || 3,
         schedule: form.schedule || '',
         learningFormat: payment.learningFormat || form.learningFormat,
+        lang: payment.contractLang || form.contractLang || 'uz',
       })
     } catch (err) {
       console.error('Contract generation failed:', err)

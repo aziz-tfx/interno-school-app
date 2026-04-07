@@ -146,7 +146,9 @@ export default function ContractSign() {
     )
   }
 
+  const isRu = payment.contractLang === 'ru'
   const courseUz = COURSE_MAP[payment.course] || payment.course
+  const courseName = isRu ? payment.course : courseUz
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
@@ -154,115 +156,152 @@ export default function ContractSign() {
         {/* Header */}
         <div className="text-center mb-6">
           <Logo size="lg" variant="dark" />
-          <p className="text-slate-500 text-sm mt-2">Электронное подписание договора</p>
+          <p className="text-slate-500 text-sm mt-2">{isRu ? 'Электронное подписание договора' : 'Shartnomani elektron imzolash'}</p>
         </div>
 
         {/* Contract Body */}
         <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 space-y-5" style={{ fontFamily: 'Times New Roman, serif' }}>
-          <h2 className="text-center font-bold text-lg">SHARTNOMA №{payment.contractNumber}</h2>
-          <p className="text-center text-sm text-slate-600">Pullik ta'lim xizmatlari ko'rsatish to'g'risida</p>
+          <h2 className="text-center font-bold text-lg">{isRu ? 'ДОГОВОР' : 'SHARTNOMA'} №{payment.contractNumber}</h2>
+          <p className="text-center text-sm text-slate-600">{isRu ? 'Об оказании платных образовательных услуг' : "Pullik ta'lim xizmatlari ko'rsatish to'g'risida"}</p>
 
           <div className="flex justify-between text-sm text-slate-600">
-            <span>Toshkent shahri</span>
+            <span>{isRu ? 'г. Ташкент' : 'Toshkent shahri'}</span>
             <span>{payment.date}</span>
           </div>
 
           <p className="text-sm text-justify leading-relaxed">
-            "Interno Edu" MCHJ, Ustav asosida faoliyat yuritayotgan bosh direktor Toshpulatov A.A.
-            (keyingi o'rinlarda – <b>"Bajaruvchi"</b>), bir tomondan, <b>{payment.student}</b> va
-            pasport <b>{payment.passport || '_______________'}</b> (keyingi o'rinlarda – <b>"Buyurtmachi"</b>)
-            ikkinchi tomondan, quyidagicha shartnoma tuzdilar:
+            {isRu ? (
+              <>ООО "Interno Edu", в лице генерального директора Тошпулатова А.А., действующего на основании Устава (далее – <b>"Исполнитель"</b>), с одной стороны, и <b>{payment.student}</b>, паспорт <b>{payment.passport || '_______________'}</b> (далее – <b>"Заказчик"</b>), с другой стороны, заключили настоящий договор о нижеследующем:</>
+            ) : (
+              <>"Interno Edu" MCHJ, Ustav asosida faoliyat yuritayotgan bosh direktor Toshpulatov A.A. (keyingi o'rinlarda – <b>"Bajaruvchi"</b>), bir tomondan, <b>{payment.student}</b> va pasport <b>{payment.passport || '_______________'}</b> (keyingi o'rinlarda – <b>"Buyurtmachi"</b>) ikkinchi tomondan, quyidagicha shartnoma tuzdilar:</>
+            )}
           </p>
 
           <div className="space-y-3 text-sm">
-            <p><b>Shartnoma predmeti</b></p>
+            <p><b>{isRu ? 'Предмет договора' : 'Shartnoma predmeti'}</b></p>
             <p className="text-justify">
-              Bajaruvchi "{courseUz}" yo'nalishi bo'yicha guruhli mashg'ulotlar tarzida
-              o'quv kurslarini taqdim etadi, Buyurtmachi esa ushbu xizmatlar uchun to'lovni amalga oshiradi.
+              {isRu
+                ? <>Исполнитель предоставляет учебные курсы по направлению "{courseName}" в формате групповых занятий, а Заказчик осуществляет оплату за данные услуги.</>
+                : <>Bajaruvchi "{courseName}" yo'nalishi bo'yicha guruhli mashg'ulotlar tarzida o'quv kurslarini taqdim etadi, Buyurtmachi esa ushbu xizmatlar uchun to'lovni amalga oshiradi.</>
+              }
             </p>
-            <p>Ta'lim dasturining davomiyligi – {payment.durationMonths || 3} oy</p>
-            {payment.courseStartDate && <p>Kurs boshlanish sanasi: {payment.courseStartDate}{payment.schedule ? ` ( ${payment.schedule} )` : ''}</p>}
+            <p>{isRu ? `Продолжительность учебной программы – ${payment.durationMonths || 3} месяцев` : `Ta'lim dasturining davomiyligi – ${payment.durationMonths || 3} oy`}</p>
+            {payment.courseStartDate && <p>{isRu ? 'Дата начала курса' : 'Kurs boshlanish sanasi'}: {payment.courseStartDate}{payment.schedule ? ` ( ${payment.schedule} )` : ''}</p>}
 
-            <p className="pt-2"><b>Bajaruvchi va Buyurtmachining huquqlari</b></p>
-            <p className="text-justify">Bajaruvchi ta'lim jarayonini mustaqil ravishda olib borish, baholash tizimi, shakli, tartibi va oraliq hamda yakuniy attestatsiya (baholash) muddatlarini belgilash huquqiga ega.</p>
-            <p className="text-justify">Buyurtmachi quyidagi o'quv shartlarini bajarmagan taqdirda: uyga vazifa topshiriqlarini bajarmaslik, ta'lim jarayonida ishtirok etishga istak bildirmaslik, asosli sabablarsiz darslarni qoldirish – Bajaruvchi mazkur shartnoma bo'yicha o'z majburiyatlarini bajarishni to'xtatish huquqiga ega.</p>
-            <p className="text-justify">Buyurtmachi Bajaruvchidan ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlarni to'g'ri va sifatli bajarilishiga doir masalalar bo'yicha o'z vaqtida axborot berilishini talab qilish huquqiga ega.</p>
-            <p className="text-justify">Shuningdek, Buyurtmachi quyidagi huquqlarga ega:</p>
-            <p className="text-justify">-Kursdagi o'quv jarayoni bo'yicha Bajaruvchining xodimlariga murojaat qilish;</p>
-            <p className="text-justify">-O'rganilayotgan dastur doirasidagi bilim darajasi haqida to'liq va ishonchli ma'lumot olish;</p>
-            <p className="text-justify">-O'quv jadvalida belgilangan darslar davomida ta'lim jarayonini amalga oshirish uchun zarur bo'lgan Bajaruvchiga tegishli ashyolar va jihozlardan foydalanish;</p>
-            <p className="text-justify">-Bajaruvchi tomonidan tashkil etilgan madaniy va jamoaviy tadbirlarda ishtirok etish.</p>
+            <p className="pt-2"><b>{isRu ? 'Права Исполнителя и Заказчика' : "Bajaruvchi va Buyurtmachining huquqlari"}</b></p>
+            {isRu ? (<>
+              <p className="text-justify">Исполнитель имеет право самостоятельно вести образовательный процесс, устанавливать систему оценивания, её форму, порядок и сроки промежуточной и итоговой аттестации (оценки).</p>
+              <p className="text-justify">В случае невыполнения Заказчиком следующих учебных требований: невыполнение домашних заданий, нежелание участвовать в образовательном процессе, пропуск занятий без уважительных причин – Исполнитель имеет право прекратить выполнение своих обязательств по настоящему договору.</p>
+              <p className="text-justify">Заказчик имеет право требовать от Исполнителя своевременного предоставления информации по вопросам надлежащего и качественного оказания услуг, указанных в разделе 1 настоящего договора.</p>
+              <p className="text-justify">Кроме того, Заказчик имеет следующие права:</p>
+              <p className="text-justify">-Обращаться к сотрудникам Исполнителя по вопросам учебного процесса на курсе;</p>
+              <p className="text-justify">-Получать полную и достоверную информацию об уровне знаний в рамках изучаемой программы;</p>
+              <p className="text-justify">-Пользоваться принадлежащими Исполнителю материалами и оборудованием, необходимыми для проведения учебного процесса во время занятий, указанных в учебном расписании;</p>
+              <p className="text-justify">-Участвовать в культурных и коллективных мероприятиях, организованных Исполнителем.</p>
+            </>) : (<>
+              <p className="text-justify">Bajaruvchi ta'lim jarayonini mustaqil ravishda olib borish, baholash tizimi, shakli, tartibi va oraliq hamda yakuniy attestatsiya (baholash) muddatlarini belgilash huquqiga ega.</p>
+              <p className="text-justify">Buyurtmachi quyidagi o'quv shartlarini bajarmagan taqdirda: uyga vazifa topshiriqlarini bajarmaslik, ta'lim jarayonida ishtirok etishga istak bildirmaslik, asosli sabablarsiz darslarni qoldirish – Bajaruvchi mazkur shartnoma bo'yicha o'z majburiyatlarini bajarishni to'xtatish huquqiga ega.</p>
+              <p className="text-justify">Buyurtmachi Bajaruvchidan ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlarni to'g'ri va sifatli bajarilishiga doir masalalar bo'yicha o'z vaqtida axborot berilishini talab qilish huquqiga ega.</p>
+              <p className="text-justify">Shuningdek, Buyurtmachi quyidagi huquqlarga ega:</p>
+              <p className="text-justify">-Kursdagi o'quv jarayoni bo'yicha Bajaruvchining xodimlariga murojaat qilish;</p>
+              <p className="text-justify">-O'rganilayotgan dastur doirasidagi bilim darajasi haqida to'liq va ishonchli ma'lumot olish;</p>
+              <p className="text-justify">-O'quv jadvalida belgilangan darslar davomida ta'lim jarayonini amalga oshirish uchun zarur bo'lgan Bajaruvchiga tegishli ashyolar va jihozlardan foydalanish;</p>
+              <p className="text-justify">-Bajaruvchi tomonidan tashkil etilgan madaniy va jamoaviy tadbirlarda ishtirok etish.</p>
+            </>)}
 
-            <p className="pt-2"><b>Bajaruvchining majburiyatlari:</b></p>
-            <p className="text-justify">Bajaruvchi quyidagilarga majbur:</p>
-            <p className="text-justify">Bajaruvchi tomonidan belgilangan qabul shartlarini bajargan Buyurtmachini Kurslarga qabul qilish.</p>
-            <p className="text-justify">Ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlarni ta'lim dasturi, o'quv rejasi va Bajaruvchi tomonidan ishlab chiqilgan dars jadvaliga muvofiq ravishda tashkil qilish va sifatli bajarilishini ta'minlash.</p>
-            <p className="text-justify">Buyurtmachi tanlagan ta'lim dasturini o'zlashtirishi uchun zarur sharoitlarni yaratish:</p>
-            <p className="text-justify">-o'quv dasturi, o'tilgan soatlar soni va dasturni egallash darajasi ko'rsatilgan namunadagi sertifikatni Buyurtmachiga topshirish;</p>
-            <p className="text-justify">-agar Buyurtmachi o'qishni belgilangan muddatdan oldin tugatsa — o'tilgan soatlar to'g'risida ma'lumotnoma berish.</p>
-            <p className="text-justify">-3.4. Bajaruvchi kurs boshlanish sanasini o'zgartirish huquqiga ega, bu haqda Buyurtmachini oldindan xabardor qilgan holda.</p>
-            <p className="text-justify">-3.5. Ta'lim samaradorligini oshirish maqsadida zamonaviy o'qitish uslublari, o'quv materiallari va texnik vositalardan foydalanish.</p>
+            <p className="pt-2"><b>{isRu ? 'Обязанности Исполнителя:' : "Bajaruvchining majburiyatlari:"}</b></p>
+            {isRu ? (<>
+              <p className="text-justify">Исполнитель обязан:</p>
+              <p className="text-justify">Принять Заказчика на Курсы при выполнении условий приёма, установленных Исполнителем.</p>
+              <p className="text-justify">Организовать и обеспечить качественное оказание услуг, указанных в разделе 1 настоящего договора, в соответствии с учебной программой, учебным планом и расписанием занятий, разработанными Исполнителем.</p>
+              <p className="text-justify">Создать необходимые условия для освоения Заказчиком выбранной учебной программы:</p>
+              <p className="text-justify">-вручить Заказчику сертификат установленного образца с указанием учебной программы, количества пройденных часов и степени освоения программы;</p>
+              <p className="text-justify">-в случае досрочного завершения обучения Заказчиком — выдать справку о пройденных часах.</p>
+              <p className="text-justify">-3.4. Исполнитель имеет право изменить дату начала курса, предварительно уведомив об этом Заказчика.</p>
+              <p className="text-justify">-3.5. Использовать современные методы обучения, учебные материалы и технические средства в целях повышения эффективности образования.</p>
+            </>) : (<>
+              <p className="text-justify">Bajaruvchi quyidagilarga majbur:</p>
+              <p className="text-justify">Bajaruvchi tomonidan belgilangan qabul shartlarini bajargan Buyurtmachini Kurslarga qabul qilish.</p>
+              <p className="text-justify">Ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlarni ta'lim dasturi, o'quv rejasi va Bajaruvchi tomonidan ishlab chiqilgan dars jadvaliga muvofiq ravishda tashkil qilish va sifatli bajarilishini ta'minlash.</p>
+              <p className="text-justify">Buyurtmachi tanlagan ta'lim dasturini o'zlashtirishi uchun zarur sharoitlarni yaratish:</p>
+              <p className="text-justify">-o'quv dasturi, o'tilgan soatlar soni va dasturni egallash darajasi ko'rsatilgan namunadagi sertifikatni Buyurtmachiga topshirish;</p>
+              <p className="text-justify">-agar Buyurtmachi o'qishni belgilangan muddatdan oldin tugatsa — o'tilgan soatlar to'g'risida ma'lumotnoma berish.</p>
+              <p className="text-justify">-3.4. Bajaruvchi kurs boshlanish sanasini o'zgartirish huquqiga ega, bu haqda Buyurtmachini oldindan xabardor qilgan holda.</p>
+              <p className="text-justify">-3.5. Ta'lim samaradorligini oshirish maqsadida zamonaviy o'qitish uslublari, o'quv materiallari va texnik vositalardan foydalanish.</p>
+            </>)}
 
-            <p className="pt-2"><b>Buyurtmachining majburiyatlari Buyurtmachi quyidagilarga majbur:</b></p>
-            <p className="text-justify">Ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlar uchun to'lovni o'z vaqtida amalga oshirish.</p>
-            <p className="text-justify">Kurslarga qabul qilinishda Bajaruvchiga zarur hujjatlarni o'z vaqtida taqdim etish.</p>
-            <p className="text-justify">Darslarga qatnashmaslik sabablari jiddiy bo'lsa, bu haqda Bajaruvchini xabardor qilish.</p>
-            <p className="text-justify">Bajaruvchining o'qituvchilari va o'quv yordamchi xodimlariga hurmat bilan munosabatda bo'lish.</p>
-            <p className="text-justify">Dars jadvalida ko'rsatilgan mashg'ulotlarda muntazam qatnashish.</p>
-            <p className="text-justify mt-1">Bajaruvchining ichki tartib-qoidalariga, o'quv intizomiga va umumiy odob-axloq me'yorlariga rioya qilish, kurs ishtirokchilariga nisbatan hurmatni saqlash.</p>
-            <p className="text-justify">Bajaruvchiga tegishli bo'lgan mol-mulkning yo'qolishi yoki shikastlanishi uchun to'liq javobgarlikni o'z zimmasiga olish.</p>
+            <p className="pt-2"><b>{isRu ? 'Обязанности Заказчика. Заказчик обязан:' : "Buyurtmachining majburiyatlari Buyurtmachi quyidagilarga majbur:"}</b></p>
+            {isRu ? (<>
+              <p className="text-justify">Своевременно осуществлять оплату за услуги, указанные в разделе 1 настоящего договора.</p>
+              <p className="text-justify">Своевременно предоставить Исполнителю необходимые документы при зачислении на Курсы.</p>
+              <p className="text-justify">При наличии уважительных причин неявки на занятия уведомить об этом Исполнителя.</p>
+              <p className="text-justify">Проявлять уважение к преподавателям и учебно-вспомогательному персоналу Исполнителя.</p>
+              <p className="text-justify">Регулярно посещать занятия, указанные в расписании.</p>
+              <p className="text-justify mt-1">Соблюдать внутренние правила Исполнителя, учебную дисциплину и общепринятые нормы поведения, проявлять уважение к участникам курса.</p>
+              <p className="text-justify">Принять на себя полную ответственность за утрату или повреждение имущества, принадлежащего Исполнителю.</p>
+            </>) : (<>
+              <p className="text-justify">Ushbu shartnomaning 1-bo'limida ko'rsatilgan xizmatlar uchun to'lovni o'z vaqtida amalga oshirish.</p>
+              <p className="text-justify">Kurslarga qabul qilinishda Bajaruvchiga zarur hujjatlarni o'z vaqtida taqdim etish.</p>
+              <p className="text-justify">Darslarga qatnashmaslik sabablari jiddiy bo'lsa, bu haqda Bajaruvchini xabardor qilish.</p>
+              <p className="text-justify">Bajaruvchining o'qituvchilari va o'quv yordamchi xodimlariga hurmat bilan munosabatda bo'lish.</p>
+              <p className="text-justify">Dars jadvalida ko'rsatilgan mashg'ulotlarda muntazam qatnashish.</p>
+              <p className="text-justify mt-1">Bajaruvchining ichki tartib-qoidalariga, o'quv intizomiga va umumiy odob-axloq me'yorlariga rioya qilish, kurs ishtirokchilariga nisbatan hurmatni saqlash.</p>
+              <p className="text-justify">Bajaruvchiga tegishli bo'lgan mol-mulkning yo'qolishi yoki shikastlanishi uchun to'liq javobgarlikni o'z zimmasiga olish.</p>
+            </>)}
 
-            <p className="pt-2"><b>Xizmatlar qiymati</b></p>
-            <p className="text-justify">Ushbu shartnoma bo'yicha ta'lim xizmatlarining qiymati kelishilgan tartibda belgilanadi.</p>
+            <p className="pt-2"><b>{isRu ? 'Стоимость услуг' : 'Xizmatlar qiymati'}</b></p>
+            <p className="text-justify">{isRu ? 'Стоимость образовательных услуг по настоящему договору устанавливается в согласованном порядке.' : "Ushbu shartnoma bo'yicha ta'lim xizmatlarining qiymati kelishilgan tartibda belgilanadi."}</p>
             <p className="text-justify">
-              Shartnoma bo'yicha umumiy to'lov summasi: <b>{formatCurrency(payment.totalCoursePrice || payment.amount)}</b> so'mni tashkil qiladi
-              {payment.tariff ? ` ( ${payment.tariff} )` : ''}
+              {isRu
+                ? <>Общая сумма оплаты по договору составляет: <b>{formatCurrency(payment.totalCoursePrice || payment.amount)}</b> сум {payment.tariff ? ` ( ${payment.tariff} )` : ''}</>
+                : <>Shartnoma bo'yicha umumiy to'lov summasi: <b>{formatCurrency(payment.totalCoursePrice || payment.amount)}</b> so'mni tashkil qiladi {payment.tariff ? ` ( ${payment.tariff} )` : ''}</>
+              }
             </p>
-            <p className="text-justify">To'lov buyurtmachi tomonidan bank orqali yoki o'quv markazi kassasiga amalga oshiriladi.</p>
-            <p className="text-justify">To'lov amalga oshirilgani Bajaruvchi tomonidan berilgan kvitansiya bilan tasdiqlanadi.</p>
+            <p className="text-justify">{isRu ? 'Оплата производится Заказчиком через банк или в кассу учебного центра.' : "To'lov buyurtmachi tomonidan bank orqali yoki o'quv markazi kassasiga amalga oshiriladi."}</p>
+            <p className="text-justify">{isRu ? 'Факт оплаты подтверждается квитанцией, выданной Исполнителем.' : "To'lov amalga oshirilgani Bajaruvchi tomonidan berilgan kvitansiya bilan tasdiqlanadi."}</p>
 
-            <p className="pt-2"><b>Xizmatlarni topshirish va qabul qilish tartibi</b></p>
-            <p className="text-justify">To'lov qilingan o'quv davri yakunlangandan so'ng va loyiha taqdimotidan keyin Bajaruvchi Buyurtmachiga o'quv kursini tamomlaganligi haqida sertifikat topshiradi.</p>
+            <p className="pt-2"><b>{isRu ? 'Порядок сдачи и приёмки услуг' : "Xizmatlarni topshirish va qabul qilish tartibi"}</b></p>
+            <p className="text-justify">{isRu ? 'По завершении оплаченного учебного периода и после защиты проекта Исполнитель вручает Заказчику сертификат об окончании учебного курса.' : "To'lov qilingan o'quv davri yakunlangandan so'ng va loyiha taqdimotidan keyin Bajaruvchi Buyurtmachiga o'quv kursini tamomlaganligi haqida sertifikat topshiradi."}</p>
 
-            <p className="pt-2"><b>Tomonlarning nizolarni hal etish tartibi va javobgarligi</b></p>
-            <p className="text-justify">Tomonlar o'rtasida yuzaga kelgan nizolar va kelishmovchiliklar muzokaralar orqali hal qilinadi.</p>
-            <p className="text-justify">Muzokaralar natijasida hal etilmagan nizolar Bajaruvchi joylashgan hududdagi arbitraj sudiga ko'rib chiqishga yuboriladi.</p>
-            <p className="text-justify">Shartnoma shartlariga amal qilinmasa yoki noto'g'ri bajarilsa, tomonlar O'zbekiston Respublikasi amaldagi qonunchiligiga muvofiq javobgar bo'ladi.</p>
+            <p className="pt-2"><b>{isRu ? 'Порядок разрешения споров и ответственность сторон' : "Tomonlarning nizolarni hal etish tartibi va javobgarligi"}</b></p>
+            <p className="text-justify">{isRu ? 'Споры и разногласия, возникшие между сторонами, разрешаются путём переговоров.' : "Tomonlar o'rtasida yuzaga kelgan nizolar va kelishmovchiliklar muzokaralar orqali hal qilinadi."}</p>
+            <p className="text-justify">{isRu ? 'Споры, не урегулированные путём переговоров, передаются на рассмотрение в арбитражный суд по месту нахождения Исполнителя.' : "Muzokaralar natijasida hal etilmagan nizolar Bajaruvchi joylashgan hududdagi arbitraj sudiga ko'rib chiqishga yuboriladi."}</p>
+            <p className="text-justify">{isRu ? 'В случае неисполнения или ненадлежащего исполнения условий договора стороны несут ответственность в соответствии с действующим законодательством Республики Узбекистан.' : "Shartnoma shartlariga amal qilinmasa yoki noto'g'ri bajarilsa, tomonlar O'zbekiston Respublikasi amaldagi qonunchiligiga muvofiq javobgar bo'ladi."}</p>
 
-            <p className="pt-2"><b>Shartnomaning amal qilish muddati</b></p>
-            <p className="text-justify">Ushbu shartnoma ikki tomon tomonidan imzolangan paytdan kuchga kiradi va tomonlar o'z majburiyatlarini to'liq bajargunga qadar amal qiladi.</p>
-            <p className="text-justify">Buyurtmachi to'langan o'quv davri tugagach, istalgan vaqtda shartnomani bekor qilish huquqiga ega. Agar Buyurtmachi o'qishni belgilangan muddat tugamasidan oldin o'z ixtiyori bilan to'xtatsa, to'langan mablag' qaytarilmaydi.</p>
+            <p className="pt-2"><b>{isRu ? 'Срок действия договора' : "Shartnomaning amal qilish muddati"}</b></p>
+            <p className="text-justify">{isRu ? 'Настоящий договор вступает в силу с момента подписания обеими сторонами и действует до полного выполнения сторонами своих обязательств.' : "Ushbu shartnoma ikki tomon tomonidan imzolangan paytdan kuchga kiradi va tomonlar o'z majburiyatlarini to'liq bajargunga qadar amal qiladi."}</p>
+            <p className="text-justify">{isRu ? 'Заказчик имеет право расторгнуть договор в любое время после окончания оплаченного учебного периода. Если Заказчик добровольно прекращает обучение до истечения установленного срока, оплаченные средства не возвращаются.' : "Buyurtmachi to'langan o'quv davri tugagach, istalgan vaqtda shartnomani bekor qilish huquqiga ega. Agar Buyurtmachi o'qishni belgilangan muddat tugamasidan oldin o'z ixtiyori bilan to'xtatsa, to'langan mablag' qaytarilmaydi."}</p>
 
-            <p className="pt-2"><b>Yakuniy qoidalar</b></p>
-            <p className="text-justify">Ushbu shartnoma ikki nusxada tuzilgan bo'lib, har bir tomon uchun bittadan nusxasi mavjud. Har ikkala nusxa teng yuridik kuchga ega.</p>
+            <p className="pt-2"><b>{isRu ? 'Заключительные положения' : 'Yakuniy qoidalar'}</b></p>
+            <p className="text-justify">{isRu ? 'Настоящий договор составлен в двух экземплярах, по одному для каждой стороны. Оба экземпляра имеют одинаковую юридическую силу.' : "Ushbu shartnoma ikki nusxada tuzilgan bo'lib, har bir tomon uchun bittadan nusxasi mavjud. Har ikkala nusxa teng yuridik kuchga ega."}</p>
           </div>
 
           {/* Signature Section */}
           <div className="grid grid-cols-2 gap-6 mt-8 pt-6 border-t border-slate-200">
             <div className="text-sm border border-slate-200 rounded-lg p-3">
-              <p className="font-bold text-center mb-3">Bajaruvchi "Interno Edu"</p>
-              <p className="text-xs text-slate-600">Manzil: Toshkent shahri, Mirzo Ulug'bek tumani, Xirmontepa ko'chasi, 34B-uy</p>
-              <p className="text-xs text-slate-600">Hisob raqami: 2020 8000 7053 5951 4001</p>
-              <p className="text-xs text-slate-600">Bank: ATB "Orient Finans", MFO: 01071</p>
-              <p className="text-xs text-slate-600">STIR (INN): 308 290 853</p>
-              <p className="text-xs text-slate-600">SOEID (OKED): 85590</p>
-              <p className="text-xs text-slate-600 mt-1">Telefon: +998 94 676 88 58</p>
+              <p className="font-bold text-center mb-3">{isRu ? 'Исполнитель "Interno Edu"' : 'Bajaruvchi "Interno Edu"'}</p>
+              <p className="text-xs text-slate-600">{isRu ? 'Адрес: г. Ташкент, Мирзо-Улугбекский район, ул. Хирмонтепа, дом 34Б' : "Manzil: Toshkent shahri, Mirzo Ulug'bek tumani, Xirmontepa ko'chasi, 34B-uy"}</p>
+              <p className="text-xs text-slate-600">{isRu ? 'Расчётный счёт' : 'Hisob raqami'}: 2020 8000 7053 5951 4001</p>
+              <p className="text-xs text-slate-600">{isRu ? 'Банк: АТБ "Ориент Финанс", МФО: 01071' : 'Bank: ATB "Orient Finans", MFO: 01071'}</p>
+              <p className="text-xs text-slate-600">{isRu ? 'ИНН' : 'STIR (INN)'}: 308 290 853</p>
+              <p className="text-xs text-slate-600">{isRu ? 'ОКЭД' : 'SOEID (OKED)'}: 85590</p>
+              <p className="text-xs text-slate-600 mt-1">{isRu ? 'Телефон' : 'Telefon'}: +998 94 676 88 58</p>
               <div className="mt-3 pt-2 border-t border-slate-100">
-                <p className="text-xs text-slate-600">Bosh direktor</p>
-                <p className="text-xs text-slate-600 font-medium">Toshpulatov A.A.</p>
+                <p className="text-xs text-slate-600">{isRu ? 'Генеральный директор' : 'Bosh direktor'}</p>
+                <p className="text-xs text-slate-600 font-medium">{isRu ? 'Тошпулатов А.А.' : 'Toshpulatov A.A.'}</p>
               </div>
             </div>
             <div className="text-sm border border-slate-200 rounded-lg p-3">
-              <p className="font-bold text-center mb-3">Buyurtmachi</p>
+              <p className="font-bold text-center mb-3">{isRu ? 'Заказчик' : 'Buyurtmachi'}</p>
               <p className="text-xs text-slate-600 font-medium">{payment.student}</p>
-              <p className="text-xs text-slate-600">Manzil: Toshkent</p>
-              <p className="text-xs text-slate-600">Pasport: {payment.passport || '___'}</p>
-              <p className="text-xs text-slate-600">Tel: {payment.phone || '___'}</p>
+              <p className="text-xs text-slate-600">{isRu ? 'Адрес: Ташкент' : 'Manzil: Toshkent'}</p>
+              <p className="text-xs text-slate-600">{isRu ? 'Паспорт' : 'Pasport'}: {payment.passport || '___'}</p>
+              <p className="text-xs text-slate-600">{isRu ? 'Тел' : 'Tel'}: {payment.phone || '___'}</p>
 
               {signed && signatureData ? (
                 <div className="mt-3 p-2 bg-emerald-50 rounded-lg border border-emerald-200">
                   <img src={signatureData} alt="Imzo" className="h-14 object-contain mx-auto" />
-                  <p className="text-xs text-emerald-600 font-semibold text-center mt-1">✓ Elektron imzo qo'yilgan</p>
+                  <p className="text-xs text-emerald-600 font-semibold text-center mt-1">{isRu ? '✓ Электронная подпись поставлена' : "✓ Elektron imzo qo'yilgan"}</p>
                   {payment.signedAt && (
                     <p className="text-[10px] text-emerald-500 text-center">{new Date(payment.signedAt).toLocaleString('ru-RU')}</p>
                   )}
@@ -276,11 +315,11 @@ export default function ContractSign() {
           {/* Sign Action */}
           {!signed && (
             <div className="mt-6 pt-4 border-t border-blue-200">
-              <p className="text-sm font-semibold text-blue-800 mb-3">Imzo qo'yish / Подпись</p>
+              <p className="text-sm font-semibold text-blue-800 mb-3">{isRu ? 'Подпись' : "Imzo qo'yish"}</p>
               {!signing ? (
                 <button onClick={initCanvas}
                   className="w-full py-4 border-2 border-dashed border-blue-400 rounded-xl text-blue-600 font-medium hover:bg-blue-50 transition-colors text-sm">
-                  ✍ Imzo qo'yish uchun bosing / Нажмите для подписи
+                  {isRu ? '✍ Нажмите для подписи' : "✍ Imzo qo'yish uchun bosing"}
                 </button>
               ) : (
                 <div className="space-y-3">
@@ -320,11 +359,11 @@ export default function ContractSign() {
                   <div className="flex gap-2">
                     <button onClick={clearCanvas}
                       className="flex-1 px-4 py-2.5 text-sm text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 font-medium">
-                      Tozalash / Очистить
+                      {isRu ? 'Очистить' : 'Tozalash'}
                     </button>
                     <button onClick={handleSign} disabled={saving}
                       className="flex-1 px-4 py-2.5 text-sm text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 font-medium disabled:opacity-50">
-                      {saving ? '...' : "✓ Tasdiqlash / Подтвердить"}
+                      {saving ? '...' : (isRu ? '✓ Подтвердить' : '✓ Tasdiqlash')}
                     </button>
                   </div>
                 </div>
@@ -334,8 +373,7 @@ export default function ContractSign() {
 
           {signed && (
             <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-              <p className="text-emerald-700 font-semibold">✓ Shartnoma muvaffaqiyatli imzolandi</p>
-              <p className="text-emerald-600 text-sm mt-1">Договор успешно подписан</p>
+              <p className="text-emerald-700 font-semibold">{isRu ? '✓ Договор успешно подписан' : '✓ Shartnoma muvaffaqiyatli imzolandi'}</p>
             </div>
           )}
         </div>
