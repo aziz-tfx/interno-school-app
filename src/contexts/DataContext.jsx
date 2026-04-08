@@ -262,6 +262,11 @@ export function DataProvider({ children }) {
           lmsUpdate.lmsAccess = true
         }
 
+        // Extend LMS access for 6 months from payment date on every payment
+        const payDate = new Date(payment.date || new Date())
+        payDate.setMonth(payDate.getMonth() + 6)
+        lmsUpdate.lmsExpiresAt = payDate.toISOString()
+
         // Also update totalCoursePrice if provided and student doesn't have one
         const priceUpdate = {}
         if (payment.totalCoursePrice && !student.totalCoursePrice) {
@@ -331,6 +336,10 @@ export function DataProvider({ children }) {
 
   const updatePayment = async (id, updates) => {
     await updateDoc(doc(db, 'payments', id), updates)
+  }
+
+  const deletePayment = async (id) => {
+    await deleteDoc(doc(db, 'payments', id))
   }
 
   // --- Attendance ---
@@ -541,7 +550,7 @@ export function DataProvider({ children }) {
       groups, addGroup, updateGroup, deleteGroup, getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
       students, addStudent, updateStudent, deleteStudent,
       teachers, addTeacher, updateTeacher, deleteTeacher,
-      payments: paymentsList, addPayment, updatePayment,
+      payments: paymentsList, addPayment, updatePayment, deletePayment,
       attendance, markAttendance, getAttendanceByGroup, getAttendanceStats,
       getStudentsByBranch, getTeachersByBranch, getPaymentsByBranch,
       getDebtors, getTotalRevenue, getTotalExpenses,

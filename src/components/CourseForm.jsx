@@ -37,6 +37,7 @@ export default function CourseForm({ course, onClose, onSave }) {
     featuresText: '',
   })
   const [pricing, setPricing] = useState(buildDefaultPricing())
+  const [durationByRegion, setDurationByRegion] = useState({})
 
   useEffect(() => {
     if (course) {
@@ -50,6 +51,10 @@ export default function CourseForm({ course, onClose, onSave }) {
       // Deep clone pricing
       if (course.pricing) {
         setPricing(JSON.parse(JSON.stringify(course.pricing)))
+      }
+      // Load per-region durations
+      if (course.durationByRegion) {
+        setDurationByRegion({ ...course.durationByRegion })
       }
     }
   }, [course])
@@ -145,6 +150,7 @@ export default function CourseForm({ course, onClose, onSave }) {
       name: form.name,
       icon: form.icon,
       duration: form.duration,
+      durationByRegion: Object.keys(durationByRegion).length > 0 ? durationByRegion : null,
       description: form.description || '',
       features,
       pricing: cleanedPricing,
@@ -201,6 +207,47 @@ export default function CourseForm({ course, onClose, onSave }) {
               <option key={m} value={`${m} мес`}>{m} мес</option>
             ))}
           </select>
+          <p className="text-[10px] text-slate-400 mt-1">Общий срок (по умолчанию)</p>
+        </div>
+
+        {/* Per-region duration overrides */}
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Срок обучения по регионам</label>
+          <div className="grid grid-cols-3 gap-3">
+            {REGION_OPTIONS.map(r => {
+              const regionLabel = t(r.tKey)
+              const val = durationByRegion[r.key] || ''
+              return (
+                <div key={r.key} className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 min-w-[90px]">
+                    <r.icon size={12} className="text-slate-400" />
+                    <span className="text-xs text-slate-600">{regionLabel}</span>
+                  </div>
+                  <select
+                    value={val}
+                    onChange={e => {
+                      const v = e.target.value
+                      setDurationByRegion(prev => {
+                        if (!v) {
+                          const copy = { ...prev }
+                          delete copy[r.key]
+                          return copy
+                        }
+                        return { ...prev, [r.key]: v }
+                      })
+                    }}
+                    className="flex-1 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">— по умолч.</option>
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                      <option key={m} value={`${m} мес`}>{m} мес</option>
+                    ))}
+                  </select>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1.5">Если не указано — используется общий срок выше</p>
         </div>
 
         <div className="col-span-2">

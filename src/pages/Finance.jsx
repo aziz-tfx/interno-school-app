@@ -4,7 +4,7 @@ import {
   DollarSign, Plus, CreditCard, FileBarChart, TrendingUp, TrendingDown,
   Users, Target, BarChart3, ArrowUpRight, ArrowDownRight, Eye,
   ChevronLeft, ChevronRight, Filter, ShoppingCart, UserCheck, Phone,
-  Percent, CalendarDays,
+  Percent, CalendarDays, Pencil, Save, X, Trash2,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
@@ -32,7 +32,7 @@ export default function Finance() {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const { user, hasPermission, employees, getSalesStaff } = useAuth()
-  const { branches, payments, getSalesPlan, getManagerPerf } = useData()
+  const { branches, payments, getSalesPlan, getManagerPerf, updatePayment, deletePayment, courses } = useData()
 
   function formatRevenue(val) {
     if (val == null || val === 0) return '0'
@@ -55,6 +55,61 @@ export default function Finance() {
   const [paymentModal, setPaymentModal] = useState(false)
   const [paymentType, setPaymentType] = useState('new') // 'new' | 'doplata'
   const [branchFilter, setBranchFilter] = useState(user?.branch !== 'all' ? user.branch : 'all')
+  const [editingPayment, setEditingPayment] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [editSaving, setEditSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const EDIT_METHODS = ['Наличные', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
+
+  const openEditPayment = (p) => {
+    setEditForm({
+      student: p.student || '',
+      phone: p.phone || '',
+      course: p.course || '',
+      amount: p.amount || 0,
+      method: p.method || 'Наличные',
+      date: p.date || '',
+      courseStartDate: p.courseStartDate || '',
+      contractNumber: p.contractNumber || '',
+      tariff: p.tariff || '',
+      discount: p.discount || '',
+      learningFormat: p.learningFormat || 'Оффлайн',
+      comment: p.comment || '',
+      debt: p.debt || 0,
+      branch: p.branch || 'tashkent',
+      nextPaymentDate: p.nextPaymentDate || '',
+    })
+    setEditingPayment(p)
+  }
+
+  const saveEditPayment = async () => {
+    if (!editingPayment) return
+    setEditSaving(true)
+    try {
+      await updatePayment(editingPayment.id, {
+        student: editForm.student,
+        phone: editForm.phone,
+        course: editForm.course,
+        amount: Number(editForm.amount) || 0,
+        method: editForm.method,
+        date: editForm.date,
+        courseStartDate: editForm.courseStartDate,
+        contractNumber: editForm.contractNumber,
+        tariff: editForm.tariff,
+        discount: editForm.discount,
+        learningFormat: editForm.learningFormat,
+        comment: editForm.comment,
+        debt: Number(editForm.debt) || 0,
+        branch: editForm.branch,
+        nextPaymentDate: editForm.nextPaymentDate,
+      })
+      setEditingPayment(null)
+    } catch (err) {
+      console.error('Failed to update payment:', err)
+    }
+    setEditSaving(false)
+  }
 
   // Time filter
   const now = new Date()
@@ -209,6 +264,22 @@ export default function Finance() {
     })
   }, [managerKPIs])
 
+  // ─── Real revenue from actual payments (source of truth) ─────────────────
+  const realRevenueData = useMemo(() => {
+    let filtered = payments.filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey))
+    if (branchFilter !== 'all') filtered = filtered.filter(p => p.branch === branchFilter)
+    if (isSales && user?.managerId) filtered = filtered.filter(p => p.managerId === user.managerId)
+    if ((isRop || isBranchDirector) && user.branch !== 'all') {
+      filtered = filtered.filter(p => p.branch === user.branch)
+    }
+    const revenue = filtered.reduce((sum, p) => sum + (p.amount || 0), 0)
+    const salesCount = filtered.length
+    const doplata = filtered.filter(p => (p.trancheNumber || 1) > 1).reduce((s, p) => s + p.amount, 0)
+    const offlineCount = filtered.filter(p => p.learningFormat === 'Оффлайн').length
+    const onlineCount = filtered.filter(p => p.learningFormat === 'Онлайн').length
+    return { revenue, salesCount, doplata, offlineCount, onlineCount }
+  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user])
+
   // ─── Month navigation ──────────────────────────────────────────────────
   const prevMonth = () => {
     if (selectedMonth === 1) { setSelectedYear(y => y - 1); setSelectedMonth(12) }
@@ -330,11 +401,11 @@ export default function Finance() {
               <div className="p-1.5 bg-emerald-50 rounded-lg"><TrendingUp size={16} className="text-emerald-600" /></div>
               <span className="text-xs text-slate-500">{t('finance.fact_revenue')}</span>
             </div>
-            <p className="text-lg font-bold text-emerald-600">{formatRevenue(teamTotals.actualRevenue)}</p>
+            <p className="text-lg font-bold text-emerald-600">{formatRevenue(realRevenueData.revenue)}</p>
             <p className={`text-xs font-semibold ${teamTotals.planRevenue > 0
-              ? statusColor(Math.round(teamTotals.actualRevenue / teamTotals.planRevenue * 100))
+              ? statusColor(Math.round(realRevenueData.revenue / teamTotals.planRevenue * 100))
               : 'text-slate-400'}`}>
-              {teamTotals.planRevenue > 0 ? `${Math.round(teamTotals.actualRevenue / teamTotals.planRevenue * 100)}%` : '—'}
+              {teamTotals.planRevenue > 0 ? `${Math.round(realRevenueData.revenue / teamTotals.planRevenue * 100)}%` : '—'}
             </p>
           </div>
           <div className="glass-card rounded-2xl p-4">
@@ -342,14 +413,14 @@ export default function Finance() {
               <div className="p-1.5 bg-purple-50 rounded-lg"><ShoppingCart size={16} className="text-purple-600" /></div>
               <span className="text-xs text-slate-500">{t('finance.sales_label')}</span>
             </div>
-            <p className="text-lg font-bold text-slate-900">{teamTotals.actualSales} <span className="text-sm text-slate-400">/ {teamTotals.planSales}</span></p>
+            <p className="text-lg font-bold text-slate-900">{realRevenueData.salesCount} <span className="text-sm text-slate-400">/ {teamTotals.planSales}</span></p>
           </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-amber-50 rounded-lg"><CreditCard size={16} className="text-amber-600" /></div>
               <span className="text-xs text-slate-500">{t('finance.expected_doplata')}</span>
             </div>
-            <p className="text-lg font-bold text-amber-600">{formatRevenue(teamTotals.totalDoplata)}</p>
+            <p className="text-lg font-bold text-amber-600">{formatRevenue(realRevenueData.doplata)}</p>
           </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -357,9 +428,9 @@ export default function Finance() {
               <span className="text-xs text-slate-500">{t('finance.visitors')}</span>
             </div>
             <p className="text-lg font-bold text-slate-900">
-              <span className="text-cyan-600">{teamTotals.offlineCount}</span>
+              <span className="text-cyan-600">{realRevenueData.offlineCount}</span>
               <span className="text-xs text-slate-400 mx-1">{t('finance.off')}</span>
-              <span className="text-blue-600">{teamTotals.onlineCount}</span>
+              <span className="text-blue-600">{realRevenueData.onlineCount}</span>
               <span className="text-xs text-slate-400 ml-1">{t('finance.onl')}</span>
             </p>
           </div>
@@ -522,7 +593,7 @@ export default function Finance() {
         ) : (
           <div className="space-y-2">
             {recentTransactions.map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-2.5 px-4 bg-emerald-50/60 rounded-xl hover:bg-emerald-50 transition-colors">
+              <div key={p.id} className="flex items-center justify-between py-2.5 px-4 bg-emerald-50/60 rounded-xl hover:bg-emerald-50 transition-colors group">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-900 truncate">{p.student}</p>
                   <p className="text-xs text-slate-500">
@@ -531,9 +602,18 @@ export default function Finance() {
                     {p.trancheNumber > 1 ? ` · ${t('finance.tranche_number')}${p.trancheNumber}` : ''}
                   </p>
                 </div>
-                <div className="text-right flex-shrink-0 ml-3">
-                  <span className="text-sm font-bold text-emerald-600">+{formatCurrency(p.amount)}</span>
-                  {p.debt > 0 && <p className="text-xs text-red-500">{t('finance.debt_label')} {formatCurrency(p.debt)}</p>}
+                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-emerald-600">+{formatCurrency(p.amount)}</span>
+                    {p.debt > 0 && <p className="text-xs text-red-500">{t('finance.debt_label')} {formatCurrency(p.debt)}</p>}
+                  </div>
+                  {canPayments && (
+                    <button onClick={() => openEditPayment(p)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
+                      title="Редактировать">
+                      <Pencil size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -545,6 +625,175 @@ export default function Finance() {
       <Modal isOpen={paymentModal} onClose={() => setPaymentModal(false)}
         title={paymentType === 'doplata' ? t('finance.modal_doplata') : t('finance.modal_new_sale')} size="lg">
         <PaymentForm onClose={() => setPaymentModal(false)} mode={paymentType} />
+      </Modal>
+
+      {/* ─── Edit Payment Modal ────────────────────────────────────────── */}
+      <Modal isOpen={!!editingPayment} onClose={() => setEditingPayment(null)} title="Редактирование продажи" size="lg">
+        {editingPayment && (
+          <div className="space-y-5">
+            {/* Student & Contact */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Имя клиента</label>
+                <input type="text" value={editForm.student}
+                  onChange={e => setEditForm(prev => ({ ...prev, student: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Телефон</label>
+                <input type="text" value={editForm.phone}
+                  onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            {/* Course & Amount */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Курс</label>
+                <select value={editForm.course}
+                  onChange={e => setEditForm(prev => ({ ...prev, course: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  {courses.map(c => <option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Сумма</label>
+                <input type="number" value={editForm.amount}
+                  onChange={e => setEditForm(prev => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            {/* Method & Branch */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Способ оплаты</label>
+                <select value={editForm.method}
+                  onChange={e => setEditForm(prev => ({ ...prev, method: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {EDIT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Филиал</label>
+                <select value={editForm.branch}
+                  onChange={e => setEditForm(prev => ({ ...prev, branch: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Dates */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Дата оплаты</label>
+                <input type="date" value={editForm.date}
+                  onChange={e => setEditForm(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Старт курса</label>
+                <input type="date" value={editForm.courseStartDate}
+                  onChange={e => setEditForm(prev => ({ ...prev, courseStartDate: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">След. оплата</label>
+                <input type="date" value={editForm.nextPaymentDate}
+                  onChange={e => setEditForm(prev => ({ ...prev, nextPaymentDate: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            {/* Contract, Tariff, Format */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Номер договора</label>
+                <input type="text" value={editForm.contractNumber}
+                  onChange={e => setEditForm(prev => ({ ...prev, contractNumber: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Тариф</label>
+                <input type="text" value={editForm.tariff}
+                  onChange={e => setEditForm(prev => ({ ...prev, tariff: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Формат</label>
+                <select value={editForm.learningFormat}
+                  onChange={e => setEditForm(prev => ({ ...prev, learningFormat: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="Оффлайн">Оффлайн</option>
+                  <option value="Онлайн">Онлайн</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Debt & Comment */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Долг</label>
+                <input type="number" value={editForm.debt}
+                  onChange={e => setEditForm(prev => ({ ...prev, debt: e.target.value }))}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Комментарий</label>
+                <input type="text" value={editForm.comment}
+                  onChange={e => setEditForm(prev => ({ ...prev, comment: e.target.value }))}
+                  placeholder="Комментарий..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+              <div>
+                {!confirmDelete ? (
+                  <button onClick={() => setConfirmDelete(true)}
+                    className="px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1.5">
+                    <Trash2 size={14} /> Удалить
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-500">Удалить продажу?</span>
+                    <button onClick={async () => {
+                      await deletePayment(editingPayment.id)
+                      setEditingPayment(null)
+                      setConfirmDelete(false)
+                    }}
+                      className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                      Да, удалить
+                    </button>
+                    <button onClick={() => setConfirmDelete(false)}
+                      className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+                      Отмена
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setEditingPayment(null); setConfirmDelete(false) }}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1.5">
+                  <X size={14} /> Отмена
+                </button>
+                <button onClick={saveEditPayment} disabled={editSaving}
+                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-lg shadow-blue-500/25">
+                  {editSaving ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Save size={14} />
+                  )}
+                  Сохранить
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

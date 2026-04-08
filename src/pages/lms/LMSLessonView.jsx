@@ -6,8 +6,9 @@ import { useLanguage } from '../../contexts/LanguageContext'
 import {
   ArrowLeft, ChevronLeft, ChevronRight, CheckCircle2,
   BookOpen, Play, FileText, Link2, Download, Video,
-  Clock, Award, Send, Pencil, AlertCircle, Shield
+  Clock, Award, Send, Pencil, AlertCircle, Shield, Lock
 } from 'lucide-react'
+import { isLessonAccessible } from '../../utils/lessonAccess'
 
 // ─── Content Protection Hook ────────────────────────────────────────
 function useContentProtection(enabled = true) {
@@ -98,22 +99,42 @@ function Watermark({ studentName }) {
   )
 }
 
-// Parse YouTube URL to embed format
-function getYouTubeEmbedUrl(url) {
+// ─── Kinescope API token ────────────────────────────────────────────
+const KINESCOPE_API_TOKEN = 'ec80a9c2-3234-41c6-a25c-b1cef8b4e71d'
+
+// Parse video URL — supports Kinescope, YouTube, and direct URLs
+function parseVideoUrl(url) {
   if (!url) return null
+
+  // Kinescope: kinescope.io/... or just a UUID
+  const kinescopeMatch = url.match(/kinescope\.io\/(?:embed\/)?([a-zA-Z0-9-]+)/)
+  if (kinescopeMatch) return { type: 'kinescope', id: kinescopeMatch[1] }
+
+  // Pure UUID (likely Kinescope video ID pasted directly)
+  if (/^[a-f0-9-]{36}$/i.test(url.trim()) || /^[a-zA-Z0-9]{8,}$/.test(url.trim())) {
+    // Check if it looks like a Kinescope ID (not a YouTube 11-char ID)
+    if (url.trim().length > 11) return { type: 'kinescope', id: url.trim() }
+  }
+
+  // YouTube
   let videoId = null
   try {
     const u = new URL(url)
-    if (u.hostname.includes('youtube.com')) {
-      videoId = u.searchParams.get('v')
-    } else if (u.hostname === 'youtu.be') {
-      videoId = u.pathname.slice(1)
-    }
+    if (u.hostname.includes('youtube.com')) videoId = u.searchParams.get('v')
+    else if (u.hostname === 'youtu.be') videoId = u.pathname.slice(1)
   } catch {
     const match = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
     if (match) videoId = match[1]
   }
-  return videoId ? `https://www.youtube.com/embed/${videoId}` : null
+  if (videoId) return { type: 'youtube', id: videoId }
+
+  return null
+}
+
+function getYouTubeEmbedUrl(url) {
+  const parsed = parseVideoUrl(url)
+  if (parsed?.type === 'youtube') return `https://www.youtube.com/embed/${parsed.id}`
+  return null
 }
 
 export default function LMSLessonView() {
@@ -154,6 +175,33 @@ export default function LMSLessonView() {
     if (!isStudent) return null
     return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user, isStudent])
+
+  // Student's group (for access check)
+  const { payments, lmsModules } = useData()
+  const myGroup = useMemo(() => {
+    if (!myStudent) return null
+    return groups.find(g => g.name === myStudent.group || g.id === myStudent.groupId) || null
+  }, [myStudent, groups])
+
+  const studentDebt = useMemo(() => {
+    if (!myStudent) return 0
+    const totalPaid = (payments || [])
+      .filter(p => p.type === 'income' && String(p.studentId) === String(myStudent.id))
+      .reduce((s, p) => s + (p.amount || 0), 0)
+    return Math.max(0, (myStudent.totalCoursePrice || 0) - totalPaid)
+  }, [payments, myStudent])
+
+  const courseModules = useMemo(() => {
+    if (!course) return []
+    return (lmsModules || []).filter(m => m.courseId === course.id).sort((a, b) => (a.order || 0) - (b.order || 0))
+  }, [lmsModules, course])
+
+  const lessonAccess = useMemo(() => {
+    if (!isStudent || !lesson || !myStudent || !myGroup) return { accessible: true }
+    return isLessonAccessible({
+      lesson, student: myStudent, group: myGroup, modules: courseModules, debt: studentDebt
+    })
+  }, [isStudent, lesson, myStudent, myGroup, courseModules, studentDebt])
 
   // All lessons in the same course, sorted
   const allLessons = useMemo(() => {
@@ -238,6 +286,7 @@ export default function LMSLessonView() {
   }
 
   const embedUrl = getYouTubeEmbedUrl(lesson?.videoUrl)
+  const videoInfo = parseVideoUrl(lesson?.videoUrl)
 
   if (!lesson) {
     return (
@@ -245,6 +294,27 @@ export default function LMSLessonView() {
         <BookOpen size={48} className="mx-auto text-slate-300 mb-4" />
         <p className="text-slate-500">{t('lms.group_not_found')}</p>
         <button onClick={() => navigate('/lms')} className="mt-4 text-blue-600 hover:underline text-sm">{t('lms.go_back')}</button>
+      </div>
+    )
+  }
+
+  // ─── Access denied for locked lessons ───
+  if (isStudent && !lessonAccess.accessible) {
+    return (
+      <div className="max-w-md mx-auto text-center py-20">
+        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Lock size={32} className="text-slate-400" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800 mb-2">Урок заблокирован</h2>
+        <p className="text-slate-500 text-sm mb-6">
+          {lessonAccess.reason === 'debt'
+            ? 'Для доступа к записям уроков необходимо оплатить курс полностью'
+            : lessonAccess.message || 'Этот урок ещё не доступен'}
+        </p>
+        <button onClick={() => navigate(-1)}
+          className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
+          Назад
+        </button>
       </div>
     )
   }
@@ -306,7 +376,22 @@ export default function LMSLessonView() {
       </div>
 
       {/* Video player with protection */}
-      {embedUrl && (
+      {videoInfo?.type === 'kinescope' && (
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+            <iframe
+              src={`https://kinescope.io/embed/${videoInfo.id}?watermark_text=${encodeURIComponent((myStudent?.name || user?.name || '') + ' ' + (myStudent?.phone || ''))}&watermark_mode=viewer`}
+              title={lesson.title}
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+              allowFullScreen
+              className="absolute inset-0 w-full h-full border-0"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+        </div>
+      )}
+
+      {videoInfo?.type === 'youtube' && embedUrl && (
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
             <iframe
@@ -317,7 +402,6 @@ export default function LMSLessonView() {
               className="absolute inset-0 w-full h-full"
               sandbox="allow-scripts allow-same-origin allow-presentation"
             />
-            {/* Watermark overlay on video */}
             {isStudent && <Watermark studentName={myStudent?.name || user?.name} />}
           </div>
         </div>

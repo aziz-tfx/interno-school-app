@@ -11,7 +11,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore'
 import Logo from './Logo'
 import { useLanguage } from '../contexts/LanguageContext'
 
-const METHODS = ['Наличные', 'Payme', 'Click', 'Uzum']
+const METHODS = ['Наличные', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 const TARIFF_OPTIONS = [
   { tKey: 'paymentForm.tariff_standard', value: 'standard' },
   { tKey: 'paymentForm.tariff_vip', value: 'vip' },
@@ -134,7 +134,11 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       const group = groups.find(g => g.id === form.groupId)
       if (group) {
         const groupCourse = courses.find(c => c.name === group.course)
-        const courseDuration = groupCourse?.duration ? parseInt(groupCourse.duration) : null
+        const groupRegion = BRANCH_TO_REGION[group.branch] || 'tashkent'
+        const regionDur = groupCourse?.durationByRegion?.[groupRegion]
+        const courseDuration = regionDur
+          ? parseInt(regionDur)
+          : (groupCourse?.duration ? parseInt(groupCourse.duration) : null)
         setForm(prev => ({
           ...prev,
           course: group.course,

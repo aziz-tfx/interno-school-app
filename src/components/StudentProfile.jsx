@@ -6,7 +6,7 @@ import {
   User, Phone, BookOpen, Calendar, CreditCard, FileText,
   Image, Download, AlertTriangle, CheckCircle, Clock, Plus,
   ChevronDown, ChevronUp, Paperclip, Eye, Monitor, ToggleLeft, ToggleRight,
-  FileDown, ExternalLink,
+  FileDown, ExternalLink, Link2, Copy, Check,
 } from 'lucide-react'
 import Modal from './Modal'
 import PaymentForm from './PaymentForm'
@@ -24,6 +24,7 @@ export default function StudentProfile({ student, onClose }) {
   const [viewingFile, setViewingFile] = useState(null)
   const [viewingContract, setViewingContract] = useState(null)
   const [generatingDocx, setGeneratingDocx] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(null)
   const [editingPrice, setEditingPrice] = useState(false)
   const [coursePrice, setCoursePrice] = useState(student.totalCoursePrice || '')
 
@@ -101,6 +102,13 @@ export default function StudentProfile({ student, onClose }) {
                 ? student.status === 'active' ? t('studentProfile.lms_active') : t('studentProfile.lms_blocked')
                 : t('studentProfile.lms_inactive')}
             </p>
+            {student.lmsExpiresAt && (
+              <p className={`text-xs mt-0.5 ${new Date(student.lmsExpiresAt) < new Date() ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
+                {new Date(student.lmsExpiresAt) < new Date()
+                  ? `Доступ истёк: ${new Date(student.lmsExpiresAt).toLocaleDateString('ru-RU')}`
+                  : `Доступ до: ${new Date(student.lmsExpiresAt).toLocaleDateString('ru-RU')}`}
+              </p>
+            )}
           </div>
         </div>
         {canPayments && (
@@ -357,57 +365,95 @@ export default function StudentProfile({ student, onClose }) {
         </div>
       )}
 
-      {/* Signed Contracts */}
+      {/* Contracts */}
       {contractPayments.length > 0 && (
         <div>
           <h4 className="text-sm font-semibold text-slate-900 mb-3">Договоры ({contractPayments.length})</h4>
           <div className="space-y-2">
-            {contractPayments.map(p => (
-              <div key={p.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-3 border border-slate-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <FileText size={18} className="text-blue-600" />
+            {contractPayments.map(p => {
+              const signLink = `${window.location.origin}/contract/${p.id}`
+              const isSigned = !!p.signatureData
+              const isCopied = copiedLink === p.id
+
+              return (
+                <div key={p.id} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                  {/* Contract header row */}
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isSigned ? 'bg-emerald-100' : 'bg-blue-100'}`}>
+                        {isSigned
+                          ? <CheckCircle size={18} className="text-emerald-600" />
+                          : <FileText size={18} className="text-blue-600" />
+                        }
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">Шартнома №{p.contractNumber}</p>
+                        <p className="text-xs text-slate-500">{p.date} · {p.course} · {formatCurrency(p.amount)}</p>
+                      </div>
+                    </div>
+                    {isSigned ? (
+                      <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full font-medium">
+                        <CheckCircle size={12} /> Подписан
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full font-medium">
+                        <Clock size={12} /> Ожидает подписи
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">Шартнома №{p.contractNumber}</p>
-                    <p className="text-xs text-slate-500">{p.date} · {p.course} · {formatCurrency(p.amount)}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {p.signatureData && (
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-white border-t border-slate-100">
+                    {/* View contract */}
                     <button onClick={() => setViewingContract(p)}
-                      className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors">
-                      <ExternalLink size={12} /> Открыть
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors">
+                      <Eye size={13} /> Открыть
                     </button>
-                  )}
-                  <button onClick={async () => {
-                    setGeneratingDocx(true)
-                    try {
-                      await generateContract({
-                        clientName: p.student,
-                        passport: p.passport || '',
-                        phone: p.phone || '',
-                        course: p.course,
-                        amount: p.totalCoursePrice || p.amount,
-                        tariff: p.tariff,
-                        contractNumber: p.contractNumber,
-                        contractDate: p.date,
-                        courseStartDate: p.courseStartDate,
-                        durationMonths: Number(p.durationMonths) || 3,
-                        schedule: p.schedule || '',
-                        learningFormat: p.learningFormat || '',
-                        lang: p.contractLang || 'uz',
-                      })
-                    } catch (err) { console.error(err) }
-                    setGeneratingDocx(false)
-                  }}
-                    disabled={generatingDocx}
-                    className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors">
-                    <FileDown size={12} /> .docx
-                  </button>
+
+                    {/* Copy signing link */}
+                    <button onClick={() => {
+                      navigator.clipboard.writeText(signLink)
+                      setCopiedLink(p.id)
+                      setTimeout(() => setCopiedLink(null), 2000)
+                    }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        isCopied
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}>
+                      {isCopied ? <><Check size={13} /> Скопировано</> : <><Link2 size={13} /> Ссылка на подписание</>}
+                    </button>
+
+                    {/* Download .docx */}
+                    <button onClick={async () => {
+                      setGeneratingDocx(true)
+                      try {
+                        await generateContract({
+                          clientName: p.student,
+                          passport: p.passport || '',
+                          phone: p.phone || '',
+                          course: p.course,
+                          amount: p.totalCoursePrice || p.amount,
+                          tariff: p.tariff,
+                          contractNumber: p.contractNumber,
+                          contractDate: p.date,
+                          courseStartDate: p.courseStartDate,
+                          durationMonths: Number(p.durationMonths) || 3,
+                          schedule: p.schedule || '',
+                          learningFormat: p.learningFormat || '',
+                          lang: p.contractLang || 'uz',
+                        })
+                      } catch (err) { console.error(err) }
+                      setGeneratingDocx(false)
+                    }}
+                      disabled={generatingDocx}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                      <FileDown size={13} /> .docx
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

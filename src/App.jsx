@@ -20,6 +20,7 @@ import Integrations from './pages/Integrations'
 import ContractSign from './pages/ContractSign'
 import StudentCabinet from './pages/StudentCabinet'
 import Register from './pages/Register'
+import TelegramApp from './pages/TelegramApp'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/contract/:paymentId" element={<ContractSign />} />
+        <Route path="/tg" element={<TelegramApp />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     )
@@ -48,6 +50,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Navigate to="/" />} />
       <Route path="/contract/:paymentId" element={<ContractSign />} />
+      <Route path="/tg" element={<TelegramApp />} />
       <Route path="/" element={<Layout />}>
         <Route index element={homePage} />
         <Route path="dashboard" element={

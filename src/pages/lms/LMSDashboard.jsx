@@ -110,9 +110,10 @@ function LessonFormModal({ courseId, lesson, modules, onSave, onClose }) {
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.lesson_form_video')}</label>
-            <input type="url" value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)}
-              placeholder="https://youtube.com/watch?v=..."
+            <input type="text" value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)}
+              placeholder="Kinescope ID или YouTube ссылка"
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+            <p className="text-[10px] text-slate-400 mt-1">Kinescope: вставьте ID видео или ссылку · YouTube: вставьте ссылку</p>
           </div>
 
           {/* Materials */}
@@ -561,20 +562,24 @@ export default function LMSDashboard() {
     return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user, isStudent])
 
+  const lmsExpired = isStudent && myStudent?.lmsExpiresAt && new Date(myStudent.lmsExpiresAt) < new Date()
+
   const hasLmsAccess = useMemo(() => {
     if (!isStudent) return true
     if (!myStudent) return false
+    if (lmsExpired) return false
     return myStudent.lmsAccess === true && myStudent.status === 'active'
-  }, [isStudent, myStudent])
+  }, [isStudent, myStudent, lmsExpired])
 
   const isBlocked = isStudent && !hasLmsAccess
   const blockReason = useMemo(() => {
     if (!isStudent || !myStudent) return 'no_student'
+    if (lmsExpired) return 'expired'
     if (!myStudent.lmsAccess) return 'no_payment'
     if (myStudent.status === 'debtor') return 'debtor'
     if (myStudent.status === 'frozen') return 'frozen'
     return 'unknown'
-  }, [isStudent, myStudent])
+  }, [isStudent, myStudent, lmsExpired])
 
   const myGroups = useMemo(() => {
     if (isTeacher) {
@@ -744,20 +749,27 @@ export default function LMSDashboard() {
         </div>
         <div className="max-w-lg mx-auto text-center py-12">
           <div className={`w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center ${
-            blockReason === 'debtor' ? 'bg-red-100' : blockReason === 'frozen' ? 'bg-blue-100' : 'bg-amber-100'
+            blockReason === 'expired' ? 'bg-orange-100' : blockReason === 'debtor' ? 'bg-red-100' : blockReason === 'frozen' ? 'bg-blue-100' : 'bg-amber-100'
           }`}>
-            {blockReason === 'debtor' ? <CreditCard size={36} className="text-red-500" /> :
+            {blockReason === 'expired' ? <Clock size={36} className="text-orange-500" /> :
+             blockReason === 'debtor' ? <CreditCard size={36} className="text-red-500" /> :
              blockReason === 'frozen' ? <ShieldX size={36} className="text-blue-500" /> :
              <Lock size={36} className="text-amber-500" />}
           </div>
           <h3 className="text-xl font-bold text-slate-900 mb-2">
-            {blockReason === 'debtor' ? t('lms.access_suspended') :
+            {blockReason === 'expired' ? 'Срок доступа истёк' :
+             blockReason === 'debtor' ? t('lms.access_suspended') :
              blockReason === 'frozen' ? t('lms.learning_frozen') : t('lms.access_not_activated')}
           </h3>
           <p className="text-slate-500 mb-6 leading-relaxed">
-            {blockReason === 'debtor' ? t('lms.suspended_reason') :
-             blockReason === 'frozen' ? t('lms.frozen_reason') : t('lms.not_activated_reason')}
+            {blockReason === 'expired'
+              ? 'Ваш 6-месячный доступ к записям уроков истёк. Для продления обратитесь к администратору или произведите оплату.'
+              : blockReason === 'debtor' ? t('lms.suspended_reason')
+              : blockReason === 'frozen' ? t('lms.frozen_reason') : t('lms.not_activated_reason')}
           </p>
+          {blockReason === 'expired' && myStudent?.lmsExpiresAt && (
+            <p className="text-sm text-orange-600 mb-4">Доступ истёк: {new Date(myStudent.lmsExpiresAt).toLocaleDateString('ru-RU')}</p>
+          )}
           <div className="glass-card rounded-2xl p-5 text-left space-y-3">
             <h4 className="text-sm font-semibold text-slate-700">{t('lms.info')}</h4>
             {myStudent && (

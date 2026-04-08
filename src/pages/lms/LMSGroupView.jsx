@@ -6,8 +6,9 @@ import { useLanguage } from '../../contexts/LanguageContext'
 import {
   ArrowLeft, BookOpen, FileText, CheckCircle2, Bell, Plus, Pencil, Trash2, X,
   Clock, Calendar, Upload, Download, Users, ChevronDown, ChevronUp, Send, Award,
-  Video, Link2, File, Image as ImageIcon, ExternalLink, Settings2, Save, Info, CheckCircle
+  Video, Link2, File, Image as ImageIcon, ExternalLink, Settings2, Save, Info, CheckCircle, Lock
 } from 'lucide-react'
+import { isLessonAccessible, isModuleUnlocked, getUnlockedModuleCount } from '../../utils/lessonAccess'
 
 // ─── Lesson Form ─────────────────────────────────────────────────────
 function LessonForm({ lesson, groupId, courseId, onSave, onClose }) {
@@ -84,9 +85,10 @@ function LessonForm({ lesson, groupId, courseId, onSave, onClose }) {
 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">{t('lms.lesson_form_video')}</label>
-        <input type="url" value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)}
-          placeholder="https://youtube.com/watch?v=..."
+        <input type="text" value={form.videoUrl} onChange={e => set('videoUrl', e.target.value)}
+          placeholder="Kinescope ID или YouTube ссылка"
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <p className="text-[10px] text-slate-400 mt-1">Kinescope: вставьте ID видео или ссылку · YouTube: вставьте ссылку на видео</p>
       </div>
 
       {/* Materials */}
@@ -620,9 +622,25 @@ export default function LMSGroupView() {
   const group = groups.find(g => g.id === groupId)
   const course = courses.find(c => c.name === group?.course)
 
-  // Check student LMS access
+  // Check student LMS access (including 6-month expiry)
   const myStudent = isStudent ? students.find(s => s.name === user?.name || s.phone === user?.phone) : null
-  const studentBlocked = isStudent && (!myStudent || myStudent.lmsAccess !== true || myStudent.status !== 'active')
+  const lmsExpired = isStudent && myStudent?.lmsExpiresAt && new Date(myStudent.lmsExpiresAt) < new Date()
+  const studentBlocked = isStudent && (!myStudent || myStudent.lmsAccess !== true || myStudent.status !== 'active' || lmsExpired)
+
+  // Student debt for lesson access control
+  const { payments, lmsModules } = useData()
+  const studentDebt = useMemo(() => {
+    if (!isStudent || !myStudent) return 0
+    const totalPaid = (payments || [])
+      .filter(p => p.type === 'income' && String(p.studentId) === String(myStudent.id))
+      .reduce((s, p) => s + (p.amount || 0), 0)
+    return Math.max(0, (myStudent.totalCoursePrice || 0) - totalPaid)
+  }, [payments, myStudent, isStudent])
+
+  const courseModules = useMemo(() => {
+    if (!course) return []
+    return (lmsModules || []).filter(m => m.courseId === course.id).sort((a, b) => (a.order || 0) - (b.order || 0))
+  }, [lmsModules, course])
 
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'lessons')
   const [showModal, setShowModal] = useState(searchParams.get('action') || null)
@@ -660,20 +678,24 @@ export default function LMSGroupView() {
     )
   }
 
-  // Block student from accessing group content if debtor/frozen/no access
+  // Block student from accessing group content if debtor/frozen/no access/expired
   if (studentBlocked) {
     return (
       <div className="text-center py-20">
-        <div className="w-16 h-16 rounded-2xl bg-red-100 mx-auto mb-4 flex items-center justify-center">
-          <X size={28} className="text-red-500" />
+        <div className={`w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center ${lmsExpired ? 'bg-orange-100' : 'bg-red-100'}`}>
+          <X size={28} className={lmsExpired ? 'text-orange-500' : 'text-red-500'} />
         </div>
-        <h3 className="text-lg font-bold text-slate-900 mb-2">{t('lms.access_restricted')}</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-2">
+          {lmsExpired ? 'Срок доступа истёк' : t('lms.access_restricted')}
+        </h3>
         <p className="text-slate-500 text-sm max-w-sm mx-auto">
-          {myStudent?.status === 'debtor'
-            ? t('lms.blocked_debtor')
-            : myStudent?.status === 'frozen'
-              ? t('lms.blocked_frozen')
-              : t('lms.blocked_no_payment')}
+          {lmsExpired
+            ? 'Ваш 6-месячный доступ к записям уроков истёк. Для продления обратитесь к администратору.'
+            : myStudent?.status === 'debtor'
+              ? t('lms.blocked_debtor')
+              : myStudent?.status === 'frozen'
+                ? t('lms.blocked_frozen')
+                : t('lms.blocked_no_payment')}
         </p>
         <button onClick={() => navigate('/lms')} className="text-blue-600 text-sm mt-4 hover:underline">← {t('lms.back')}</button>
       </div>
@@ -768,24 +790,35 @@ export default function LMSGroupView() {
               {canEdit && <p className="text-xs mt-1">{t('lms.add_first_lesson')}</p>}
             </div>
           ) : (
-            lessons.map((lesson, i) => (
-              <div key={lesson.id} className="glass-card rounded-xl overflow-hidden">
+            lessons.map((lesson, i) => {
+              const lessonLocked = isStudent && !isLessonAccessible({
+                lesson, student: myStudent, group, modules: courseModules, debt: studentDebt
+              }).accessible
+              return (
+              <div key={lesson.id} className={`glass-card rounded-xl overflow-hidden ${lessonLocked ? 'opacity-60' : ''}`}>
                 <button
-                  onClick={() => setExpandedLesson(expandedLesson === lesson.id ? null : lesson.id)}
-                  className="w-full flex items-center gap-3 p-4 text-left hover:bg-white/30 transition-colors"
+                  onClick={() => !lessonLocked && setExpandedLesson(expandedLesson === lesson.id ? null : lesson.id)}
+                  disabled={lessonLocked}
+                  className={`w-full flex items-center gap-3 p-4 text-left transition-colors ${
+                    lessonLocked ? 'cursor-not-allowed' : 'hover:bg-white/30'
+                  }`}
                 >
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-600 flex-shrink-0">
-                    {lesson.order || i + 1}
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                    lessonLocked ? 'bg-slate-100 text-slate-400' : 'bg-blue-100 text-blue-600'
+                  }`}>
+                    {lessonLocked ? <Lock size={14} /> : (lesson.order || i + 1)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-slate-900 text-sm truncate">{lesson.title}</h4>
+                    <h4 className={`font-semibold text-sm truncate ${lessonLocked ? 'text-slate-400' : 'text-slate-900'}`}>{lesson.title}</h4>
                     {lesson.description && <p className="text-xs text-slate-500 truncate">{lesson.description}</p>}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-400">{lesson.date}</span>
-                    {lesson.videoUrl && <Video size={14} className="text-red-400" />}
-                    {lesson.materials?.length > 0 && <File size={14} className="text-slate-400" />}
-                    {expandedLesson === lesson.id ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                    {!lessonLocked && lesson.videoUrl && <Video size={14} className="text-red-400" />}
+                    {!lessonLocked && lesson.materials?.length > 0 && <File size={14} className="text-slate-400" />}
+                    {lessonLocked
+                      ? <Lock size={14} className="text-slate-400" />
+                      : expandedLesson === lesson.id ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
                   </div>
                 </button>
 
@@ -834,7 +867,7 @@ export default function LMSGroupView() {
                   </div>
                 )}
               </div>
-            ))
+            )})
           )}
         </div>
       )}

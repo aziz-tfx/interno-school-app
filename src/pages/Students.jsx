@@ -715,7 +715,10 @@ export default function Students() {
                 const teacher = group.teacherId ? teachers.find(tc => tc.id === group.teacherId) : null
                 const isExpanded = expandedGroup === group.id
                 const groupStudentsList = getGroupStudents(group.name)
-                const courseDuration = courses.find(c => c.name === group.course)?.duration
+                const groupCourseObj = courses.find(c => c.name === group.course)
+                const groupRegion = { tashkent: 'tashkent', samarkand: 'fergana', fergana: 'fergana', bukhara: 'fergana', online: 'online' }[group.branch] || 'tashkent'
+                const regionDur = groupCourseObj?.durationByRegion?.[groupRegion]
+                const courseDuration = regionDur || groupCourseObj?.duration
                 const durationMonths = courseDuration ? parseInt(courseDuration) : 0
                 const endDate = group.startDate && durationMonths ? (() => {
                   const d = new Date(group.startDate); d.setMonth(d.getMonth() + durationMonths); return d.toISOString().split('T')[0]

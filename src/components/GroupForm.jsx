@@ -18,6 +18,14 @@ const TIME_PRESETS = [
   '15:00', '16:00', '17:00', '18:00', '19:00', '20:00',
 ]
 
+const BRANCH_TO_REGION = {
+  tashkent: 'tashkent',
+  samarkand: 'fergana',
+  fergana: 'fergana',
+  bukhara: 'fergana',
+  online: 'online',
+}
+
 export default function GroupForm({ group, onClose }) {
   const { branches, teachers, courses, rooms, groups, addGroup, updateGroup } = useData()
   const { user } = useAuth()
@@ -111,9 +119,13 @@ export default function GroupForm({ group, onClose }) {
     set('schedule', scheduleStr)
   }, [selectedDays, timeFrom, timeTo])
 
-  // Auto-calculate endDate from startDate + course duration
+  // Auto-calculate endDate from startDate + course duration (region-aware)
   const selectedCourse = courses.find(c => c.name === form.course)
-  const courseDuration = selectedCourse?.duration ? parseInt(selectedCourse.duration) : 0
+  const region = BRANCH_TO_REGION[form.branch] || 'tashkent'
+  const regionDuration = selectedCourse?.durationByRegion?.[region]
+  const courseDuration = regionDuration
+    ? parseInt(regionDuration)
+    : (selectedCourse?.duration ? parseInt(selectedCourse.duration) : 0)
   const endDate = form.startDate && courseDuration
     ? (() => {
         const d = new Date(form.startDate)
