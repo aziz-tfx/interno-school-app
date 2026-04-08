@@ -276,22 +276,7 @@ export function AuthProvider({ children }) {
         return
       }
 
-      const list = snapshot.docs.map((d) => d.data())
-
-      // Auto-add missing default employees (e.g. student1 test account)
-      const missingDefaults = DEFAULT_EMPLOYEES.filter(
-        def => !list.some(e => e.login === def.login)
-      )
-      if (missingDefaults.length > 0) {
-        const batch = writeBatch(db)
-        missingDefaults.forEach(emp => {
-          const docRef = doc(employeesRef, String(emp.id))
-          batch.set(docRef, emp)
-        })
-        await batch.commit()
-        return // onSnapshot will re-fire with updated data
-      }
-
+      const list = snapshot.docs.map((d) => ({ ...d.data(), _docId: d.id }))
       setEmployees(list)
       setLoading(false)
     })
@@ -347,7 +332,9 @@ export function AuthProvider({ children }) {
     const cleanUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     )
-    await updateDoc(doc(employeesRef, String(id)), cleanUpdates)
+    const emp = employees.find(e => e.id === id)
+    const docId = emp?._docId || String(id)
+    await updateDoc(doc(employeesRef, docId), cleanUpdates)
     // Update current session if editing self
     if (user?.id === id) {
       const updatedUser = { ...user, ...cleanUpdates }
@@ -357,14 +344,17 @@ export function AuthProvider({ children }) {
   }
 
   const deleteEmployee = async (id) => {
-    await deleteDoc(doc(employeesRef, String(id)))
+    // Find employee to get Firestore document ID
+    const emp = employees.find(e => e.id === id)
+    const docId = emp?._docId || String(id)
+    await deleteDoc(doc(employeesRef, docId))
   }
 
   const resetEmployees = async () => {
     // Delete all existing employees
     const batch = writeBatch(db)
     employees.forEach((emp) => {
-      batch.delete(doc(employeesRef, String(emp.id)))
+      batch.delete(doc(employeesRef, emp._docId || String(emp.id)))
     })
     await batch.commit()
 
