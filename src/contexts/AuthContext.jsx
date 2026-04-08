@@ -276,7 +276,9 @@ export function AuthProvider({ children }) {
         return
       }
 
-      const list = snapshot.docs.map((d) => ({ ...d.data(), _docId: d.id }))
+      const list = snapshot.docs
+        .map((d) => ({ ...d.data(), _docId: d.id }))
+        .filter((e) => !e.deleted)
       setEmployees(list)
       setLoading(false)
     })
@@ -344,10 +346,11 @@ export function AuthProvider({ children }) {
   }
 
   const deleteEmployee = async (id) => {
-    // Find employee to get Firestore document ID
     const emp = employees.find(e => e.id === id)
     const docId = emp?._docId || String(id)
-    await deleteDoc(doc(employeesRef, docId))
+    // Soft delete — mark as deleted instead of removing document
+    // This prevents old cached clients from re-creating the document
+    await updateDoc(doc(employeesRef, docId), { deleted: true })
   }
 
   const resetEmployees = async () => {
