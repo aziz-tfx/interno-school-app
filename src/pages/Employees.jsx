@@ -21,7 +21,7 @@ export default function Employees() {
   const [activeTab, setActiveTab] = useState('employees')
 
   // Bulk actions
-  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [selectedIds, setSelectedIds] = useState([])
   const [bulkAction, setBulkAction] = useState(null) // 'role' | 'branch' | 'delete'
   const [bulkTarget, setBulkTarget] = useState('')
   const [bulkProcessing, setBulkProcessing] = useState(false)
@@ -66,25 +66,23 @@ export default function Employees() {
 
   // ─── Bulk Actions ───
   const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
   }
   const toggleSelectAll = () => {
-    if (selectedIds.size === filtered.length) {
-      setSelectedIds(new Set())
+    if (selectedIds.length === filtered.length) {
+      setSelectedIds([])
     } else {
-      setSelectedIds(new Set(filtered.map(e => e.id)))
+      setSelectedIds(filtered.map(e => e.id))
     }
   }
-  const clearSelection = () => { setSelectedIds(new Set()); setBulkAction(null); setBulkTarget('') }
+  const clearSelection = () => { setSelectedIds([]); setBulkAction(null); setBulkTarget('') }
 
   const executeBulkAction = async () => {
-    if (selectedIds.size === 0) return
+    if (selectedIds.length === 0) return
     setBulkProcessing(true)
-    const ids = [...selectedIds]
+    const ids = selectedIds.slice()
     try {
       if (bulkAction === 'delete') {
         for (const id of ids) {
@@ -181,12 +179,12 @@ export default function Employees() {
           </div>
 
           {/* Bulk Actions Bar */}
-          {selectedIds.size > 0 && canDelete && (
+          {selectedIds.length > 0 && canDelete && (
             <div className="glass-card rounded-2xl p-3 flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200">
               <div className="flex items-center gap-2">
                 <CheckSquare size={16} className="text-blue-600" />
                 <span className="text-sm font-semibold text-blue-800">
-                  {t('employees.selected') || 'Выбрано'}: {selectedIds.size}
+                  {t('employees.selected') || 'Выбрано'}: {selectedIds.length}
                 </span>
                 <button onClick={clearSelection} className="text-blue-400 hover:text-blue-600">
                   <X size={14} />
@@ -200,7 +198,7 @@ export default function Employees() {
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-red-600 font-medium">Удалить {selectedIds.size} сотрудник(ов)?</span>
+                  <span className="text-sm text-red-600 font-medium">Удалить {selectedIds.length} сотрудник(ов)?</span>
                   <button onClick={executeBulkAction} disabled={bulkProcessing}
                     className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
                     {bulkProcessing ? '...' : 'Да, удалить'}
@@ -221,7 +219,7 @@ export default function Employees() {
                     {canDelete && (
                       <th className="py-3 px-2 w-10">
                         <button onClick={toggleSelectAll} className="text-slate-400 hover:text-slate-600">
-                          {selectedIds.size === filtered.length && filtered.length > 0 ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
+                          {selectedIds.length === filtered.length && filtered.length > 0 ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                         </button>
                       </th>
                     )}
@@ -235,11 +233,11 @@ export default function Employees() {
                 </thead>
                 <tbody>
                   {filtered.map(emp => (
-                    <tr key={emp.id} className={`border-b border-slate-50 hover:bg-blue-50/30 transition-colors ${selectedIds.has(emp.id) ? 'bg-blue-50/50' : ''}`}>
+                    <tr key={emp.id} className={`border-b border-slate-50 hover:bg-blue-50/30 transition-colors ${selectedIds.includes(emp.id) ? 'bg-blue-50/50' : ''}`}>
                       {canDelete && (
                         <td className="py-3 px-2">
                           <button onClick={() => toggleSelect(emp.id)} className="text-slate-400 hover:text-slate-600">
-                            {selectedIds.has(emp.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
+                            {selectedIds.includes(emp.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                           </button>
                         </td>
                       )}
