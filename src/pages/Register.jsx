@@ -5,7 +5,7 @@ import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import {
   Eye, EyeOff, UserPlus, ArrowLeft, User, Phone, Lock, Briefcase,
-  Building2, BookOpen, DollarSign, CheckCircle2, AlertCircle,
+  Building2, BookOpen, DollarSign, CheckCircle2, AlertCircle, Clock,
 } from 'lucide-react'
 import Logo from '../components/Logo'
 
@@ -113,11 +113,13 @@ export default function Register() {
         role: form.role,
         branch: COMPANY_WIDE_ROLES.includes(form.role) ? 'all' : form.branch,
         phone: form.phone || '',
+        status: 'pending', // Requires admin approval
+        registeredAt: new Date().toISOString(),
       }
 
       const newEmp = await addEmployee(employeeData)
 
-      // If teacher, create teacher record
+      // If teacher, create teacher record (will be activated after approval)
       if (form.role === 'teacher') {
         await addTeacher({
           name: form.name.trim(),
@@ -152,19 +154,19 @@ export default function Register() {
           </div>
 
           <div className="glass-strong rounded-3xl shadow-2xl shadow-black/20 p-8 text-center space-y-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-green-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/30">
-              <CheckCircle2 size={40} className="text-white" />
+            <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-amber-500/30">
+              <Clock size={40} className="text-white" />
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900">Регистрация завершена!</h2>
+              <h2 className="text-xl font-bold text-slate-900">Заявка отправлена!</h2>
               <p className="text-sm text-slate-500 mt-2">
-                Аккаунт <b>{form.name}</b> успешно создан.<br />
-                Используйте логин <b>{form.login}</b> для входа.
+                Заявка на регистрацию <b>{form.name}</b> отправлена администратору на рассмотрение.<br />
+                Вы получите доступ после одобрения.
               </p>
             </div>
 
-            <div className="bg-slate-50 rounded-xl p-4 text-left space-y-2">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Должность:</span>
                 <span className="font-medium text-slate-900">{ROLE_LABELS[form.role]}</span>
@@ -174,8 +176,8 @@ export default function Register() {
                 <span className="font-medium text-slate-900">{form.login}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Пароль:</span>
-                <span className="font-medium text-slate-900">{form.password}</span>
+                <span className="text-slate-500">Статус:</span>
+                <span className="font-medium text-amber-600">Ожидает одобрения</span>
               </div>
             </div>
 
@@ -183,7 +185,7 @@ export default function Register() {
               onClick={() => navigate('/login')}
               className="w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3 rounded-xl font-medium hover:from-blue-700 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25"
             >
-              Войти в систему
+              Вернуться ко входу
             </button>
           </div>
         </div>

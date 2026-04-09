@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Filter, Plus, Pencil, Trash2, Shield, Users, ShieldCheck, CheckSquare, Square, X } from 'lucide-react'
+import { Search, Filter, Plus, Pencil, Trash2, Shield, Users, ShieldCheck, CheckSquare, Square, X, Clock, CheckCircle, XCircle, UserPlus } from 'lucide-react'
 import { useAuth, ROLE_LABELS, ROLE_COLORS } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -9,7 +9,7 @@ import AccessControl from './AccessControl'
 
 export default function Employees() {
   const { t } = useLanguage()
-  const { user, employees, hasPermission, deleteEmployee } = useAuth()
+  const { user, employees, hasPermission, deleteEmployee, updateEmployee } = useAuth()
   const { getBranchNames, teachers, deleteTeacher } = useData()
   const BRANCH_LABELS = { all: 'Центральный', ...getBranchNames() }
   const [search, setSearch] = useState('')
@@ -36,7 +36,19 @@ export default function Employees() {
     ? employees.filter(e => e.branch === user.branch || e.branch === 'all')
     : employees
 
-  const filtered = visibleEmployees.filter(e => {
+  // Pending registration requests
+  const pendingEmployees = visibleEmployees.filter(e => e.status === 'pending')
+  const approvedEmployees = visibleEmployees.filter(e => e.status !== 'pending' && e.status !== 'rejected')
+
+  const handleApprove = async (emp) => {
+    await updateEmployee(emp.id, { status: 'approved' })
+  }
+
+  const handleReject = async (id) => {
+    await deleteEmployee(id)
+  }
+
+  const filtered = approvedEmployees.filter(e => {
     const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) ||
       e.login.toLowerCase().includes(search.toLowerCase())
     const matchRole = roleFilter === 'all' || e.role === roleFilter
@@ -103,7 +115,7 @@ export default function Employees() {
     clearSelection()
   }
 
-  const usedRoles = [...new Set(visibleEmployees.map(e => e.role))]
+  const usedRoles = [...new Set(approvedEmployees.map(e => e.role))]
 
   const tabs = [
     { id: 'employees', label: t('employees.tab_employees'), icon: Users },
@@ -115,7 +127,7 @@ export default function Employees() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-900">{t('employees.heading')}</h2>
-          <p className="text-slate-500 mt-1">{t('employees.count', { count: visibleEmployees.length })}</p>
+          <p className="text-slate-500 mt-1">{t('employees.count', { count: approvedEmployees.length })}</p>
         </div>
         <div className="flex items-center gap-3">
           {activeTab === 'employees' && canAdd && (
@@ -177,6 +189,57 @@ export default function Employees() {
               )}
             </div>
           </div>
+
+          {/* Pending Registration Requests */}
+          {pendingEmployees.length > 0 && (user.role === 'owner' || user.role === 'director') && (
+            <div className="glass-card rounded-2xl overflow-hidden border border-amber-200 bg-amber-50/50">
+              <div className="flex items-center gap-2 px-4 py-3 bg-amber-100/60 border-b border-amber-200">
+                <UserPlus size={18} className="text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800">
+                  Заявки на регистрацию ({pendingEmployees.length})
+                </span>
+                <Clock size={14} className="text-amber-500 ml-1" />
+              </div>
+              <div className="divide-y divide-amber-100">
+                {pendingEmployees.map(emp => (
+                  <div key={emp.id} className="flex items-center justify-between px-4 py-3 hover:bg-amber-50/80 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 ${ROLE_COLORS[emp.role] || 'bg-slate-500'} rounded-full flex items-center justify-center text-white text-xs font-bold`}>
+                        {emp.avatar || '?'}
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900 text-sm">{emp.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {ROLE_LABELS[emp.role] || emp.role} · {BRANCH_LABELS[emp.branch] || emp.branch}
+                          {emp.registeredAt && (
+                            <span className="ml-2 text-slate-400">
+                              {new Date(emp.registeredAt).toLocaleDateString('ru-RU')}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleApprove(emp)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
+                      >
+                        <CheckCircle size={14} />
+                        Одобрить
+                      </button>
+                      <button
+                        onClick={() => handleReject(emp.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-medium hover:bg-red-200 transition-colors"
+                      >
+                        <XCircle size={14} />
+                        Отклонить
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Bulk Actions Bar */}
           {selectedIds.length > 0 && canDelete && (
@@ -292,7 +355,7 @@ export default function Employees() {
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {usedRoles.map(role => {
-              const count = visibleEmployees.filter(e => e.role === role).length
+              const count = approvedEmployees.filter(e => e.role === role).length
               return (
                 <div key={role} className="glass-card rounded-xl p-3 text-center">
                   <p className="text-lg font-bold text-slate-900">{count}</p>

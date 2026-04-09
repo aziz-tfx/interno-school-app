@@ -645,6 +645,7 @@ export default {
   "employeeForm.role_desc_owner": "Tizimning barcha bo'limlari va sozlamalariga to'liq kirish.",
   "employeeForm.role_desc_admin": "Barcha bo'limlarga to'liq kirish, xodimlarni boshqarish.",
   "employeeForm.role_desc_branch_director": "Filialni boshqarish: o'quvchilar, o'qituvchilar, moliya, xodimlar.",
+  "employeeForm.role_desc_branch_admin": "Filial resepshni: o'quv jarayoni, davomat, to'lovlarni qabul qilish, o'quvchilar bilan ishlash.",
   "employeeForm.role_desc_rop": "Filial sotuv bo'limini boshqarish, o'quvchilar va to'lovlarga kirish.",
   "employeeForm.role_desc_sales": "O'z filialida o'quvchilar bilan ishlash va to'lovlarni qabul qilish.",
   "employeeForm.role_desc_accountant": "Moliyaga to'liq kirish: P&L, xarajatlar, tushumlar.",

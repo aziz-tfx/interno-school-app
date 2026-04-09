@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { db } from '../firebase'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { collection, doc, onSnapshot } from 'firebase/firestore'
 import {
   BookOpen, Play, CheckCircle2, Lock, Clock, ChevronRight,
   ArrowLeft, FileText, Link2, Download, AlertCircle, Shield,
-  GraduationCap, BarChart3, User, Phone,
+  GraduationCap, BarChart3, User, Phone, Flame, Zap,
 } from 'lucide-react'
 import { isLessonAccessible, isModuleUnlocked, getUnlockedModuleCount } from '../utils/lessonAccess'
+import { computeXP, getLevel, getLevelProgress } from '../data/gamification'
 
 // ─── Kinescope / YouTube parser ────────────────────────────────────
 function parseVideoUrl(url) {
@@ -55,6 +56,9 @@ export default function TelegramApp() {
   const [modules, setModules] = useState([])
   const [progress, setProgress] = useState([])
   const [payments, setPayments] = useState([])
+  const [attendance, setAttendance] = useState([])
+  const [submissions, setSubmissions] = useState([])
+  const [gameData, setGameData] = useState([])
   const [selectedLesson, setSelectedLesson] = useState(null)
   const [tgUser, setTgUser] = useState(null)
   const [phoneInput, setPhoneInput] = useState('')
@@ -98,6 +102,15 @@ export default function TelegramApp() {
     }))
     unsubs.push(onSnapshot(collection(db, 'payments'), snap => {
       setPayments(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }))
+    unsubs.push(onSnapshot(collection(db, 'lmsSubmissions'), snap => {
+      setSubmissions(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }))
+    unsubs.push(onSnapshot(collection(db, 'studentGameData'), snap => {
+      setGameData(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    }))
+    unsubs.push(onSnapshot(doc(db, 'attendance', '_meta'), snap => {
+      if (snap.exists()) setAttendance(snap.data().data || [])
     }))
     return () => unsubs.forEach(u => u())
   }, [])
@@ -187,6 +200,27 @@ export default function TelegramApp() {
   }, [progress, student])
 
   const completedLessonIds = new Set(myProgress.filter(p => p.completed).map(p => p.lessonId))
+
+  // ─── Gamification ─────────────────────────────────────────────
+  const gamData = useMemo(() => {
+    if (!student) return null
+    const myAtt = attendance.filter(a => a.studentId === student.id)
+    const mySubs = submissions.filter(s => s.studentId === student.id)
+    const gd = gameData.find(d => d.id === student.id) || {}
+    const xp = computeXP({
+      completedLessons: myProgress.length,
+      submissions: mySubs,
+      attendancePresent: myAtt.filter(a => a.status === 'present').length,
+      attendanceLate: myAtt.filter(a => a.status === 'late').length,
+      streakBonusesClaimed: gd.streakBonusesClaimed || [],
+    })
+    return {
+      xp,
+      level: getLevel(xp.total),
+      levelProgress: getLevelProgress(xp.total),
+      streak: gd.currentStreak || 0,
+    }
+  }, [student, myProgress, attendance, submissions, gameData])
 
   // ─── Debt calculation ──────────────────────────────────────────
   const studentDebt = useMemo(() => {
@@ -343,7 +377,14 @@ export default function TelegramApp() {
             </div>
             <div>
               <h2 className="font-bold text-base">{student?.name}</h2>
-              <p className="text-white/70 text-xs">{student?.course} · {student?.group}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-white/70 text-xs">{student?.course} · {student?.group}</p>
+                {gamData && (
+                  <span className="bg-amber-400/20 text-amber-200 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                    {gamData.level.emoji} Lv.{gamData.level.level}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -385,7 +426,7 @@ export default function TelegramApp() {
           </button>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-2">
             <div className="bg-white rounded-xl border border-slate-200 p-3 text-center shadow-sm">
               <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center mx-auto mb-1.5">
                 <CheckCircle2 size={16} className="text-emerald-600" />
@@ -394,11 +435,18 @@ export default function TelegramApp() {
               <p className="text-[10px] text-slate-500">Пройдено</p>
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-3 text-center shadow-sm">
-              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-1.5">
-                <Play size={16} className="text-blue-600" />
+              <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center mx-auto mb-1.5">
+                <Zap size={16} className="text-amber-600" />
               </div>
-              <p className="text-lg font-bold text-slate-900">{myLessons.filter(l => l.videoUrl).length}</p>
-              <p className="text-[10px] text-slate-500">Видеоуроков</p>
+              <p className="text-lg font-bold text-slate-900">{gamData?.xp?.total || 0}</p>
+              <p className="text-[10px] text-slate-500">XP</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-3 text-center shadow-sm">
+              <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-1.5">
+                <Flame size={16} className="text-orange-500" />
+              </div>
+              <p className="text-lg font-bold text-slate-900">{gamData?.streak || 0}</p>
+              <p className="text-[10px] text-slate-500">Стрик</p>
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-3 text-center shadow-sm">
               <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-1.5">
@@ -614,18 +662,36 @@ export default function TelegramApp() {
 
         <div className="space-y-0">
           {/* Video Player */}
-          {videoInfo?.type === 'kinescope' && (
-            <div className="relative w-full bg-black" style={{ paddingBottom: '56.25%' }}>
-              <iframe
-                src={`https://kinescope.io/embed/${videoInfo.id}?watermark_text=${encodeURIComponent(studentWatermark)}&watermark_mode=viewer`}
-                title={selectedLesson.title}
-                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full border-0"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </div>
-          )}
+          {videoInfo?.type === 'kinescope' && (() => {
+            const params = new URLSearchParams()
+            if (studentWatermark) {
+              params.set('watermark_text', studentWatermark)
+              params.set('watermark_mode', 'viewer')
+            }
+            params.set('drm', 'true')
+            params.set('dnt', '1')
+            params.set('download', 'false')
+            const embedUrl = `https://kinescope.io/embed/${videoInfo.id}?${params.toString()}`
+            return (
+              <div className="relative w-full bg-black" style={{ paddingBottom: '56.25%' }}>
+                <iframe
+                  src={embedUrl}
+                  title={selectedLesson.title}
+                  allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full border-0"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+                />
+                {studentWatermark && (
+                  <div className="pointer-events-none absolute inset-0 z-10 select-none" aria-hidden="true">
+                    <div className="absolute top-2 left-3 text-white/[0.12] text-[10px] font-medium tracking-wide">{studentWatermark}</div>
+                    <div className="absolute bottom-2 right-3 text-white/[0.12] text-[10px] font-medium tracking-wide">{studentWatermark}</div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {videoInfo?.type === 'youtube' && (
             <div className="relative w-full bg-black" style={{ paddingBottom: '56.25%' }}>

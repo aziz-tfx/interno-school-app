@@ -73,8 +73,8 @@ export default function Profile() {
       stats.debtors = students.filter(s => s.status === 'debtor').length
     }
 
-    // Branch director
-    if (role === 'branch_director') {
+    // Branch director or branch admin
+    if (role === 'branch_director' || role === 'branch_admin') {
       stats.branchStudents = branchStudents.length
       stats.activeStudents = branchStudents.filter(s => s.status === 'active').length
       stats.branchGroups = branchGroups.filter(g => g.status !== 'archived').length
@@ -200,7 +200,7 @@ export default function Profile() {
     { id: 'profile', label: t('profile.tab_profile'), icon: User },
     { id: 'security', label: t('profile.tab_security'), icon: Lock },
     { id: 'stats', label: t('profile.tab_stats'), icon: Activity },
-    { id: 'access', label: t('profile.tab_access'), icon: Shield },
+    ...(user?.role !== 'student' ? [{ id: 'access', label: t('profile.tab_access'), icon: Shield }] : []),
   ]
 
   const roleColor = ROLE_COLORS[user?.role] || 'bg-blue-600'
@@ -411,7 +411,7 @@ export default function Profile() {
           )}
 
           {/* Branch director stats */}
-          {user?.role === 'branch_director' && (
+          {(user?.role === 'branch_director' || user?.role === 'branch_admin') && (
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               <StatCard icon={GraduationCap} label={t('profile.stat_branch_students')} value={roleStats.branchStudents} color="blue" />
               <StatCard icon={Users} label={t('profile.stat_active')} value={roleStats.activeStudents} color="emerald" />

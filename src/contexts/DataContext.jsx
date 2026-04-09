@@ -39,12 +39,15 @@ export function DataProvider({ children }) {
   const [lmsModules, setLmsModules] = useState([])
   const [lmsProgress, setLmsProgress] = useState([])
 
+  // Gamification streak data
+  const [studentGameData, setStudentGameData] = useState([])
+
   // Track whether initial load has resolved for each collection
-  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false })
+  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false, studentGameData: false })
 
   const checkAllLoaded = () => {
     const r = loadedRef.current
-    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress) {
+    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress && r.studentGameData) {
       setLoading(false)
     }
   }
@@ -102,6 +105,7 @@ export function DataProvider({ children }) {
     subscribeCollection('lmsAnnouncements', setLmsAnnouncements, 'lmsAnnouncements')
     subscribeCollection('lmsModules', setLmsModules, 'lmsModules')
     subscribeCollection('lmsProgress', setLmsProgress, 'lmsProgress')
+    subscribeCollection('studentGameData', setStudentGameData, 'studentGameData')
 
     return () => {
       unsubscribers.forEach(unsub => unsub())
@@ -465,6 +469,11 @@ export function DataProvider({ children }) {
     await deleteDoc(doc(db, 'lmsProgress', id))
   }
 
+  // --- Student Game Data (Gamification streaks) ---
+  const updateStudentGameData = async (studentId, updates) => {
+    await setDoc(doc(db, 'studentGameData', studentId), updates, { merge: true })
+  }
+
   // --- Sales Plans ---
   const setSalesPlan = async (managerId, amount, month) => {
     const key = month || new Date().toISOString().slice(0, 7)
@@ -562,6 +571,7 @@ export function DataProvider({ children }) {
       lmsAnnouncements, addLmsAnnouncement, deleteLmsAnnouncement,
       lmsModules, addLmsModule, updateLmsModule, deleteLmsModule,
       lmsProgress, addLmsProgress, deleteLmsProgress,
+      studentGameData, updateStudentGameData,
       loading,
     }}>
       {children}

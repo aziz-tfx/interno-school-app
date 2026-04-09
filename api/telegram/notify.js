@@ -47,9 +47,11 @@ export default async function handler(req, res) {
     tashkent:  process.env.TG_CHAT_TASHKENT,
     samarkand: process.env.TG_CHAT_SAMARKAND,
     fergana:   process.env.TG_CHAT_FERGANA,
+    bukhara:   process.env.TG_CHAT_FERGANA,
+    online:    process.env.TG_CHAT_TASHKENT,
   }
 
-  const chatId = chatMap[branch]
+  const chatId = chatMap[branch] || process.env.TG_CHAT_TASHKENT
   if (!chatId) {
     return res.status(400).json({ error: `No Telegram chat configured for branch: ${branch}` })
   }

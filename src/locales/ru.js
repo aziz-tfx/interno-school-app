@@ -645,6 +645,7 @@ export default {
   "employeeForm.role_desc_owner": "Полный доступ ко всем разделам и настройкам системы.",
   "employeeForm.role_desc_admin": "Полный доступ ко всем разделам, управление сотрудниками.",
   "employeeForm.role_desc_branch_director": "Управление филиалом: ученики, учителя, финансы, сотрудники.",
+  "employeeForm.role_desc_branch_admin": "Ресепшн филиала: учебный процесс, посещаемость, приём платежей, работа с учениками.",
   "employeeForm.role_desc_rop": "Управление отделом продаж филиала, доступ к ученикам и платежам.",
   "employeeForm.role_desc_sales": "Работа с учениками и приём платежей в своём филиале.",
   "employeeForm.role_desc_accountant": "Полный доступ к финансам: P&L, расходы, поступления.",

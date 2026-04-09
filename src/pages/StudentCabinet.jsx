@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -7,9 +7,11 @@ import {
   GraduationCap, BookOpen, Calendar, DollarSign, ClipboardCheck,
   FileText, Bell, CheckCircle2, AlertCircle, Clock, TrendingUp,
   Play, ChevronRight, CreditCard, Award, User, Layers,
-  Eye, XCircle, ExternalLink, Wallet, BarChart3,
-  BookMarked, PenTool, Star, Target, Zap,
+  Eye, XCircle, X, ExternalLink, Wallet, BarChart3,
+  BookMarked, PenTool, Star, Target, Zap, Flame, Trophy, Bot,
 } from 'lucide-react'
+import useGamification from '../hooks/useGamification'
+import AIChat from '../components/AIChat'
 
 // ─── Format currency ───────────────────────────────────────────────
 function fmt(n) {
@@ -27,7 +29,9 @@ export default function StudentCabinet() {
     lmsProgress, lmsLessons, lmsModules, lmsAssignments, lmsSubmissions, lmsAnnouncements,
   } = useData()
 
-  const [activeTab, setActiveTab] = useState('overview')
+  const [searchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') || 'overview'
+  const [aiChatOpen, setAiChatOpen] = useState(false)
 
   // ─── Student identity ──────────────────────────────────────────
   const myStudent = useMemo(() => {
@@ -41,7 +45,12 @@ export default function StudentCabinet() {
 
   const myGroups = useMemo(() => {
     if (!myStudent) return []
-    return groups.filter(g => g.name === myStudent.group || g.id === myStudent.groupId)
+    // Prioritize groupId match, fallback to name match, deduplicate by course name
+    const byId = myStudent.groupId ? groups.filter(g => g.id === myStudent.groupId) : []
+    if (byId.length > 0) return byId
+    const byName = groups.filter(g => g.name === myStudent.group)
+    const seen = new Set()
+    return byName.filter(g => { const k = g.course || g.id; if (seen.has(k)) return false; seen.add(k); return true })
   }, [myStudent, groups])
 
   const myCourse = useMemo(() => {
@@ -135,16 +144,10 @@ export default function StudentCabinet() {
     return myPayments.filter(p => p.contractNumber)
   }, [myPayments])
 
-  // ─── Tabs ──────────────────────────────────────────────────────
-  const tabs = [
-    { id: 'overview', label: 'Обзор', icon: BarChart3 },
-    { id: 'course', label: 'Мой курс', icon: BookOpen },
-    { id: 'payments', label: 'Оплата', icon: Wallet },
-    { id: 'attendance', label: 'Посещаемость', icon: ClipboardCheck },
-    { id: 'assignments', label: 'Задания', icon: PenTool },
-    { id: 'announcements', label: 'Объявления', icon: Bell },
-    { id: 'contract', label: 'Договор', icon: FileText },
-  ]
+  // ─── Gamification ─────────────────────────────────────────────
+  const gam = useGamification(myStudent?.id)
+
+  const setActiveTab = (tab) => navigate(tab === 'overview' ? '/' : `/?tab=${tab}`)
 
   // ─── Blocked screen ───────────────────────────────────────────
   if (myStudent && myStudent.lmsAccess !== true) {
@@ -214,6 +217,11 @@ export default function StudentCabinet() {
                   {myBranch && (
                     <span className="bg-white/10 backdrop-blur-sm text-white/70 text-xs px-2.5 py-0.5 rounded-full">{myBranch.name}</span>
                   )}
+                  {gam?.level && (
+                    <span className="bg-amber-400/20 backdrop-blur-sm text-amber-200 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                      {gam.level.emoji} Lv.{gam.level.level} {gam.level.title}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -227,10 +235,24 @@ export default function StudentCabinet() {
                 <p className="text-2xl font-bold text-white">{overallProgress.completed}</p>
                 <p className="text-white/50 text-xs">из {overallProgress.total} уроков</p>
               </div>
-              {pendingAssignments.length > 0 && (
+              {gam?.xp && (
                 <div className="bg-amber-500/20 backdrop-blur-sm rounded-xl px-4 py-3 border border-amber-400/20 text-center">
-                  <p className="text-2xl font-bold text-amber-200">{pendingAssignments.length}</p>
-                  <p className="text-amber-300/60 text-xs">заданий</p>
+                  <p className="text-2xl font-bold text-amber-200">{gam.xp.total}</p>
+                  <p className="text-amber-300/60 text-xs">XP</p>
+                </div>
+              )}
+              {gam?.streak?.current > 0 && (
+                <div className="bg-orange-500/20 backdrop-blur-sm rounded-xl px-4 py-3 border border-orange-400/20 text-center">
+                  <p className="text-2xl font-bold text-orange-200 flex items-center gap-1 justify-center">
+                    <Flame size={18} />{gam.streak.current}
+                  </p>
+                  <p className="text-orange-300/60 text-xs">стрик</p>
+                </div>
+              )}
+              {pendingAssignments.length > 0 && (
+                <div className="bg-red-500/20 backdrop-blur-sm rounded-xl px-4 py-3 border border-red-400/20 text-center">
+                  <p className="text-2xl font-bold text-red-200">{pendingAssignments.length}</p>
+                  <p className="text-red-300/60 text-xs">заданий</p>
                 </div>
               )}
             </div>
@@ -267,13 +289,17 @@ export default function StudentCabinet() {
 
           <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-100 p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center">
-                <Star size={16} className="text-purple-500" />
+              <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
+                <Zap size={16} className="text-amber-500" />
               </div>
-              <span className="text-xs text-slate-400">Оценки</span>
+              <span className="text-xs text-slate-400">Уровень</span>
             </div>
-            <p className="text-2xl font-bold text-slate-800">{gradedSubmissions.length}</p>
-            <p className="text-xs text-slate-400 mt-1">{mySubmissions.length} сдано</p>
+            <p className="text-2xl font-bold text-slate-800">{gam?.level?.emoji} {gam?.level?.level || 1}</p>
+            {gam?.levelProgress && (
+              <div className="w-full h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
+                <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${gam.levelProgress.progressPercent}%` }} />
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-100 p-4">
@@ -291,34 +317,6 @@ export default function StudentCabinet() {
         </div>
       </div>
 
-      {/* ─── Tab Navigation ─────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto mb-6 px-2">
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto no-scrollbar">
-          {tabs.map(tab => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.id
-            return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
-                  isActive ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}>
-                <Icon size={15} />
-                {tab.label}
-                {tab.id === 'assignments' && pendingAssignments.length > 0 && (
-                  <span className="w-4 h-4 bg-amber-500 text-white rounded-full text-[10px] flex items-center justify-center font-bold">
-                    {pendingAssignments.length}
-                  </span>
-                )}
-                {tab.id === 'announcements' && myAnnouncements.length > 0 && (
-                  <span className="w-4 h-4 bg-blue-500 text-white rounded-full text-[10px] flex items-center justify-center font-bold">
-                    {myAnnouncements.length}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
 
       {/* ─── Tab Content ────────────────────────────────────────── */}
       <div className="max-w-5xl mx-auto px-2">
@@ -435,6 +433,55 @@ export default function StudentCabinet() {
                 </div>
               )}
             </div>
+
+            {/* Achievements Preview */}
+            {gam?.achievements && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center"><Trophy size={16} className="text-amber-500" /></div>
+                    Достижения
+                    <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-bold">{gam.unlockedCount}/{gam.achievements.length}</span>
+                  </h3>
+                  <button onClick={() => setActiveTab('achievements')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">Все <ChevronRight size={14} /></button>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {gam.achievements.slice(0, 8).map(a => (
+                    <div key={a.id} className={`text-center p-2 rounded-xl transition-all ${a.unlocked ? 'bg-amber-50' : 'bg-slate-50 opacity-40'}`}>
+                      <div className="text-2xl mb-1">{a.icon}</div>
+                      <p className="text-[10px] text-slate-600 leading-tight">{a.title}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Leaderboard Preview */}
+            {myGroup && gam?.getLeaderboard && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                  <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center"><BarChart3 size={16} className="text-indigo-500" /></div>
+                  Рейтинг группы
+                </h3>
+                <div className="space-y-2">
+                  {gam.getLeaderboard(myGroup.id).slice(0, 5).map((s, i) => (
+                    <div key={s.studentId} className={`flex items-center gap-3 p-2.5 rounded-xl ${s.studentId === myStudent?.id ? 'bg-indigo-50 border border-indigo-200' : 'bg-slate-50'}`}>
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-white' : i === 2 ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{s.name}</p>
+                        <p className="text-[10px] text-slate-400">{s.level.emoji} Lv.{s.level.level}</p>
+                      </div>
+                      <span className="text-sm font-bold text-amber-600">{s.xp} XP</span>
+                    </div>
+                  ))}
+                  {gam.getLeaderboard(myGroup.id).length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-4">Пока нет данных</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Recent Announcements */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
@@ -562,6 +609,126 @@ export default function StudentCabinet() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* ══════════ ACHIEVEMENTS TAB ══════════ */}
+        {activeTab === 'achievements' && gam && (
+          <div className="space-y-5">
+            {/* Level Progress */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="text-4xl">{gam.level.emoji}</div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="font-bold text-slate-800">Lv.{gam.level.level} {gam.level.title}</h3>
+                    <span className="text-sm font-bold text-amber-600">{gam.xp.total} XP</span>
+                  </div>
+                  {gam.levelProgress.nextLevel ? (
+                    <>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all" style={{ width: `${gam.levelProgress.progressPercent}%` }} />
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {gam.xp.total} / {gam.levelProgress.nextLevel.minXP} XP до Lv.{gam.levelProgress.nextLevel.level} {gam.levelProgress.nextLevel.title}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-amber-600 font-medium">Максимальный уровень достигнут!</p>
+                  )}
+                </div>
+              </div>
+
+              {/* XP Breakdown */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                <div className="bg-blue-50 rounded-xl p-3 text-center">
+                  <p className="text-lg font-bold text-blue-600">{gam.xp.lessons}</p>
+                  <p className="text-[10px] text-slate-500">Уроки</p>
+                </div>
+                <div className="bg-emerald-50 rounded-xl p-3 text-center">
+                  <p className="text-lg font-bold text-emerald-600">{gam.xp.attendance}</p>
+                  <p className="text-[10px] text-slate-500">Посещения</p>
+                </div>
+                <div className="bg-purple-50 rounded-xl p-3 text-center">
+                  <p className="text-lg font-bold text-purple-600">{gam.xp.assignments}</p>
+                  <p className="text-[10px] text-slate-500">Задания</p>
+                </div>
+                <div className="bg-orange-50 rounded-xl p-3 text-center">
+                  <p className="text-lg font-bold text-orange-600">{gam.xp.streakBonuses}</p>
+                  <p className="text-[10px] text-slate-500">Стрики</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Streak */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center"><Flame size={16} className="text-orange-500" /></div>
+                Стрик активности
+              </h3>
+              <div className="flex items-center gap-6">
+                <div className="text-center">
+                  <p className="text-4xl font-bold text-orange-500 flex items-center gap-1"><Flame size={28} />{gam.streak.current}</p>
+                  <p className="text-xs text-slate-400 mt-1">текущий стрик</p>
+                </div>
+                <div className="h-12 w-px bg-slate-200" />
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-slate-700">{gam.streak.max}</p>
+                  <p className="text-xs text-slate-400 mt-1">лучший результат</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Проходите уроки каждый день, чтобы увеличивать стрик и получать бонусные XP!</p>
+            </div>
+
+            {/* All Achievements */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center"><Trophy size={16} className="text-amber-500" /></div>
+                Все достижения
+                <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-bold">{gam.unlockedCount}/{gam.achievements.length}</span>
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {gam.achievements.map(a => (
+                  <div key={a.id} className={`p-4 rounded-xl border transition-all ${a.unlocked ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100 opacity-50'}`}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{a.icon}</span>
+                      <div>
+                        <p className="font-semibold text-sm text-slate-800">{a.title}</p>
+                        <p className="text-[11px] text-slate-500">{a.description}</p>
+                      </div>
+                    </div>
+                    {a.unlocked && <p className="text-[10px] text-amber-600 font-medium mt-2">Разблокировано!</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Full Leaderboard */}
+            {myGroup && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                  <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center"><BarChart3 size={16} className="text-indigo-500" /></div>
+                  Рейтинг группы — {myGroup.name}
+                </h3>
+                <div className="space-y-2">
+                  {gam.getLeaderboard(myGroup.id).map((s, i) => (
+                    <div key={s.studentId} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${s.studentId === myStudent?.id ? 'bg-indigo-50 border border-indigo-200' : 'bg-slate-50'}`}>
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-white' : i === 2 ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{s.name} {s.studentId === myStudent?.id ? '(Вы)' : ''}</p>
+                        <p className="text-[10px] text-slate-400">{s.level.emoji} Lv.{s.level.level} {s.level.title}</p>
+                      </div>
+                      <span className="text-sm font-bold text-amber-600">{s.xp} XP</span>
+                    </div>
+                  ))}
+                  {gam.getLeaderboard(myGroup.id).length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-6">Пока нет данных для рейтинга</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -833,6 +1000,27 @@ export default function StudentCabinet() {
         )}
 
       </div>
+
+      {/* Floating AI Chat Button */}
+      <button
+        onClick={() => setAiChatOpen(v => !v)}
+        className={`fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg shadow-violet-500/30 flex items-center justify-center text-white transition-all z-40 ${
+          aiChatOpen
+            ? 'bg-slate-600 hover:bg-slate-700 rotate-90'
+            : 'bg-gradient-to-br from-violet-600 to-blue-600 hover:scale-105'
+        }`}
+      >
+        {aiChatOpen ? <X size={22} /> : <Bot size={24} />}
+      </button>
+      <AIChat
+        isOpen={aiChatOpen}
+        onClose={() => setAiChatOpen(false)}
+        context={{
+          courseName: myCourse?.name,
+          studentName: myStudent?.name,
+        }}
+        mode="floating"
+      />
     </div>
   )
 }

@@ -15,6 +15,12 @@ import {
   Monitor,
   Plug,
   Home,
+  BarChart3,
+  Trophy,
+  Wallet,
+  PenTool,
+  Bell,
+  FileText,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -27,7 +33,15 @@ export default function Sidebar({ open, onClose }) {
   const location = useLocation()
 
   const studentNavItems = [
-    { to: '/', icon: Home, label: t('sidebar.student_home') || 'Личный кабинет' },
+    { to: '/', icon: BarChart3, label: 'Обзор' },
+    { to: '/?tab=course', icon: BookOpen, label: 'Мой курс' },
+    { to: '/?tab=achievements', icon: Trophy, label: 'Достижения' },
+    { to: '/?tab=payments', icon: Wallet, label: 'Оплата' },
+    { to: '/?tab=attendance', icon: ClipboardCheck, label: 'Посещаемость' },
+    { to: '/?tab=assignments', icon: PenTool, label: 'Задания' },
+    { to: '/?tab=announcements', icon: Bell, label: 'Объявления' },
+    { to: '/?tab=contract', icon: FileText, label: 'Договор' },
+    { divider: true },
     { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
   ]
 
@@ -90,23 +104,61 @@ export default function Sidebar({ open, onClose }) {
           <Logo size="md" variant="light" />
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-white/15 text-white shadow-lg shadow-blue-500/10 backdrop-blur-sm'
-                    : 'text-slate-400 hover:bg-white/8 hover:text-white'
-                }`
-              }
-            >
-              <Icon size={18} />
-              {label}
-            </NavLink>
-          ))}
+          {navItems.map((item, idx) => {
+            if (item.divider) return <div key={`div-${idx}`} className="my-2 border-t border-white/10" />
+            const { to, icon: Icon, label } = item
+            // For student tab items with query params, check active state manually
+            const isStudentTab = user?.role === 'student' && to.startsWith('/?tab=')
+            const isHomeTab = user?.role === 'student' && to === '/'
+            let isActive = false
+            if (isStudentTab) {
+              const tabParam = new URLSearchParams(to.split('?')[1]).get('tab')
+              const currentTab = new URLSearchParams(location.search).get('tab')
+              isActive = currentTab === tabParam
+            } else if (isHomeTab) {
+              const currentTab = new URLSearchParams(location.search).get('tab')
+              isActive = location.pathname === '/' && !currentTab
+            }
+
+            if (isStudentTab || isHomeTab) {
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={onClose}
+                  end
+                  className={
+                    `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-white/15 text-white shadow-lg shadow-blue-500/10 backdrop-blur-sm'
+                        : 'text-slate-400 hover:bg-white/8 hover:text-white'
+                    }`
+                  }
+                >
+                  <Icon size={18} />
+                  {label}
+                </NavLink>
+              )
+            }
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={onClose}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-white/15 text-white shadow-lg shadow-blue-500/10 backdrop-blur-sm'
+                      : 'text-slate-400 hover:bg-white/8 hover:text-white'
+                  }`
+                }
+              >
+                <Icon size={18} />
+                {label}
+              </NavLink>
+            )
+          })}
         </nav>
         <div className="p-3 border-t border-white/10">
           <button

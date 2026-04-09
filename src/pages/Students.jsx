@@ -13,7 +13,7 @@ export default function Students() {
   const { t } = useLanguage()
   const { user, hasPermission } = useAuth()
   const {
-    students, branches, payments, groups, teachers, courses,
+    students, branches, payments, groups, teachers, courses, rooms: dataRooms,
     addStudent, updateStudent, deleteStudent, deleteGroup, updateGroup,
     getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
     getBranchName,
@@ -908,19 +908,31 @@ export default function Students() {
 
           {/* ── TIMELINE VIEW ── */}
           {groupView === 'timeline' && (() => {
+            // Room name resolver
+            const getRoomName = (roomId) => {
+              if (!roomId) return 'Без кабинета'
+              const found = dataRooms.find(r => r.id === roomId)
+              return found ? found.name : roomId
+            }
+
             // Build timeline data
             const timelineGroups = filteredGroups.filter(g => g.startDate).map(g => {
-              const courseDur = courses.find(c => c.name === g.course)?.duration
+              const courseObj = courses.find(c => c.name === g.course)
+              const groupRegion = { tashkent: 'tashkent', samarkand: 'fergana', fergana: 'fergana', bukhara: 'fergana', online: 'online' }[g.branch] || 'tashkent'
+              const regionDur = courseObj?.durationByRegion?.[groupRegion]
+              const courseDur = regionDur || courseObj?.duration
               const durMonths = courseDur ? parseInt(courseDur) : 6
               const start = new Date(g.startDate)
               const end = g.endDate ? new Date(g.endDate) : new Date(new Date(g.startDate).setMonth(start.getMonth() + durMonths))
-              return { ...g, startD: start, endD: end, durMonths }
+              const totalStudents = getGroupOfflineCount(g.name) + getGroupOnlineCount(g.name)
+              return { ...g, startD: start, endD: end, durMonths, totalStudents, roomName: getRoomName(g.room) }
             })
 
-            // Get all unique rooms
-            const rooms = [...new Set(timelineGroups.map(g => g.room || 'Без кабинета'))].sort()
+            // Get all unique rooms (by resolved name)
+            const roomIds = [...new Set(timelineGroups.map(g => g.room || ''))]
+            const roomList = roomIds.map(rid => ({ id: rid, name: getRoomName(rid) })).sort((a, b) => a.name.localeCompare(b.name))
 
-            // Timeline range: 6 months back, 6 months forward
+            // Timeline range: 2 months back, 10 months forward
             const now = new Date()
             const tlStart = new Date(now.getFullYear(), now.getMonth() - 2, 1)
             const tlEnd = new Date(now.getFullYear(), now.getMonth() + 10, 0)
@@ -938,49 +950,81 @@ export default function Students() {
             const uniqueCourses = [...new Set(timelineGroups.map(g => g.course))]
             uniqueCourses.forEach((c, i) => { courseColors[c] = palette[i % palette.length] })
 
-            // Detect conflicts (same room + overlapping time + same schedule time)
+            // Detect conflicts (same room + overlapping dates + same schedule days/time)
             const getConflicts = (group) => {
               return timelineGroups.filter(other =>
                 other.id !== group.id &&
-                (other.room || 'Без кабинета') === (group.room || 'Без кабинета') &&
-                other.room &&
+                other.room && group.room &&
+                other.room === group.room &&
                 other.startD < group.endD &&
                 other.endD > group.startD &&
                 other.schedule === group.schedule
               )
             }
 
+            // Assign lanes within each room so overlapping groups don't stack
+            const assignLanes = (roomGroups) => {
+              const sorted = [...roomGroups].sort((a, b) => a.startD - b.startD)
+              const lanes = [] // each lane = array of groups
+              sorted.forEach(g => {
+                let placed = false
+                for (let i = 0; i < lanes.length; i++) {
+                  const last = lanes[i][lanes[i].length - 1]
+                  if (last.endD <= g.startD) {
+                    lanes[i].push(g)
+                    g._lane = i
+                    placed = true
+                    break
+                  }
+                }
+                if (!placed) {
+                  g._lane = lanes.length
+                  lanes.push([g])
+                }
+              })
+              return lanes.length
+            }
+
             const noRoomGroups = timelineGroups.filter(g => !g.room)
+            const todayPos = ((now - tlStart) / (1000 * 60 * 60 * 24)) / totalDays * 100
+            const LANE_H = 32 // height per lane
+            const LANE_GAP = 4
 
             return (
               <div className="space-y-4">
-                {/* Legend */}
+                {/* Legend + stats */}
                 <div className="glass-card rounded-2xl p-4">
-                  <div className="flex flex-wrap gap-3 items-center">
-                    <span className="text-xs font-semibold text-slate-500 mr-2">Курсы:</span>
-                    {uniqueCourses.map(c => (
-                      <span key={c} className="flex items-center gap-1.5 text-xs">
-                        <span className="w-3 h-3 rounded" style={{ background: courseColors[c] }} />
-                        {c}
-                      </span>
-                    ))}
+                  <div className="flex flex-wrap gap-3 items-center justify-between">
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <span className="text-xs font-semibold text-slate-500 mr-1">Курсы:</span>
+                      {uniqueCourses.map(c => (
+                        <span key={c} className="flex items-center gap-1.5 text-xs">
+                          <span className="w-3 h-3 rounded" style={{ background: courseColors[c] }} />
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                      <span className="flex items-center gap-1"><span className="w-3 h-px bg-red-400 inline-block" /> Сегодня</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded ring-2 ring-red-400 ring-offset-1 inline-block" style={{background: '#e5e7eb'}} /> Конфликт</span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Timeline Grid */}
                 <div className="glass-card rounded-2xl overflow-hidden">
                   <div className="overflow-x-auto">
-                    <div style={{ minWidth: '900px' }}>
+                    <div style={{ minWidth: '1000px' }}>
                       {/* Month headers */}
-                      <div className="flex border-b border-slate-200">
-                        <div className="w-36 shrink-0 px-3 py-2 bg-slate-50 text-xs font-semibold text-slate-500 border-r border-slate-200">
+                      <div className="flex border-b border-slate-200 sticky top-0 z-20 bg-white">
+                        <div className="w-40 shrink-0 px-3 py-2.5 bg-slate-50 text-xs font-semibold text-slate-500 border-r border-slate-200">
                           Кабинет
                         </div>
-                        <div className="flex-1 flex">
+                        <div className="flex-1 flex relative">
                           {months.map((m, i) => {
                             const isCurrentMonth = m.date.getMonth() === now.getMonth() && m.date.getFullYear() === now.getFullYear()
                             return (
-                              <div key={i} className={`flex-1 px-2 py-2 text-xs text-center border-r border-slate-100 ${isCurrentMonth ? 'bg-blue-50 font-bold text-blue-700' : 'text-slate-500'}`}>
+                              <div key={i} className={`flex-1 px-2 py-2.5 text-xs text-center border-r border-slate-100 ${isCurrentMonth ? 'bg-blue-50 font-bold text-blue-700' : 'text-slate-400'}`}>
                                 {m.label}
                               </div>
                             )
@@ -989,39 +1033,62 @@ export default function Students() {
                       </div>
 
                       {/* Room rows */}
-                      {rooms.map(room => {
-                        const roomGroups = timelineGroups.filter(g => (g.room || 'Без кабинета') === room)
+                      {roomList.map(({ id: roomId, name: roomName }) => {
+                        const roomGroups = timelineGroups.filter(g => (g.room || '') === roomId)
+                        const laneCount = assignLanes(roomGroups)
+                        const rowH = Math.max(44, laneCount * (LANE_H + LANE_GAP) + LANE_GAP * 2)
+
                         return (
-                          <div key={room} className="flex border-b border-slate-100 min-h-[52px]">
-                            <div className="w-36 shrink-0 px-3 py-3 bg-slate-50/50 border-r border-slate-200 flex items-center gap-2">
-                              <DoorOpen size={14} className="text-slate-400" />
-                              <span className="text-xs font-medium text-slate-700 truncate">{room}</span>
+                          <div key={roomId || '_none'} className="flex border-b border-slate-100" style={{ minHeight: `${rowH}px` }}>
+                            <div className="w-40 shrink-0 px-3 py-3 bg-slate-50/50 border-r border-slate-200 flex items-start gap-2 pt-3">
+                              <DoorOpen size={14} className="text-slate-400 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="text-xs font-medium text-slate-700 block leading-tight">{roomName}</span>
+                                <span className="text-[10px] text-slate-400">{roomGroups.length} групп</span>
+                              </div>
                             </div>
-                            <div className="flex-1 relative py-1.5">
+                            <div className="flex-1 relative" style={{ height: `${rowH}px` }}>
                               {/* Today marker */}
-                              {(() => {
-                                const todayPos = ((now - tlStart) / (1000 * 60 * 60 * 24)) / totalDays * 100
-                                return todayPos > 0 && todayPos < 100 ? (
-                                  <div className="absolute top-0 bottom-0 w-px bg-red-400 z-10" style={{ left: `${todayPos}%` }} />
-                                ) : null
-                              })()}
+                              {todayPos > 0 && todayPos < 100 && (
+                                <div className="absolute top-0 bottom-0 w-px bg-red-400/60 z-10" style={{ left: `${todayPos}%` }} />
+                              )}
+                              {/* Month grid lines */}
+                              {months.map((m, i) => {
+                                const mPos = ((m.date - tlStart) / (1000 * 60 * 60 * 24)) / totalDays * 100
+                                return <div key={i} className="absolute top-0 bottom-0 w-px bg-slate-100" style={{ left: `${mPos}%` }} />
+                              })}
+                              {/* Group bars */}
                               {roomGroups.map(g => {
                                 const left = Math.max(0, ((g.startD - tlStart) / (1000 * 60 * 60 * 24)) / totalDays * 100)
                                 const right = Math.min(100, ((g.endD - tlStart) / (1000 * 60 * 60 * 24)) / totalDays * 100)
                                 const width = right - left
                                 const conflicts = getConflicts(g)
                                 const hasConflict = conflicts.length > 0
+                                const lane = g._lane || 0
+                                const topPx = LANE_GAP + lane * (LANE_H + LANE_GAP)
+                                const bgColor = courseColors[g.course] || '#64748b'
+
                                 return (
                                   <div key={g.id}
-                                    className={`absolute top-1.5 h-7 rounded-md flex items-center px-2 text-[10px] font-medium text-white truncate cursor-pointer hover:opacity-90 transition-opacity ${hasConflict ? 'ring-2 ring-red-500 ring-offset-1' : ''}`}
+                                    onClick={() => handleEditGroup(g)}
+                                    className={`absolute rounded-lg flex items-center gap-1 px-2 text-[10px] font-medium text-white truncate cursor-pointer transition-all hover:brightness-110 hover:shadow-md ${hasConflict ? 'ring-2 ring-red-500 ring-offset-1' : ''}`}
                                     style={{
                                       left: `${left}%`,
-                                      width: `${Math.max(width, 2)}%`,
-                                      background: courseColors[g.course] || '#64748b',
+                                      width: `${Math.max(width, 3)}%`,
+                                      top: `${topPx}px`,
+                                      height: `${LANE_H}px`,
+                                      background: `linear-gradient(135deg, ${bgColor}, ${bgColor}dd)`,
                                     }}
-                                    title={`${g.name} | ${g.course}\n${g.schedule || ''}\n${g.startD.toLocaleDateString('ru-RU')} → ${g.endD.toLocaleDateString('ru-RU')}\nУчеников: ${getGroupOfflineCount(g.name) + getGroupOnlineCount(g.name)}${hasConflict ? '\n⚠️ Конфликт: ' + conflicts.map(c => c.name).join(', ') : ''}`}
+                                    title={[
+                                      `📋 ${g.name} — ${g.course}`,
+                                      `📅 ${g.startD.toLocaleDateString('ru-RU')} → ${g.endD.toLocaleDateString('ru-RU')}`,
+                                      g.schedule ? `🕐 ${g.schedule}` : '',
+                                      `👥 ${g.totalStudents} учеников` + (g.maxOffline ? ` / ${g.maxOffline} мест` : ''),
+                                      hasConflict ? `⚠️ Конфликт: ${conflicts.map(c => c.name).join(', ')}` : '',
+                                    ].filter(Boolean).join('\n')}
                                   >
-                                    {width > 5 ? g.name : ''}
+                                    {width > 8 && <span className="truncate">{g.name}</span>}
+                                    {width > 15 && <span className="opacity-70 text-[9px] shrink-0">({g.totalStudents})</span>}
                                   </div>
                                 )
                               })}
@@ -1030,9 +1097,9 @@ export default function Students() {
                         )
                       })}
 
-                      {rooms.length === 0 && (
+                      {roomList.length === 0 && (
                         <div className="text-center py-8 text-slate-400 text-sm">
-                          Нет групп с датой старта и кабинетом. Укажите «Дата старта» и «Кабинет» при редактировании группы.
+                          Нет групп с датой старта. Укажите «Дата старта» и «Кабинет» при создании/редактировании группы.
                         </div>
                       )}
                     </div>
@@ -1045,9 +1112,10 @@ export default function Students() {
                     <p className="text-xs font-semibold text-amber-600 mb-2">⚠ Группы без кабинета/даты старта ({noRoomGroups.length})</p>
                     <div className="flex flex-wrap gap-2">
                       {noRoomGroups.map(g => (
-                        <span key={g.id} className="text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-lg border border-amber-200">
+                        <button key={g.id} onClick={() => handleEditGroup(g)}
+                          className="text-xs bg-amber-50 text-amber-700 px-2.5 py-1.5 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors text-left">
                           {g.name} — {g.course}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>

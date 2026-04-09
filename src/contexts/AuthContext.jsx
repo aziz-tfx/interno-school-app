@@ -17,6 +17,7 @@ export const ROLE_LABELS = {
   owner:            'Владелец',
   admin:            'Администратор',
   branch_director:  'Руководитель филиала',
+  branch_admin:     'Админ филиала',
   rop:              'РОП',
   sales:            'Менеджер по продажам',
   accountant:       'Бухгалтер',
@@ -31,6 +32,7 @@ export const ROLE_COLORS = {
   owner:            'bg-yellow-600',
   admin:            'bg-blue-600',
   branch_director:  'bg-indigo-600',
+  branch_admin:     'bg-sky-600',
   rop:              'bg-teal-600',
   sales:            'bg-emerald-600',
   accountant:       'bg-pink-600',
@@ -74,6 +76,17 @@ export const DEFAULT_PERMISSIONS = {
     employees: { view: true, add: true, edit: true, delete: false },
     attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: true, grade: true, manage: true },
+    settings: false,
+  },
+  branch_admin: {
+    dashboard: true, branches: false,
+    students:  { view: true, add: true, edit: true, delete: false },
+    teachers:  { view: true, add: false, edit: false, delete: false, salaries: false },
+    courses:   { view: true, add: false, edit: false },
+    finance:   { view: true, fullPnL: false, expenses: false, payments: true },
+    employees: { view: true, add: false, edit: false, delete: false },
+    attendance: { view: true, mark: true, edit: true },
+    lms:       { view: true, create_content: false, grade: true, manage: false },
     settings: false,
   },
   rop: {
@@ -289,6 +302,14 @@ export function AuthProvider({ children }) {
   const login = (loginStr, password) => {
     const found = employees.find(u => u.login === loginStr && u.password === password)
     if (found) {
+      if (found.status === 'pending') {
+        setError('Ваша заявка на регистрацию ещё не одобрена. Обратитесь к администратору.')
+        return false
+      }
+      if (found.status === 'rejected') {
+        setError('Ваша заявка на регистрацию была отклонена.')
+        return false
+      }
       const { password: _, ...safe } = found
       setUser(safe)
       setError('')
@@ -302,6 +323,14 @@ export function AuthProvider({ children }) {
 
   const hasPermission = (section, action) => {
     if (!user) return false
+    // Check individual custom permissions first (override role defaults)
+    const custom = user.customPermissions
+    if (custom && custom[section] !== undefined) {
+      if (typeof custom[section] === 'boolean') return custom[section]
+      if (action && typeof custom[section] === 'object') return custom[section][action]
+      if (typeof custom[section] === 'object') return custom[section].view
+    }
+    // Fall back to role-based permissions
     const perms = PERMISSIONS[user.role]
     if (!perms) return false
     if (typeof perms[section] === 'boolean') return perms[section]

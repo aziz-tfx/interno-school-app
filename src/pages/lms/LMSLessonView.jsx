@@ -9,6 +9,10 @@ import {
   Clock, Award, Send, Pencil, AlertCircle, Shield, Lock
 } from 'lucide-react'
 import { isLessonAccessible } from '../../utils/lessonAccess'
+import { updateStreak, XP_RULES } from '../../data/gamification'
+import XPGainAnimation from '../../components/XPGainAnimation'
+import AIChat from '../../components/AIChat'
+import { Bot } from 'lucide-react'
 
 // ─── Content Protection Hook ────────────────────────────────────────
 function useContentProtection(enabled = true) {
@@ -146,11 +150,14 @@ export default function LMSLessonView() {
     groups, students, courses, lmsLessons, lmsAssignments,
     lmsSubmissions, lmsProgress, addLmsProgress, deleteLmsProgress,
     addLmsSubmission, updateLmsSubmission,
+    studentGameData, updateStudentGameData,
   } = useData()
 
   const isStudent = user?.role === 'student'
   const [answerText, setAnswerText] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [xpGain, setXpGain] = useState(0)
+  const [aiChatOpen, setAiChatOpen] = useState(false)
 
   // Enable content protection for students
   useContentProtection(isStudent)
@@ -257,6 +264,11 @@ export default function LMSLessonView() {
         courseId: course?.id || '',
         completedAt: new Date().toISOString(),
       })
+      // Gamification: update streak + show XP animation
+      try {
+        await updateStreak(studentGameData, myStudent.id, updateStudentGameData)
+      } catch (e) { console.error('Streak update error:', e) }
+      setXpGain(prev => prev + 1) // trigger animation
     }
   }
 
@@ -376,20 +388,46 @@ export default function LMSLessonView() {
       </div>
 
       {/* Video player with protection */}
-      {videoInfo?.type === 'kinescope' && (
-        <div className="glass-card rounded-2xl overflow-hidden">
-          <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-            <iframe
-              src={`https://kinescope.io/embed/${videoInfo.id}?watermark_text=${encodeURIComponent((myStudent?.name || user?.name || '') + ' ' + (myStudent?.phone || ''))}&watermark_mode=viewer`}
-              title={lesson.title}
-              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-              allowFullScreen
-              className="absolute inset-0 w-full h-full border-0"
-              referrerPolicy="no-referrer-when-downgrade"
-            />
+      {videoInfo?.type === 'kinescope' && (() => {
+        const watermarkName = myStudent?.name || user?.name || ''
+        const watermarkPhone = myStudent?.phone || ''
+        const watermarkText = `${watermarkName} ${watermarkPhone}`.trim()
+        const params = new URLSearchParams()
+        // Watermark — displays student name over video
+        if (watermarkText) {
+          params.set('watermark_text', watermarkText)
+          params.set('watermark_mode', 'viewer')
+        }
+        // DRM & security
+        params.set('drm', 'true')
+        params.set('dnt', '1')
+        // Disable download button
+        params.set('download', 'false')
+        const embedUrl = `https://kinescope.io/embed/${videoInfo.id}?${params.toString()}`
+        return (
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+              <iframe
+                src={embedUrl}
+                title={lesson.title}
+                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                allowFullScreen
+                className="absolute inset-0 w-full h-full border-0"
+                referrerPolicy="no-referrer-when-downgrade"
+                sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+              />
+              {/* Subtle watermark overlay with student name */}
+              {isStudent && watermarkText && (
+                <div className="pointer-events-none absolute inset-0 z-10 select-none" aria-hidden="true">
+                  <div className="absolute top-3 left-4 text-white/[0.12] text-[11px] font-medium tracking-wide">{watermarkText}</div>
+                  <div className="absolute bottom-3 right-4 text-white/[0.12] text-[11px] font-medium tracking-wide">{watermarkText}</div>
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-30 text-white/[0.06] text-sm font-semibold tracking-widest whitespace-nowrap">{watermarkText} · INTERNO</div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {videoInfo?.type === 'youtube' && embedUrl && (
         <div className="glass-card rounded-2xl overflow-hidden">
@@ -518,18 +556,51 @@ export default function LMSLessonView() {
                 <p className="text-sm text-slate-500">{t('lms.mark_complete')}</p>
               )}
             </div>
-            <button
-              onClick={handleToggleComplete}
-              className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                isCompleted
-                  ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
-              }`}
-            >
-              <CheckCircle2 size={16} />
-              {isCompleted ? t('lms.mark_incomplete') : t('lms.mark_complete')}
-            </button>
+            <div className="flex items-center gap-2">
+              {isStudent && (
+                <button
+                  onClick={() => setAiChatOpen(v => !v)}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                    aiChatOpen
+                      ? 'bg-violet-100 text-violet-700'
+                      : 'bg-violet-600 text-white hover:bg-violet-700'
+                  }`}
+                >
+                  <Bot size={16} />
+                  Спросить AI
+                </button>
+              )}
+              <div className="relative">
+                <button
+                  onClick={handleToggleComplete}
+                  className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                    isCompleted
+                      ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  }`}
+                >
+                  <CheckCircle2 size={16} />
+                  {isCompleted ? t('lms.mark_incomplete') : t('lms.mark_complete')}
+                </button>
+                <XPGainAnimation amount={XP_RULES.LESSON_COMPLETE} trigger={xpGain} />
+              </div>
+            </div>
           </div>
+
+          {/* AI Chat */}
+          {isStudent && (
+            <AIChat
+              isOpen={aiChatOpen}
+              onClose={() => setAiChatOpen(false)}
+              context={{
+                courseName: course?.name,
+                lessonTitle: lesson?.title,
+                lessonContent: lesson?.content?.slice(0, 2000),
+                studentName: myStudent?.name,
+              }}
+              mode="inline"
+            />
+          )}
 
           {/* Navigation */}
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
