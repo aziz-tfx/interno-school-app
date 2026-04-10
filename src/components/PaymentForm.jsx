@@ -13,6 +13,7 @@ import Logo from './Logo'
 import { useLanguage } from '../contexts/LanguageContext'
 
 const METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
+const MAX_FILES = 5
 const TARIFF_OPTIONS = [
   { tKey: 'paymentForm.tariff_standard', value: 'standard' },
   { tKey: 'paymentForm.tariff_vip', value: 'vip' },
@@ -182,20 +183,33 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
   const handleFileAdd = (e) => {
     const selectedFiles = Array.from(e.target.files)
-    selectedFiles.forEach(file => {
+    const remainingSlots = MAX_FILES - files.length
+    if (remainingSlots <= 0) {
+      alert(t('paymentForm.file_limit_reached').replace('{max}', MAX_FILES))
+      e.target.value = ''
+      return
+    }
+    const toAdd = selectedFiles.slice(0, remainingSlots)
+    if (selectedFiles.length > remainingSlots) {
+      alert(t('paymentForm.file_limit_exceeded').replace('{max}', MAX_FILES).replace('{added}', remainingSlots))
+    }
+    toAdd.forEach(file => {
       if (file.size > 10 * 1024 * 1024) {
         alert(t('paymentForm.file_too_large').replace('{name}', file.name))
         return
       }
       const reader = new FileReader()
       reader.onload = (ev) => {
-        setFiles(prev => [...prev, {
-          id: Date.now() + Math.random(),
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          data: ev.target.result,
-        }])
+        setFiles(prev => {
+          if (prev.length >= MAX_FILES) return prev
+          return [...prev, {
+            id: Date.now() + Math.random(),
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            data: ev.target.result,
+          }]
+        })
       }
       reader.readAsDataURL(file)
     })
@@ -1144,18 +1158,24 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
           {/* ═══ SHARED: File Attachments — MANDATORY ═══ */}
           <div className={`rounded-lg p-4 space-y-3 ${files.length === 0 ? 'bg-red-50 border border-red-200' : 'bg-slate-50'}`}>
-            <h4 className={`text-xs font-semibold uppercase tracking-wide ${files.length === 0 ? 'text-red-600' : 'text-slate-500'}`}>
-              {t('paymentForm.label_files')} *
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className={`text-xs font-semibold uppercase tracking-wide ${files.length === 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                {t('paymentForm.label_files')} *
+              </h4>
+              <span className={`text-xs font-medium ${files.length >= MAX_FILES ? 'text-amber-600' : 'text-slate-400'}`}>
+                {files.length} / {MAX_FILES}
+              </span>
+            </div>
             <p className="text-xs text-slate-400">{t('paymentForm.max_file_size')}</p>
 
             <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx" onChange={handleFileAdd}
               className="hidden" />
 
             <button type="button" onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-dashed border-slate-300 rounded-lg text-sm text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors w-full justify-center">
+              disabled={files.length >= MAX_FILES}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-dashed border-slate-300 rounded-lg text-sm text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-slate-300 disabled:hover:text-slate-600">
               <Paperclip size={16} />
-              {t('paymentForm.attach_files')}
+              {files.length >= MAX_FILES ? t('paymentForm.file_limit_reached_label') : t('paymentForm.attach_files')}
             </button>
 
             {files.length > 0 && (
