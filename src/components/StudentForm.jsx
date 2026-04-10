@@ -98,7 +98,12 @@ export default function StudentForm({ student, onClose }) {
     if (isEdit) {
       updateStudent(student.id, data)
     } else {
-      addStudent(data)
+      addStudent({
+        ...data,
+        createdBy: user?.id || null,
+        createdByName: user?.name || '',
+        createdAt: new Date().toISOString(),
+      })
     }
     onClose()
   }

@@ -142,6 +142,7 @@ export default {
   "students.th_debt": "Debitorlik",
   "students.th_status": "Status",
   "students.th_actions": "Amallar",
+  "students.created_by": "Qo'shgan",
   "students.status_active": "Faol",
   "students.status_debtor": "Qarzdor",
   "students.status_frozen": "Muzlatilgan",

@@ -142,6 +142,7 @@ export default {
   "students.th_debt": "Дебиторка",
   "students.th_status": "Статус",
   "students.th_actions": "Действия",
+  "students.created_by": "Добавил",
   "students.status_active": "Активен",
   "students.status_debtor": "Должник",
   "students.status_frozen": "Заморожен",

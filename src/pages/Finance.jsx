@@ -60,7 +60,7 @@ export default function Finance() {
   const [editSaving, setEditSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const EDIT_METHODS = ['Наличные', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
+  const EDIT_METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 
   const openEditPayment = (p) => {
     setEditForm({
@@ -601,6 +601,11 @@ export default function Finance() {
                     {p.course ? ` · ${p.course}` : ''}
                     {p.trancheNumber > 1 ? ` · ${t('finance.tranche_number')}${p.trancheNumber}` : ''}
                   </p>
+                  {p.createdByName && (
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {t('students.created_by')}: <span className="text-slate-600 font-medium">{p.createdByName}</span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                   <div className="text-right">

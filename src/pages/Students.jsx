@@ -313,18 +313,10 @@ export default function Students() {
             </button>
           )}
           {canAdd && activeTab === 'students' && (
-            <>
-              {orphanPayments.length > 0 && (
-                <button onClick={handleSync} disabled={syncing}
-                  className="bg-amber-500 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-amber-600 transition-colors flex items-center gap-2 disabled:opacity-50">
-                  <Users size={16} /> {syncing ? t('students.btn_syncing') : `${t('students.btn_sync')} (${orphanPayments.length})`}
-                </button>
-              )}
-              <button onClick={handleAdd}
-                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
-                <Plus size={16} /> {t('students.btn_add_student')}
-              </button>
-            </>
+            <button onClick={handleAdd}
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
+              <Plus size={16} /> {t('students.btn_add_student')}
+            </button>
           )}
         </div>
       </div>
@@ -515,6 +507,12 @@ export default function Students() {
                             {student.course || '—'}
                             {info.trancheCount > 0 && <span className="ml-1 text-emerald-500">· {info.trancheCount} {t('students.tranches')}</span>}
                           </p>
+                          {student.createdByName && (
+                            <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                              <User size={10} />
+                              <span>{t('students.created_by')}: <span className="text-slate-600 font-medium">{student.createdByName}</span></span>
+                            </p>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-slate-600 hidden md:table-cell">{getBranchName(student.branch)}</td>
                         <td className="py-3 px-4">

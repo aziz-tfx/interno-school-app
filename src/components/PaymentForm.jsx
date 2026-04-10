@@ -11,7 +11,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore'
 import Logo from './Logo'
 import { useLanguage } from '../contexts/LanguageContext'
 
-const METHODS = ['Наличные', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
+const METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 const TARIFF_OPTIONS = [
   { tKey: 'paymentForm.tariff_standard', value: 'standard' },
   { tKey: 'paymentForm.tariff_vip', value: 'vip' },
@@ -31,6 +31,12 @@ const BRANCH_TO_REGION = {
   bukhara: 'fergana',
   online: 'online',
 }
+const BRANCH_OPTIONS = [
+  { slug: 'tashkent', name: 'Ташкент' },
+  { slug: 'samarkand', name: 'Самарканд' },
+  { slug: 'fergana', name: 'Фергана' },
+  { slug: 'bukhara', name: 'Бухара' },
+]
 const FORMAT_OPTIONS = [
   { value: 'Оффлайн', tKey: 'paymentForm.format_offline' },
   { value: 'Онлайн', tKey: 'paymentForm.format_online' },
@@ -235,6 +241,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           tariff: tariffLabel,
           discount: form.discount || 'full',
           contractNumber: form.contractNumber || '',
+          createdBy: user?.id || null,
+          createdByName: user?.name || '',
+          createdAt: new Date().toISOString(),
         })
         studentId = newStudent.id
       } catch (err) {
@@ -292,6 +301,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       files: files.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size, data: f.data })),
       trancheNumber: studentPayments.length + 1,
       managerId: user?.managerId || null,
+      createdBy: user?.id || null,
+      createdByName: user?.name || '',
+      createdAt: new Date().toISOString(),
     }
 
     const saved = await addPayment(paymentData)
@@ -896,6 +908,28 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                       <option value="">— Выберите курс —</option>
                       {courses.map(c => (
                         <option key={c.id || c.name} value={c.name}>{c.icon || '📚'} {c.name} ({c.duration || '—'})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Branch (affects pricing per region) */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_branch')} *</label>
+                    <select value={form.branch} onChange={(e) => {
+                      const newBranch = e.target.value
+                      set('branch', newBranch)
+                      // Reset tariff if not available for new region
+                      const c = courses.find(cr => cr.name === form.course)
+                      const r = form.learningFormat === 'Онлайн' ? 'online' : (BRANCH_TO_REGION[newBranch] || 'tashkent')
+                      if (c?.pricing?.[r] && !c.pricing[r][form.tariff]) {
+                        const firstTariff = Object.keys(c.pricing[r])[0]
+                        if (firstTariff) set('tariff', firstTariff)
+                      }
+                    }} required
+                      disabled={user?.branch && user?.branch !== 'all'}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500">
+                      {BRANCH_OPTIONS.map(b => (
+                        <option key={b.slug} value={b.slug}>{b.name}</option>
                       ))}
                     </select>
                   </div>
