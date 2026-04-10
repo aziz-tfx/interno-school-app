@@ -12,6 +12,7 @@ import Attendance from './pages/Attendance'
 import Employees from './pages/Employees'
 import Profile from './pages/Profile'
 import Reports from './pages/Reports'
+import Leaderboard from './pages/Leaderboard'
 import LMSDashboard from './pages/lms/LMSDashboard'
 import LMSGroupView from './pages/lms/LMSGroupView'
 import LMSCourseView from './pages/lms/LMSCourseView'
@@ -78,6 +79,9 @@ export default function App() {
           <ProtectedRoute permission="attendance"><Attendance /></ProtectedRoute>
         } />
         <Route path="reports" element={<Reports />} />
+        <Route path="leaderboard" element={
+          <ProtectedRoute permission="finance"><Leaderboard /></ProtectedRoute>
+        } />
         <Route path="lms" element={
           <ProtectedRoute permission="lms"><LMSDashboard /></ProtectedRoute>
         } />
