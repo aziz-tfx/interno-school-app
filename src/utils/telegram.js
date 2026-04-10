@@ -30,6 +30,7 @@ function buildMessage(saleData) {
     clientName, phone, course, group, amount, method, date,
     courseStartDate, tariff, discount, contractNumber, debt,
     totalCoursePrice, trancheNumber, managerName, comment, learningFormat,
+    contractUrl,
   } = saleData
 
   const isNewSale = !trancheNumber || trancheNumber <= 1
@@ -64,6 +65,8 @@ function buildMessage(saleData) {
   if (trancheNumber > 1) {
     message += `🔄 Транш №${trancheNumber}\n`
   }
+
+  if (contractUrl) message += `📄 Договор: ${contractUrl}\n`
 
   if (managerName) message += `\n👔 Менеджер: ${managerName}`
 

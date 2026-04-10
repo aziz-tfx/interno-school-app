@@ -3,11 +3,12 @@ import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
 import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor } from 'lucide-react'
-import { generateContract } from '../utils/generateContract'
+import { generateContract, buildContractBlob } from '../utils/generateContract'
 import { pushSaleToAmo } from '../utils/amocrm'
 import { pushSaleToTelegram } from '../utils/telegram'
-import { db } from '../firebase'
+import { db, storage } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Logo from './Logo'
 import { useLanguage } from '../contexts/LanguageContext'
 
@@ -347,6 +348,49 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials })
     setShowReceipt(true)
 
+    // ─── Auto-generate contract & upload to Firebase Storage ───
+    // Runs non-blocking. Returns a public download URL to include in Telegram.
+    let contractUrl = null
+    if (form.type === 'income') {
+      try {
+        const { blob, fileName } = await buildContractBlob({
+          clientName: form.clientName,
+          passport: form.passport || '',
+          phone: form.phone,
+          course: form.course,
+          amount: courseFullPrice || totalCoursePrice || Number(form.amount) || 0,
+          tariff: form.tariff,
+          contractNumber: form.contractNumber,
+          contractDate: form.paymentDate,
+          courseStartDate: form.courseStartDate,
+          durationMonths: Number(form.durationMonths) || 3,
+          schedule: form.schedule || '',
+          learningFormat: form.learningFormat,
+          lang: form.contractLang || 'uz',
+        })
+        const safeNumber = (form.contractNumber || `sale_${saved.id}`).replace(/[^\w-]/g, '_')
+        const storagePath = `contracts/${safeNumber}_${Date.now()}_${fileName}`
+        const fileRef = storageRef(storage, storagePath)
+        await uploadBytes(fileRef, blob, {
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          customMetadata: {
+            paymentId: saved.id,
+            contractNumber: form.contractNumber || '',
+            clientName: form.clientName || '',
+          },
+        })
+        contractUrl = await getDownloadURL(fileRef)
+        // Save URL back on the payment document for later reference
+        try {
+          await updatePayment(saved.id, { contractUrl, contractFileName: fileName })
+        } catch (e) {
+          console.warn('Failed to persist contractUrl on payment:', e)
+        }
+      } catch (err) {
+        console.error('Contract upload failed, continuing without URL:', err)
+      }
+    }
+
     // Push to amoCRM (non-blocking — doesn't prevent the sale)
     if (form.type === 'income') {
       pushSaleToAmo({
@@ -392,6 +436,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         managerName: user?.name || '',
         comment: form.comment,
         learningFormat: form.learningFormat,
+        contractUrl,
       }).then(result => {
         if (result.success) {
           console.log('Sale notification sent to Telegram:', result.messageId)

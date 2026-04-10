@@ -30,6 +30,7 @@ export default async function handler(req, res) {
     managerName,
     comment,
     learningFormat,
+    contractUrl,
   } = req.body
 
   if (!clientName || !amount) {
@@ -98,6 +99,8 @@ export default async function handler(req, res) {
   if (trancheNumber > 1) {
     message += `🔄 Транш №${trancheNumber}\n`
   }
+
+  if (contractUrl) message += `📄 Договор: ${contractUrl}\n`
 
   if (managerName) message += `\n👔 Менеджер: ${managerName}`
 

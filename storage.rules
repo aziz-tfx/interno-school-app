@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// Firebase Storage rules for INTERNO School App.
+// The app authenticates users via Firestore (not Firebase Auth),
+// so these rules mirror the Firestore rules: open access for the
+// internal team. Apply via Firebase Console → Storage → Rules, or
+// `firebase deploy --only storage`.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Contracts bucket — auto-generated .docx files linked in Telegram notifications
+    match /contracts/{file=**} {
+      allow read, write: if true;
+    }
+
+    // Any other path: read-only by default
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

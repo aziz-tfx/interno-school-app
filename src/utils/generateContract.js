@@ -486,7 +486,11 @@ function buildSignatureTable(data, lang) {
  * @param {object} data - Contract data
  * @param {string} data.lang - Language: 'ru' for Russian, 'uz' for Uzbek (default 'uz')
  */
-export async function generateContract(data) {
+/**
+ * Build the contract .docx blob and filename without triggering a download.
+ * Useful for uploading to storage or attaching to emails/Telegram.
+ */
+export async function buildContractBlob(data) {
   const lang = data.lang || 'uz'
   const isRu = lang === 'ru'
 
@@ -531,6 +535,11 @@ export async function generateContract(data) {
   const blob = await Packer.toBlob(doc)
   const prefix = isRu ? 'Договор' : 'Shartnoma'
   const fileName = `${prefix}_${(data.clientName || 'client').replace(/\s+/g, '_')}_${contractNum || 'N'}.docx`
+  return { blob, fileName }
+}
+
+export async function generateContract(data) {
+  const { blob, fileName } = await buildContractBlob(data)
   saveAs(blob, fileName)
   return fileName
 }
