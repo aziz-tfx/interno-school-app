@@ -221,6 +221,16 @@ export default {
   "finance.fmt_million": "mln",
   "finance.fmt_thousand": "ming",
   "finance.sum": "so'm",
+  "finance.signups": "Yozilganlar",
+  "finance.save": "Saqlash",
+  "finance.cancel": "Bekor qilish",
+  "finance.saving": "Saqlanmoqda...",
+  "finance.edit_kpi_hint": "Tahrirlash",
+  "finance.edit_kpi_title": "Menejer ko'rsatkichlari",
+  "finance.edit_kpi_plan_section": "Oylik reja",
+  "finance.edit_kpi_actual_section": "Haqiqiy ko'rsatkichlar",
+  "finance.edit_kpi_override_note": "Kiritilgan haqiqiy qiymatlar oyga hisobotlardagi ma'lumotlarni almashtiradi.",
+  "finance.kpi_save_failed": "Ko'rsatkichlarni saqlab bo'lmadi. Qayta urinib ko'ring.",
 
   // ─── Branches ─────────────────────────────────────────────────────────────────
   "branches.heading": "Filiallar",

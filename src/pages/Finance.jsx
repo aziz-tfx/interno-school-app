@@ -11,7 +11,7 @@ import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { formatCurrency } from '../data/mockData'
 import { db } from '../firebase'
-import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { collection, doc, setDoc, query, where, onSnapshot } from 'firebase/firestore'
 import Modal from '../components/Modal'
 import PaymentForm from '../components/PaymentForm'
 
@@ -32,7 +32,7 @@ export default function Finance() {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const { user, hasPermission, employees, getSalesStaff } = useAuth()
-  const { branches, payments, getSalesPlan, getManagerPerf, updatePayment, deletePayment, courses } = useData()
+  const { branches, payments, getSalesPlan, getManagerPerf, setSalesPlan, updatePayment, deletePayment, courses } = useData()
 
   function formatRevenue(val) {
     if (val == null || val === 0) return '0'
@@ -59,6 +59,86 @@ export default function Finance() {
   const [editForm, setEditForm] = useState({})
   const [editSaving, setEditSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // ─── Manager KPI editor state ───────────────────────────────────────────
+  const [editingKpi, setEditingKpi] = useState(null) // mgr object
+  const [kpiForm, setKpiForm] = useState(null)
+  const [kpiSaving, setKpiSaving] = useState(false)
+
+  const canEditKpi = isAdmin || isBranchDirector || isRop
+
+  const openKpiEditor = (mgr) => {
+    if (!canEditKpi) return
+    setEditingKpi(mgr)
+    setKpiForm({
+      planLeads:         mgr.plan.leads,
+      planConversations: mgr.plan.conversations,
+      planSignups:       mgr.plan.signups,
+      planVisited:       mgr.plan.visited,
+      planSales:         mgr.plan.sales,
+      planRevenue:       mgr.plan.revenue,
+      actLeads:         mgr.actual.leads,
+      actConversations: mgr.actual.conversations,
+      actSignups:       mgr.actual.signups,
+      actVisited:       mgr.actual.visited,
+      actSales:         mgr.actual.sales,
+      actRevenue:       mgr.actual.revenue,
+    })
+  }
+
+  const closeKpiEditor = () => {
+    setEditingKpi(null)
+    setKpiForm(null)
+  }
+
+  const saveKpiEditor = async () => {
+    if (!editingKpi || !kpiForm) return
+    setKpiSaving(true)
+    try {
+      const mgrName = editingKpi.name
+      // 1) Save plan to reportPlans (same doc Reports.jsx uses)
+      const plansRef = collection(db, 'reportPlans')
+      await setDoc(doc(plansRef, `${monthKey}_${mgrName}`), {
+        monthKey,
+        manager: mgrName,
+        leads:         Number(kpiForm.planLeads)         || 0,
+        conversations: Number(kpiForm.planConversations) || 0,
+        signups:       Number(kpiForm.planSignups)       || 0,
+        visited:       Number(kpiForm.planVisited)       || 0,
+        sales:         Number(kpiForm.planSales)         || 0,
+        revenue:       Number(kpiForm.planRevenue)       || 0,
+      })
+
+      // 2) Sync plan revenue → salesPlans (used by Dashboard Sales tab + Leaderboard)
+      if (editingKpi.managerId) {
+        try {
+          await setSalesPlan(editingKpi.managerId, Number(kpiForm.planRevenue) || 0, monthKey)
+        } catch (err) {
+          console.warn('setSalesPlan failed:', err)
+        }
+      }
+
+      // 3) Save actuals as an "override" entry in reportDaily
+      const dailyRef = collection(db, 'reportDaily')
+      await setDoc(doc(dailyRef, `${monthKey}_${mgrName}_override`), {
+        monthKey,
+        manager: mgrName,
+        day: 'override',
+        leads:         Number(kpiForm.actLeads)         || 0,
+        conversations: Number(kpiForm.actConversations) || 0,
+        signups:       Number(kpiForm.actSignups)       || 0,
+        visited:       Number(kpiForm.actVisited)       || 0,
+        sales:         Number(kpiForm.actSales)         || 0,
+        revenue:       Number(kpiForm.actRevenue)       || 0,
+      })
+
+      closeKpiEditor()
+    } catch (err) {
+      console.error('Failed to save KPI:', err)
+      alert(t('finance.kpi_save_failed') || 'Не удалось сохранить показатели')
+    }
+    setKpiSaving(false)
+  }
 
   const EDIT_METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 
@@ -136,22 +216,41 @@ export default function Finance() {
   }, [monthKey])
 
   // ─── Firestore: Load reportDaily for this month ─────────────────────────
+  // Supports per-manager "override" entries (day='override') that REPLACE
+  // the aggregated daily totals for that manager.
   useEffect(() => {
     const q = query(collection(db, 'reportDaily'), where('monthKey', '==', monthKey))
     const unsub = onSnapshot(q, (snap) => {
-      const d = {}
-      snap.docs.forEach(doc => {
-        const data = doc.data()
+      const daily = {}
+      const overrides = {}
+      snap.docs.forEach(docSnap => {
+        const data = docSnap.data()
         const mgr = data.manager
-        if (!d[mgr]) d[mgr] = { leads: 0, conversations: 0, signups: 0, visited: 0, sales: 0, revenue: 0 }
-        d[mgr].leads += data.leads || 0
-        d[mgr].conversations += data.conversations || 0
-        d[mgr].signups += data.signups || 0
-        d[mgr].visited += data.visited || 0
-        d[mgr].sales += data.sales || 0
-        d[mgr].revenue += data.revenue || 0
+        if (data.day === 'override') {
+          overrides[mgr] = {
+            leads: data.leads || 0,
+            conversations: data.conversations || 0,
+            signups: data.signups || 0,
+            visited: data.visited || 0,
+            sales: data.sales || 0,
+            revenue: data.revenue || 0,
+          }
+          return
+        }
+        if (!daily[mgr]) daily[mgr] = { leads: 0, conversations: 0, signups: 0, visited: 0, sales: 0, revenue: 0 }
+        daily[mgr].leads += data.leads || 0
+        daily[mgr].conversations += data.conversations || 0
+        daily[mgr].signups += data.signups || 0
+        daily[mgr].visited += data.visited || 0
+        daily[mgr].sales += data.sales || 0
+        daily[mgr].revenue += data.revenue || 0
       })
-      setReportDaily(d)
+      // Apply overrides: replace aggregated values for managers with override entry
+      const merged = { ...daily }
+      Object.keys(overrides).forEach(mgr => {
+        merged[mgr] = overrides[mgr]
+      })
+      setReportDaily(merged)
     })
     return unsub
   }, [monthKey])
@@ -457,9 +556,18 @@ export default function Finance() {
             const isCurrentUser = mgr.id === user?.id
             return (
               <div key={mgr.id}
-                className={`glass-card rounded-2xl p-5 border transition-all ${
+                onClick={() => canEditKpi && openKpiEditor(mgr)}
+                className={`glass-card rounded-2xl p-5 border transition-all group relative ${
                   isCurrentUser ? 'border-blue-300 ring-2 ring-blue-100' : 'border-transparent hover:border-slate-200'
-                }`}>
+                } ${canEditKpi ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''}`}>
+                {canEditKpi && (
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-slate-200">
+                      <Pencil size={10} />
+                      {t('finance.edit_kpi_hint')}
+                    </div>
+                  </div>
+                )}
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -800,6 +908,112 @@ export default function Finance() {
           </div>
         )}
       </Modal>
+
+      {/* ─── Manager KPI Edit Modal ─────────────────────────────────────── */}
+      <Modal
+        isOpen={!!editingKpi}
+        onClose={closeKpiEditor}
+        title={editingKpi ? `${t('finance.edit_kpi_title')}: ${editingKpi.name}` : ''}
+        size="lg"
+      >
+        {editingKpi && kpiForm && (
+          <div className="space-y-5">
+            {/* Header info */}
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-bold ${
+                editingKpi.role === 'rop' ? 'bg-teal-600' : 'bg-emerald-600'
+              }`}>
+                {editingKpi.avatar || editingKpi.name?.charAt(0)}
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-slate-900 text-sm">{editingKpi.name}</p>
+                <p className="text-xs text-slate-500">
+                  {editingKpi.role === 'rop' ? t('finance.rop') : t('finance.manager')}
+                  {' · '}
+                  {branches.find(b => b.id === editingKpi.branch)?.name || editingKpi.branch}
+                  {' · '}
+                  {monthKey}
+                </p>
+              </div>
+            </div>
+
+            {/* Plan section */}
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-1.5">
+                <Target size={12} className="text-blue-600" />
+                {t('finance.edit_kpi_plan_section')}
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <KpiField label={t('finance.leads')}         value={kpiForm.planLeads}         onChange={v => setKpiForm(p => ({ ...p, planLeads: v }))} />
+                <KpiField label={t('finance.conversations')} value={kpiForm.planConversations} onChange={v => setKpiForm(p => ({ ...p, planConversations: v }))} />
+                <KpiField label={t('finance.signups') || 'Записи'} value={kpiForm.planSignups} onChange={v => setKpiForm(p => ({ ...p, planSignups: v }))} />
+                <KpiField label={t('finance.visited_off')}   value={kpiForm.planVisited}      onChange={v => setKpiForm(p => ({ ...p, planVisited: v }))} />
+                <KpiField label={t('finance.sales_short')}   value={kpiForm.planSales}        onChange={v => setKpiForm(p => ({ ...p, planSales: v }))} />
+                <KpiField label={t('finance.revenue')}       value={kpiForm.planRevenue}      onChange={v => setKpiForm(p => ({ ...p, planRevenue: v }))} isMoney />
+              </div>
+            </div>
+
+            {/* Actual section */}
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-1.5">
+                <TrendingUp size={12} className="text-emerald-600" />
+                {t('finance.edit_kpi_actual_section')}
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <KpiField label={t('finance.leads')}         value={kpiForm.actLeads}         onChange={v => setKpiForm(p => ({ ...p, actLeads: v }))} />
+                <KpiField label={t('finance.conversations')} value={kpiForm.actConversations} onChange={v => setKpiForm(p => ({ ...p, actConversations: v }))} />
+                <KpiField label={t('finance.signups') || 'Записи'} value={kpiForm.actSignups} onChange={v => setKpiForm(p => ({ ...p, actSignups: v }))} />
+                <KpiField label={t('finance.visited_off')}   value={kpiForm.actVisited}      onChange={v => setKpiForm(p => ({ ...p, actVisited: v }))} />
+                <KpiField label={t('finance.sales_short')}   value={kpiForm.actSales}        onChange={v => setKpiForm(p => ({ ...p, actSales: v }))} />
+                <KpiField label={t('finance.revenue')}       value={kpiForm.actRevenue}      onChange={v => setKpiForm(p => ({ ...p, actRevenue: v }))} isMoney />
+              </div>
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3 flex items-start gap-1.5">
+                <span className="mt-0.5">⚠</span>
+                <span>{t('finance.edit_kpi_override_note')}</span>
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={closeKpiEditor}
+                disabled={kpiSaving}
+                className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                {t('finance.cancel') || 'Отмена'}
+              </button>
+              <button
+                type="button"
+                onClick={saveKpiEditor}
+                disabled={kpiSaving}
+                className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <Save size={14} />
+                {kpiSaving ? (t('finance.saving') || 'Сохранение...') : (t('finance.save') || 'Сохранить')}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
+// ─── KPI field input ───────────────────────────────────────────────────────
+function KpiField({ label, value, onChange, isMoney }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-slate-500 mb-1 uppercase tracking-wide">
+        {label}
+      </label>
+      <input
+        type="number"
+        min="0"
+        value={value}
+        onChange={e => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+        className={`w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${isMoney ? 'text-right' : ''}`}
+      />
     </div>
   )
 }

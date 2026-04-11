@@ -221,6 +221,16 @@ export default {
   "finance.fmt_million": "млн",
   "finance.fmt_thousand": "тыс",
   "finance.sum": "сум",
+  "finance.signups": "Записи",
+  "finance.save": "Сохранить",
+  "finance.cancel": "Отмена",
+  "finance.saving": "Сохранение...",
+  "finance.edit_kpi_hint": "Изменить",
+  "finance.edit_kpi_title": "Показатели менеджера",
+  "finance.edit_kpi_plan_section": "План на месяц",
+  "finance.edit_kpi_actual_section": "Фактические показатели",
+  "finance.edit_kpi_override_note": "Введённые значения фактов заменят данные из отчётов за месяц.",
+  "finance.kpi_save_failed": "Не удалось сохранить показатели. Попробуйте ещё раз.",
 
   // ─── Branches ─────────────────────────────────────────────────────────────────
   "branches.heading": "Филиалы",
