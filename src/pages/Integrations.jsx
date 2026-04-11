@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useData } from '../contexts/DataContext'
 import {
   Send, Globe, CheckCircle, XCircle, AlertTriangle,
   Settings, Save, Eye, EyeOff, RefreshCw, Plug, Zap,
+  Bell, Inbox, Clock, User as UserIcon,
 } from 'lucide-react'
+import { pushSaleToTelegram } from '../utils/telegram'
 
 const BRANCH_LABELS = {
   tashkent: 'Ташкент',
@@ -15,6 +18,94 @@ const BRANCH_LABELS = {
 export default function Integrations() {
   const { t } = useLanguage()
   const { user } = useAuth()
+  const { payments, updatePayment, branches, groups, courses } = useData()
+
+  // ─── Missed Telegram notifications state ───
+  const [missedDaysBack, setMissedDaysBack] = useState(7)
+  const [resending, setResending] = useState(false)
+  const [resendingId, setResendingId] = useState(null)
+  const [resendLog, setResendLog] = useState([]) // [{id, ok, error, timestamp}]
+
+  // Compute list of income payments without telegramSent flag for selected period
+  const missedSales = (() => {
+    const now = new Date()
+    const threshold = new Date(now.getTime() - missedDaysBack * 24 * 60 * 60 * 1000)
+    const thresholdKey = threshold.toISOString().split('T')[0]
+    return payments
+      .filter(p => {
+        if (p.type !== 'income') return false
+        if (p.telegramSent) return false
+        const d = p.date || ''
+        return d >= thresholdKey
+      })
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  })()
+
+  const buildTelegramPayloadFromPayment = (p) => {
+    const group = groups.find(g => String(g.id) === String(p.groupId))
+    const course = courses.find(c => c.name === p.course)
+    return {
+      clientName: p.student || p.clientName || '—',
+      phone: p.phone || '',
+      course: p.course || '',
+      group: group?.name || p.group || '',
+      amount: Number(p.amount) || 0,
+      method: p.method || '',
+      date: p.date || '',
+      courseStartDate: p.courseStartDate || '',
+      branch: p.branch || 'tashkent',
+      tariff: p.tariff || '',
+      discount: p.discount || '',
+      contractNumber: p.contractNumber || '',
+      debt: p.debt || 0,
+      totalCoursePrice: p.totalCoursePrice || 0,
+      trancheNumber: p.trancheNumber || 1,
+      managerName: p.createdByName || '',
+      comment: p.comment || '',
+      learningFormat: p.learningFormat || '',
+      contractUrl: p.contractUrl || null,
+    }
+  }
+
+  const resendOne = async (p) => {
+    setResendingId(p.id)
+    try {
+      const payload = buildTelegramPayloadFromPayment(p)
+      const result = await pushSaleToTelegram(payload)
+      if (result.success) {
+        await updatePayment(p.id, {
+          telegramSent: true,
+          telegramSentAt: new Date().toISOString(),
+          telegramMessageId: result.messageId || null,
+          telegramResent: true,
+        })
+        setResendLog(prev => [...prev, { id: p.id, ok: true, client: p.student, timestamp: Date.now() }])
+      } else {
+        setResendLog(prev => [...prev, { id: p.id, ok: false, client: p.student, error: result.error || 'Unknown error', timestamp: Date.now() }])
+      }
+    } catch (err) {
+      setResendLog(prev => [...prev, { id: p.id, ok: false, client: p.student, error: err.message, timestamp: Date.now() }])
+    }
+    setResendingId(null)
+  }
+
+  const resendAll = async () => {
+    if (!missedSales.length) return
+    if (!confirm(`Отправить ${missedSales.length} уведомлений в Telegram? Это нельзя отменить.`)) return
+    setResending(true)
+    setResendLog([])
+    for (const p of missedSales) {
+      await resendOne(p)
+      // Small delay between sends to avoid Telegram rate-limit (30 msg/sec)
+      await new Promise(r => setTimeout(r, 400))
+    }
+    setResending(false)
+  }
+
+  const formatAmount = (v) => {
+    if (!v) return '0'
+    return Number(v).toLocaleString('ru-RU').replace(/,/g, ' ')
+  }
 
   // ─── Telegram State ───
   const [tgConfig, setTgConfig] = useState({
@@ -300,6 +391,152 @@ export default function Integrations() {
               {tgSaved ? <><CheckCircle size={16} /> Сохранено!</> : <><Save size={16} /> Сохранить</>}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* RESEND MISSED TELEGRAM NOTIFICATIONS */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      <div className="glass rounded-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+              <Bell size={24} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">Повторная отправка уведомлений</h3>
+              <p className="text-white/80 text-sm">Продажи без отметки об отправке в Telegram</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-full text-sm text-white">
+              <Inbox size={14} /> {missedSales.length}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Period selector */}
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-sm font-medium text-slate-700">Период поиска:</label>
+            <select
+              value={missedDaysBack}
+              onChange={(e) => setMissedDaysBack(Number(e.target.value))}
+              className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value={1}>Сегодня</option>
+              <option value={3}>3 дня</option>
+              <option value={7}>7 дней</option>
+              <option value={14}>14 дней</option>
+              <option value={30}>30 дней</option>
+            </select>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={resendAll}
+                disabled={resending || !missedSales.length}
+                className="px-5 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-semibold hover:bg-amber-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-amber-500/25"
+              >
+                <Send size={15} className={resending ? 'animate-pulse' : ''} />
+                {resending ? 'Отправка...' : `Отправить все (${missedSales.length})`}
+              </button>
+            </div>
+          </div>
+
+          {/* Info banner */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="flex gap-2">
+              <AlertTriangle size={16} className="text-amber-500 mt-0.5 shrink-0" />
+              <div className="text-sm text-amber-800">
+                <p className="font-medium mb-0.5">Что делает этот раздел</p>
+                <p className="text-amber-700 text-xs leading-relaxed">
+                  Показывает продажи, у которых нет отметки <code className="bg-amber-100 px-1 py-0.5 rounded text-[10px] font-mono">telegramSent</code>.
+                  При нажатии на кнопку — повторно отправляет уведомление в Telegram-группу филиала и ставит отметку,
+                  чтобы избежать дублей. Работает только с продажами типа «income».
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* List of missed sales */}
+          {missedSales.length === 0 ? (
+            <div className="text-center py-10 text-slate-400">
+              <CheckCircle size={40} className="mx-auto mb-2 opacity-40 text-emerald-500" />
+              <p className="text-sm font-medium">Все продажи за период отправлены ✓</p>
+              <p className="text-xs mt-1">Нет необработанных уведомлений</p>
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+                {missedSales.map(p => {
+                  const logEntry = resendLog.find(l => l.id === p.id)
+                  const branchName = branches.find(b => b.id === p.branch)?.name || p.branch || '—'
+                  return (
+                    <div key={p.id} className="p-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
+                      <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+                        <UserIcon size={16} className="text-slate-500" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                          {p.student || p.clientName || '—'}
+                          {(p.trancheNumber || 1) > 1 && (
+                            <span className="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                              Транш №{p.trancheNumber}
+                            </span>
+                          )}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
+                          <span className="flex items-center gap-1"><Clock size={10} />{p.date}</span>
+                          <span>·</span>
+                          <span>{branchName}</span>
+                          <span>·</span>
+                          <span className="font-semibold text-emerald-600">+{formatAmount(p.amount)} сум</span>
+                          {p.createdByName && (
+                            <>
+                              <span>·</span>
+                              <span className="text-slate-400">{p.createdByName}</span>
+                            </>
+                          )}
+                        </div>
+                        {logEntry && (
+                          <p className={`text-[11px] mt-1 flex items-center gap-1 ${logEntry.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {logEntry.ok ? <CheckCircle size={11} /> : <XCircle size={11} />}
+                            {logEntry.ok ? 'Отправлено' : `Ошибка: ${logEntry.error}`}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => resendOne(p)}
+                        disabled={resending || resendingId === p.id || logEntry?.ok}
+                        className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-medium hover:bg-amber-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 shrink-0"
+                      >
+                        {resendingId === p.id ? (
+                          <><RefreshCw size={12} className="animate-spin" /> Отправка</>
+                        ) : logEntry?.ok ? (
+                          <><CheckCircle size={12} /> Готово</>
+                        ) : (
+                          <><Send size={12} /> Отправить</>
+                        )}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Summary log */}
+          {resendLog.length > 0 && !resending && (
+            <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-600">
+              <span className="font-semibold">Результат:</span>{' '}
+              <span className="text-emerald-600">{resendLog.filter(l => l.ok).length} успешно</span>
+              {resendLog.filter(l => !l.ok).length > 0 && (
+                <>
+                  {' · '}
+                  <span className="text-red-500">{resendLog.filter(l => !l.ok).length} с ошибкой</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

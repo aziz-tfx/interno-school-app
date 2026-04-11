@@ -464,6 +464,12 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       }).then(result => {
         if (result.success) {
           console.log('Sale notification sent to Telegram:', result.messageId)
+          // Mark payment as notified so admin tools can filter missed ones
+          updatePayment(saved.id, {
+            telegramSent: true,
+            telegramSentAt: new Date().toISOString(),
+            telegramMessageId: result.messageId || null,
+          }).catch(e => console.warn('Failed to mark telegramSent:', e))
         } else {
           console.warn('Telegram notification skipped:', result.error)
         }
