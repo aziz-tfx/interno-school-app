@@ -363,47 +363,57 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     setShowReceipt(true)
 
     // ─── Auto-generate contract & upload to Firebase Storage ───
-    // Runs non-blocking. Returns a public download URL to include in Telegram.
-    let contractUrl = null
+    // Runs in parallel, does NOT block Telegram/amoCRM notifications.
+    // If Firebase Storage is not provisioned (Spark plan), this promise
+    // will reject/hang — we race it against a 5-second timeout so the
+    // Telegram push still fires reliably.
+    let contractUploadPromise = Promise.resolve(null)
     if (form.type === 'income') {
-      try {
-        const { blob, fileName } = await buildContractBlob({
-          clientName: form.clientName,
-          passport: form.passport || '',
-          phone: form.phone,
-          course: form.course,
-          amount: courseFullPrice || totalCoursePrice || Number(form.amount) || 0,
-          tariff: form.tariff,
-          contractNumber: form.contractNumber,
-          contractDate: form.paymentDate,
-          courseStartDate: form.courseStartDate,
-          durationMonths: Number(form.durationMonths) || 3,
-          schedule: form.schedule || '',
-          learningFormat: form.learningFormat,
-          lang: form.contractLang || 'uz',
-        })
-        const safeNumber = (form.contractNumber || `sale_${saved.id}`).replace(/[^\w-]/g, '_')
-        const storagePath = `contracts/${safeNumber}_${Date.now()}_${fileName}`
-        const fileRef = storageRef(storage, storagePath)
-        await uploadBytes(fileRef, blob, {
-          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          customMetadata: {
-            paymentId: saved.id,
-            contractNumber: form.contractNumber || '',
-            clientName: form.clientName || '',
-          },
-        })
-        contractUrl = await getDownloadURL(fileRef)
-        // Save URL back on the payment document for later reference
+      contractUploadPromise = (async () => {
         try {
-          await updatePayment(saved.id, { contractUrl, contractFileName: fileName })
-        } catch (e) {
-          console.warn('Failed to persist contractUrl on payment:', e)
+          const { blob, fileName } = await buildContractBlob({
+            clientName: form.clientName,
+            passport: form.passport || '',
+            phone: form.phone,
+            course: form.course,
+            amount: courseFullPrice || totalCoursePrice || Number(form.amount) || 0,
+            tariff: form.tariff,
+            contractNumber: form.contractNumber,
+            contractDate: form.paymentDate,
+            courseStartDate: form.courseStartDate,
+            durationMonths: Number(form.durationMonths) || 3,
+            schedule: form.schedule || '',
+            learningFormat: form.learningFormat,
+            lang: form.contractLang || 'uz',
+          })
+          const safeNumber = (form.contractNumber || `sale_${saved.id}`).replace(/[^\w-]/g, '_')
+          const storagePath = `contracts/${safeNumber}_${Date.now()}_${fileName}`
+          const fileRef = storageRef(storage, storagePath)
+          await uploadBytes(fileRef, blob, {
+            contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            customMetadata: {
+              paymentId: saved.id,
+              contractNumber: form.contractNumber || '',
+              clientName: form.clientName || '',
+            },
+          })
+          const url = await getDownloadURL(fileRef)
+          // Persist URL on the payment record (best-effort, don't block)
+          updatePayment(saved.id, { contractUrl: url, contractFileName: fileName })
+            .catch(e => console.warn('Failed to persist contractUrl on payment:', e))
+          return url
+        } catch (err) {
+          console.error('Contract upload failed, continuing without URL:', err)
+          return null
         }
-      } catch (err) {
-        console.error('Contract upload failed, continuing without URL:', err)
-      }
+      })()
     }
+
+    // Wait up to 5s for contract URL, then fire notifications regardless.
+    const contractUrl = await Promise.race([
+      contractUploadPromise,
+      new Promise(resolve => setTimeout(() => resolve(null), 5000)),
+    ])
 
     // Push to amoCRM (non-blocking — doesn't prevent the sale)
     if (form.type === 'income') {
