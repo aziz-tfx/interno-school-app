@@ -244,7 +244,7 @@ function SubmissionView({ assignment, groupId }) {
     setSubmitting(true)
     try {
       if (mySubmission) {
-        await updateLmsSubmission(mySubmission.id, { answer, updatedAt: new Date().toISOString() })
+        await updateLmsSubmission(mySubmission.id, { answer, updatedAt: new Date().toISOString(), status: 'submitted' })
       } else {
         await addLmsSubmission({
           assignmentId: assignment.id,
@@ -252,6 +252,8 @@ function SubmissionView({ assignment, groupId }) {
           studentId: myStudent.id,
           studentName: myStudent.name,
           answer,
+          status: 'submitted',
+          comments: [],
           createdAt: new Date().toISOString(),
         })
       }
@@ -265,18 +267,79 @@ function SubmissionView({ assignment, groupId }) {
     await updateLmsSubmission(submissionId, {
       grade: Number(grade),
       feedback: feedback || '',
+      status: 'reviewed',
       gradedAt: new Date().toISOString(),
       gradedBy: user?.name,
     })
   }
 
+  // Deadline indicator
+  const deadlineBadge = useMemo(() => {
+    if (!assignment.deadline) return null
+    const now = new Date()
+    const dl = new Date(assignment.deadline)
+    const diffDays = Math.ceil((dl - now) / (1000 * 60 * 60 * 24))
+    if (diffDays < 0) return { label: t('lms.deadline_overdue'), color: 'bg-red-100 text-red-700', urgent: true }
+    if (diffDays === 0) return { label: t('lms.deadline_today'), color: 'bg-red-100 text-red-700', urgent: true }
+    if (diffDays === 1) return { label: t('lms.deadline_tomorrow'), color: 'bg-amber-100 text-amber-700', urgent: true }
+    if (diffDays <= 3) return { label: `${diffDays} дн.`, color: 'bg-amber-100 text-amber-700', urgent: false }
+    return { label: `${diffDays} дн.`, color: 'bg-emerald-100 text-emerald-700', urgent: false }
+  }, [assignment.deadline, t])
+
+  // Resolve status from submission data (backward compat)
+  const resolveStatus = (sub) => {
+    if (!sub) return null
+    if (sub.status) return sub.status
+    if (sub.grade !== undefined && sub.grade !== null) return 'reviewed'
+    return 'submitted'
+  }
+
+  const statusBadge = (sub) => {
+    const st = resolveStatus(sub)
+    if (st === 'reviewed') return { label: t('lms.status_reviewed'), color: 'bg-emerald-100 text-emerald-700' }
+    if (st === 'under_review') return { label: t('lms.status_under_review'), color: 'bg-blue-100 text-blue-700' }
+    return { label: t('lms.status_submitted'), color: 'bg-amber-100 text-amber-700' }
+  }
+
+  // Comment handling for student
+  const [commentText, setCommentText] = useState('')
+  const handleAddComment = async (submissionId) => {
+    if (!commentText.trim()) return
+    const sub = submissions.find(s => s.id === submissionId)
+    const comments = [...(sub?.comments || []), {
+      id: Date.now().toString(),
+      userId: user?.id || user?._docId || '',
+      userName: user?.name || '',
+      userRole: user?.role || '',
+      text: commentText.trim(),
+      createdAt: new Date().toISOString(),
+    }]
+    await updateLmsSubmission(submissionId, { comments })
+    setCommentText('')
+  }
+
   // Student view
   if (isStudent) {
+    const myStatus = mySubmission ? statusBadge(mySubmission) : null
     return (
-      <div className="mt-4 p-4 bg-slate-50 rounded-xl">
-        <h5 className="text-sm font-semibold text-slate-700 mb-2">
-          {mySubmission ? t('lms.submission_your_answer') : t('lms.submission_submit_work')}
-        </h5>
+      <div className="mt-4 p-4 bg-slate-50 rounded-xl space-y-3">
+        <div className="flex items-center justify-between">
+          <h5 className="text-sm font-semibold text-slate-700">
+            {mySubmission ? t('lms.submission_your_answer') : t('lms.submission_submit_work')}
+          </h5>
+          <div className="flex items-center gap-2">
+            {deadlineBadge && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${deadlineBadge.color} ${deadlineBadge.urgent ? 'animate-pulse' : ''}`}>
+                <Clock size={10} className="inline mr-0.5" />{deadlineBadge.label}
+              </span>
+            )}
+            {myStatus && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${myStatus.color}`}>
+                {myStatus.label}
+              </span>
+            )}
+          </div>
+        </div>
         {mySubmission?.grade !== undefined && mySubmission?.grade !== null ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -292,12 +355,40 @@ function SubmissionView({ assignment, groupId }) {
           <>
             <textarea value={answer} onChange={e => setAnswer(e.target.value)}
               rows={3} placeholder={t('lms.submission_placeholder')}
-              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-2" />
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             <button onClick={handleSubmit} disabled={submitting || !answer.trim()}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
               <Send size={14} /> {mySubmission ? t('lms.submission_update') : t('lms.submission_send')}
             </button>
           </>
+        )}
+        {/* Comment thread */}
+        {mySubmission?.comments?.length > 0 && (
+          <div className="border-t border-slate-200 pt-3 space-y-2">
+            <p className="text-xs font-semibold text-slate-500">{t('lms.comments')}</p>
+            {mySubmission.comments.map(c => (
+              <div key={c.id} className={`rounded-lg p-2.5 text-xs ${c.userRole === 'student' ? 'bg-blue-50 ml-4' : 'bg-white mr-4 border border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-slate-700">{c.userName}</span>
+                  <span className="text-slate-400">{new Date(c.createdAt).toLocaleDateString('ru-RU')}</span>
+                </div>
+                <p className="text-slate-600">{c.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Add comment (if submitted) */}
+        {mySubmission && (
+          <div className="flex gap-2">
+            <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)}
+              placeholder={t('lms.comment_placeholder')}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddComment(mySubmission.id) }}
+              className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            <button onClick={() => handleAddComment(mySubmission.id)} disabled={!commentText.trim()}
+              className="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              <Send size={12} />
+            </button>
+          </div>
         )}
       </div>
     )
@@ -326,23 +417,65 @@ function SubmissionView({ assignment, groupId }) {
 
 function GradeCard({ submission, maxScore, onGrade }) {
   const { t } = useLanguage()
+  const { user } = useAuth()
+  const { updateLmsSubmission } = useData()
   const [editing, setEditing] = useState(false)
   const [grade, setGrade] = useState(submission.grade ?? '')
   const [feedback, setFeedback] = useState(submission.feedback || '')
+  const [commentText, setCommentText] = useState('')
+  const [showComments, setShowComments] = useState(false)
+
+  // Resolve status (backward compat)
+  const status = submission.status || (submission.grade != null ? 'reviewed' : 'submitted')
+  const statusInfo = status === 'reviewed'
+    ? { label: t('lms.status_reviewed'), color: 'bg-emerald-100 text-emerald-700' }
+    : status === 'under_review'
+      ? { label: t('lms.status_under_review'), color: 'bg-blue-100 text-blue-700' }
+      : { label: t('lms.status_submitted'), color: 'bg-amber-100 text-amber-700' }
+
+  const handleStartReview = async () => {
+    if (status === 'submitted') {
+      await updateLmsSubmission(submission.id, { status: 'under_review', reviewStartedAt: new Date().toISOString() })
+    }
+    setEditing(true)
+  }
+
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return
+    const comments = [...(submission.comments || []), {
+      id: Date.now().toString(),
+      userId: user?.id || user?._docId || '',
+      userName: user?.name || '',
+      userRole: user?.role || '',
+      text: commentText.trim(),
+      createdAt: new Date().toISOString(),
+    }]
+    await updateLmsSubmission(submission.id, { comments })
+    setCommentText('')
+  }
+
+  const comments = submission.comments || []
 
   return (
-    <div className="bg-slate-50 rounded-xl p-3">
+    <div className="bg-slate-50 rounded-xl p-3 space-y-2">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-medium text-slate-900">{submission.studentName}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-slate-900">{submission.studentName}</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${statusInfo.color}`}>
+            {statusInfo.label}
+          </span>
+        </div>
         {submission.grade !== undefined && submission.grade !== null ? (
           <span className="text-sm font-bold text-emerald-600">{submission.grade}/{maxScore}</span>
         ) : (
           <span className="text-xs text-amber-500">{t('lms.submission_not_graded')}</span>
         )}
       </div>
-      <p className="text-xs text-slate-600 mb-2">{submission.answer}</p>
+      <p className="text-xs text-slate-600">{submission.answer}</p>
+      <p className="text-[10px] text-slate-400">{submission.createdAt ? new Date(submission.createdAt).toLocaleString('ru-RU') : ''}</p>
+
       {editing ? (
-        <div className="space-y-2">
+        <div className="space-y-2 border-t border-slate-200 pt-2">
           <div className="flex gap-2">
             <input type="number" min="0" max={maxScore} value={grade} onChange={e => setGrade(e.target.value)}
               placeholder={t('lms.submission_score_placeholder')} className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm" />
@@ -356,9 +489,41 @@ function GradeCard({ submission, maxScore, onGrade }) {
           </div>
         </div>
       ) : (
-        <button onClick={() => setEditing(true)} className="text-xs text-blue-600 hover:underline">
-          {submission.grade !== undefined ? t('lms.submission_change_grade') : t('lms.submission_grade')}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleStartReview} className="text-xs text-blue-600 hover:underline">
+            {submission.grade !== undefined ? t('lms.submission_change_grade') : t('lms.submission_grade')}
+          </button>
+          <button onClick={() => setShowComments(!showComments)} className="text-xs text-slate-400 hover:text-slate-600">
+            {t('lms.comments')} ({comments.length})
+          </button>
+        </div>
+      )}
+
+      {/* Comment thread */}
+      {showComments && (
+        <div className="border-t border-slate-200 pt-2 space-y-2">
+          {comments.length > 0 ? comments.map(c => (
+            <div key={c.id} className={`rounded-lg p-2 text-xs ${c.userRole === 'student' ? 'bg-blue-50 ml-4' : 'bg-white mr-4 border border-slate-200'}`}>
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="font-medium text-slate-700">{c.userName} <span className="text-slate-400 font-normal">({c.userRole})</span></span>
+                <span className="text-slate-400">{new Date(c.createdAt).toLocaleDateString('ru-RU')}</span>
+              </div>
+              <p className="text-slate-600">{c.text}</p>
+            </div>
+          )) : (
+            <p className="text-xs text-slate-400">{t('lms.no_comments')}</p>
+          )}
+          <div className="flex gap-2">
+            <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)}
+              placeholder={t('lms.comment_placeholder')}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddComment() }}
+              className="flex-1 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            <button onClick={handleAddComment} disabled={!commentText.trim()}
+              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              <Send size={10} />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

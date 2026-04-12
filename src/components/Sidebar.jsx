@@ -21,6 +21,8 @@ import {
   PenTool,
   Bell,
   FileText,
+  Calendar,
+  ScrollText,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -43,6 +45,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/?tab=contract', icon: FileText, label: 'Договор' },
     { divider: true },
     { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
+    { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
   ]
 
   const allNavItems = [
@@ -57,6 +60,8 @@ export default function Sidebar({ open, onClose }) {
     { to: '/leaderboard', icon: Trophy, label: t('sidebar.leaderboard'), permission: 'finance' },
     { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
     { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: 'attendance' },
+    { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
+    { to: '/audit', icon: ScrollText, label: t('sidebar.audit'), permission: 'audit' },
     { to: '/integrations', icon: Plug, label: t('sidebar.integrations'), permission: 'settings' },
   ]
 
