@@ -18,6 +18,8 @@ import LMSGroupView from './pages/lms/LMSGroupView'
 import LMSCourseView from './pages/lms/LMSCourseView'
 import LMSLessonView from './pages/lms/LMSLessonView'
 import Integrations from './pages/Integrations'
+import Schedule from './pages/Schedule'
+import AuditLog from './pages/AuditLog'
 import ContractSign from './pages/ContractSign'
 import StudentCabinet from './pages/StudentCabinet'
 import Register from './pages/Register'
@@ -93,6 +95,12 @@ export default function App() {
         } />
         <Route path="lms/lesson/:lessonId" element={
           <ProtectedRoute permission="lms"><LMSLessonView /></ProtectedRoute>
+        } />
+        <Route path="schedule" element={
+          <ProtectedRoute permission="schedule"><Schedule /></ProtectedRoute>
+        } />
+        <Route path="audit" element={
+          <ProtectedRoute permission="audit"><AuditLog /></ProtectedRoute>
         } />
         <Route path="integrations" element={
           <ProtectedRoute permission="settings"><Integrations /></ProtectedRoute>

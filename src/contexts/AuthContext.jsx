@@ -54,6 +54,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: { view: true, add: true, edit: true, delete: true },
     attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: true, grade: true, manage: true },
+    schedule:  { view: true, edit: true },
+    audit:     true,
     settings: true,
   },
   admin: {
@@ -65,6 +67,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: { view: true, add: true, edit: true, delete: true },
     attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: true, grade: true, manage: true },
+    schedule:  { view: true, edit: true },
+    audit:     true,
     settings: true,
   },
   branch_director: {
@@ -76,6 +80,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: { view: true, add: true, edit: true, delete: false },
     attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: true, grade: true, manage: true },
+    schedule:  { view: true, edit: true },
+    audit:     false,
     settings: false,
   },
   branch_admin: {
@@ -87,6 +93,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: { view: true, add: false, edit: false, delete: false },
     attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: false, grade: true, manage: false },
+    schedule:  { view: true, edit: false },
+    audit:     false,
     settings: false,
   },
   rop: {
@@ -98,6 +106,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: { view: true, add: false, edit: false, delete: false },
     attendance: { view: true, mark: true, edit: false },
     lms:       { view: true, create_content: false, grade: false, manage: false },
+    schedule:  { view: true, edit: false },
+    audit:     false,
     settings: false,
   },
   sales: {
@@ -109,6 +119,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: false,
     attendance: { view: true, mark: false, edit: false },
     lms:       false,
+    schedule:  false,
+    audit:     false,
     settings: false,
   },
   accountant: {
@@ -120,6 +132,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: false,
     attendance: { view: true, mark: false, edit: false },
     lms:       false,
+    schedule:  false,
+    audit:     false,
     settings: false,
   },
   financier: {
@@ -131,6 +145,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: false,
     attendance: false,
     lms:       false,
+    schedule:  false,
+    audit:     false,
     settings: false,
   },
   hr: {
@@ -142,6 +158,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: { view: true, add: true, edit: true, delete: false },
     attendance: false,
     lms:       false,
+    schedule:  false,
+    audit:     false,
     settings: false,
   },
   smm: {
@@ -153,6 +171,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: false,
     attendance: false,
     lms:       false,
+    schedule:  false,
+    audit:     false,
     settings: false,
   },
   teacher: {
@@ -164,6 +184,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: false,
     attendance: { view: true, mark: true, edit: false },
     lms:       { view: true, create_content: true, grade: true, manage: false },
+    schedule:  { view: true, edit: false },
+    audit:     false,
     settings: false,
   },
   student: {
@@ -175,6 +197,8 @@ export const DEFAULT_PERMISSIONS = {
     employees: false,
     attendance: false,
     lms:       { view: true, create_content: false, grade: false, manage: false },
+    schedule:  { view: true, edit: false },
+    audit:     false,
     settings: false,
   },
 }

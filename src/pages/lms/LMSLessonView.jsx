@@ -279,6 +279,7 @@ export default function LMSLessonView() {
       if (mySubmission) {
         await updateLmsSubmission(mySubmission.id, {
           answer: answerText.trim(),
+          status: 'submitted',
           updatedAt: new Date().toISOString(),
         })
       } else {
@@ -288,6 +289,8 @@ export default function LMSLessonView() {
           studentId: myStudent.id,
           studentName: myStudent.name,
           answer: answerText.trim(),
+          status: 'submitted',
+          comments: [],
           createdAt: new Date().toISOString(),
         })
       }
@@ -295,6 +298,44 @@ export default function LMSLessonView() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Deadline calculation
+  const deadlineBadge = useMemo(() => {
+    if (!linkedAssignment?.deadline) return null
+    const now = new Date()
+    const dl = new Date(linkedAssignment.deadline)
+    const diffDays = Math.ceil((dl - now) / (1000 * 60 * 60 * 24))
+    if (diffDays < 0) return { label: 'Просрочено', color: 'text-red-600 bg-red-50 border-red-200', urgent: true }
+    if (diffDays === 0) return { label: 'Сдать сегодня!', color: 'text-red-600 bg-red-50 border-red-200', urgent: true }
+    if (diffDays === 1) return { label: 'Сдать завтра', color: 'text-amber-600 bg-amber-50 border-amber-200', urgent: true }
+    if (diffDays <= 3) return { label: `Осталось ${diffDays} дн.`, color: 'text-amber-600 bg-amber-50 border-amber-200', urgent: false }
+    return { label: `Осталось ${diffDays} дн.`, color: 'text-emerald-600 bg-emerald-50 border-emerald-200', urgent: false }
+  }, [linkedAssignment])
+
+  // Submission status
+  const submissionStatus = useMemo(() => {
+    if (!mySubmission) return null
+    const st = mySubmission.status || (mySubmission.grade != null ? 'reviewed' : 'submitted')
+    if (st === 'reviewed') return { label: 'Проверено', color: 'bg-emerald-100 text-emerald-700' }
+    if (st === 'under_review') return { label: 'На проверке', color: 'bg-blue-100 text-blue-700' }
+    return { label: 'Отправлено', color: 'bg-amber-100 text-amber-700' }
+  }, [mySubmission])
+
+  // Comment handling
+  const [commentText, setCommentText] = useState('')
+  const handleAddComment = async () => {
+    if (!commentText.trim() || !mySubmission) return
+    const comments = [...(mySubmission.comments || []), {
+      id: Date.now().toString(),
+      userId: user?.id || user?._docId || '',
+      userName: user?.name || myStudent?.name || '',
+      userRole: user?.role || '',
+      text: commentText.trim(),
+      createdAt: new Date().toISOString(),
+    }]
+    await updateLmsSubmission(mySubmission.id, { comments })
+    setCommentText('')
   }
 
   const embedUrl = getYouTubeEmbedUrl(lesson?.videoUrl)
@@ -484,17 +525,28 @@ export default function LMSLessonView() {
       {/* Assignment section */}
       {linkedAssignment && isStudent && (
         <div className="glass-card rounded-2xl p-5 border-2 border-purple-100">
-          <h3 className="font-semibold text-slate-900 mb-1 flex items-center gap-2">
-            <AlertCircle size={16} className="text-purple-500" />
-            {t('lms.homework')}: {linkedAssignment.title}
-          </h3>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+              <AlertCircle size={16} className="text-purple-500" />
+              {t('lms.homework')}: {linkedAssignment.title}
+            </h3>
+            <div className="flex items-center gap-2">
+              {submissionStatus && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${submissionStatus.color}`}>
+                  {submissionStatus.label}
+                </span>
+              )}
+            </div>
+          </div>
           {linkedAssignment.description && (
             <p className="text-sm text-slate-500 mb-3">{linkedAssignment.description}</p>
           )}
-          {linkedAssignment.deadline && (
-            <p className="text-xs text-red-500 mb-3 flex items-center gap-1">
-              <Clock size={12} /> {linkedAssignment.deadline}
-            </p>
+          {/* Deadline badge */}
+          {deadlineBadge && (
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border mb-3 ${deadlineBadge.color} ${deadlineBadge.urgent ? 'animate-pulse' : ''}`}>
+              <Clock size={12} />
+              {linkedAssignment.deadline} — {deadlineBadge.label}
+            </div>
           )}
 
           {/* Grade display */}
@@ -536,6 +588,34 @@ export default function LMSLessonView() {
               >
                 <Send size={14} />
                 {mySubmission ? t('lms.submission_update') : t('lms.submit_homework')}
+              </button>
+            </div>
+          )}
+
+          {/* Comment thread */}
+          {mySubmission?.comments?.length > 0 && (
+            <div className="border-t border-purple-100 pt-3 mt-3 space-y-2">
+              <p className="text-xs font-semibold text-slate-500">{t('lms.comments')}</p>
+              {mySubmission.comments.map(c => (
+                <div key={c.id} className={`rounded-lg p-2.5 text-xs ${c.userRole === 'student' ? 'bg-purple-50 ml-4' : 'bg-white mr-4 border border-slate-200'}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-slate-700">{c.userName}</span>
+                    <span className="text-slate-400">{new Date(c.createdAt).toLocaleDateString('ru-RU')}</span>
+                  </div>
+                  <p className="text-slate-600">{c.text}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {mySubmission && (
+            <div className="flex gap-2 mt-2">
+              <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)}
+                placeholder={t('lms.comment_placeholder')}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddComment() }}
+                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-300" />
+              <button onClick={handleAddComment} disabled={!commentText.trim()}
+                className="px-3 py-2 text-xs bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50">
+                <Send size={12} />
               </button>
             </div>
           )}

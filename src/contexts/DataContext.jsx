@@ -10,6 +10,7 @@ import {
   getDocs,
   setDoc,
 } from 'firebase/firestore'
+import { logAudit } from '../utils/auditLog'
 
 // Цвета для филиалов (используются в графиках и бейджах)
 const BRANCH_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16']
@@ -17,7 +18,7 @@ const BRANCH_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#
 const DataContext = createContext(null)
 
 
-export function DataProvider({ children }) {
+export function DataProvider({ children, currentUser }) {
   const [branches, setBranches] = useState([])
   const [courses, setCourses] = useState([])
   const [groups, setGroups] = useState([])
@@ -42,12 +43,18 @@ export function DataProvider({ children }) {
   // Gamification streak data
   const [studentGameData, setStudentGameData] = useState([])
 
+  // Schedule collection
+  const [schedule, setSchedule] = useState([])
+
+  // Audit log collection
+  const [auditLogs, setAuditLogs] = useState([])
+
   // Track whether initial load has resolved for each collection
-  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false, studentGameData: false })
+  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false, studentGameData: false, schedule: false, auditLogs: false })
 
   const checkAllLoaded = () => {
     const r = loadedRef.current
-    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress && r.studentGameData) {
+    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress && r.studentGameData && r.schedule && r.auditLogs) {
       setLoading(false)
     }
   }
@@ -106,11 +113,16 @@ export function DataProvider({ children }) {
     subscribeCollection('lmsModules', setLmsModules, 'lmsModules')
     subscribeCollection('lmsProgress', setLmsProgress, 'lmsProgress')
     subscribeCollection('studentGameData', setStudentGameData, 'studentGameData')
+    subscribeCollection('schedule', setSchedule, 'schedule')
+    subscribeCollection('auditLog', setAuditLogs, 'auditLogs')
 
     return () => {
       unsubscribers.forEach(unsub => unsub())
     }
   }, [])
+
+  // Helper: get user info for audit
+  const auditUser = () => currentUser ? { id: currentUser.id || currentUser._docId, name: currentUser.name, role: currentUser.role } : {}
 
   // --- Branches CRUD ---
   const addBranch = async (branch) => {
@@ -128,15 +140,20 @@ export function DataProvider({ children }) {
       color: branch.color || BRANCH_COLORS[branches.length % BRANCH_COLORS.length],
     }
     const docRef = await addDoc(collection(db, 'branches'), newBranch)
+    logAudit({ action: 'create', collection: 'branches', documentId: docRef.id, user: auditUser(), after: newBranch, description: `Создан филиал "${newBranch.name}"` })
     return { ...newBranch, id: docRef.id }
   }
 
   const updateBranch = async (id, updates) => {
+    const before = branches.find(b => b.id === id)
     await updateDoc(doc(db, 'branches', id), updates)
+    logAudit({ action: 'update', collection: 'branches', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён филиал "${before?.name || id}"` })
   }
 
   const deleteBranch = async (id) => {
+    const before = branches.find(b => b.id === id)
     await deleteDoc(doc(db, 'branches', id))
+    logAudit({ action: 'delete', collection: 'branches', documentId: id, user: auditUser(), before, description: `Удалён филиал "${before?.name || id}"` })
   }
 
   // Helper: get branch name by id
@@ -170,15 +187,20 @@ export function DataProvider({ children }) {
   // --- Courses CRUD ---
   const addCourse = async (course) => {
     const docRef = await addDoc(collection(db, 'courses'), course)
+    logAudit({ action: 'create', collection: 'courses', documentId: docRef.id, user: auditUser(), after: course, description: `Создан курс "${course.name}"` })
     return { ...course, id: docRef.id }
   }
 
   const updateCourse = async (id, updates) => {
+    const before = courses.find(c => c.id === id)
     await updateDoc(doc(db, 'courses', id), updates)
+    logAudit({ action: 'update', collection: 'courses', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён курс "${before?.name || id}"` })
   }
 
   const deleteCourse = async (id) => {
+    const before = courses.find(c => c.id === id)
     await deleteDoc(doc(db, 'courses', id))
+    logAudit({ action: 'delete', collection: 'courses', documentId: id, user: auditUser(), before, description: `Удалён курс "${before?.name || id}"` })
   }
 
   // --- Students CRUD ---
@@ -188,30 +210,40 @@ export function DataProvider({ children }) {
       startDate: new Date().toISOString().split('T')[0],
     }
     const docRef = await addDoc(collection(db, 'students'), newStudent)
+    logAudit({ action: 'create', collection: 'students', documentId: docRef.id, user: auditUser(), after: newStudent, description: `Добавлен студент "${newStudent.name}"` })
     return { ...newStudent, id: docRef.id }
   }
 
   const updateStudent = async (id, updates) => {
+    const before = students.find(s => s.id === id)
     await updateDoc(doc(db, 'students', id), updates)
+    logAudit({ action: 'update', collection: 'students', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён студент "${before?.name || id}"` })
   }
 
   const deleteStudent = async (id) => {
+    const before = students.find(s => s.id === id)
     await deleteDoc(doc(db, 'students', id))
+    logAudit({ action: 'delete', collection: 'students', documentId: id, user: auditUser(), before, description: `Удалён студент "${before?.name || id}"` })
   }
 
   // --- Teachers CRUD ---
   const addTeacher = async (teacher) => {
     const newTeacher = { ...teacher }
     const docRef = await addDoc(collection(db, 'teachers'), newTeacher)
+    logAudit({ action: 'create', collection: 'teachers', documentId: docRef.id, user: auditUser(), after: newTeacher, description: `Добавлен преподаватель "${newTeacher.name}"` })
     return { ...newTeacher, id: docRef.id }
   }
 
   const updateTeacher = async (id, updates) => {
+    const before = teachers.find(t => t.id === id)
     await updateDoc(doc(db, 'teachers', id), updates)
+    logAudit({ action: 'update', collection: 'teachers', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён преподаватель "${before?.name || id}"` })
   }
 
   const deleteTeacher = async (id) => {
+    const before = teachers.find(t => t.id === id)
     await deleteDoc(doc(db, 'teachers', id))
+    logAudit({ action: 'delete', collection: 'teachers', documentId: id, user: auditUser(), before, description: `Удалён преподаватель "${before?.name || id}"` })
   }
 
   // --- Payments CRUD ---
@@ -221,6 +253,7 @@ export function DataProvider({ children }) {
       date: payment.date || new Date().toISOString().split('T')[0],
     }
     const docRef = await addDoc(collection(db, 'payments'), newPayment)
+    logAudit({ action: 'create', collection: 'payments', documentId: docRef.id, user: auditUser(), after: newPayment, description: `${newPayment.type === 'income' ? 'Оплата' : 'Расход'} ${newPayment.amount} сум — ${newPayment.student || ''}` })
 
     // Update student balance and debt status if it's a student payment
     if (payment.type === 'income' && payment.studentId) {
@@ -339,11 +372,15 @@ export function DataProvider({ children }) {
   }
 
   const updatePayment = async (id, updates) => {
+    const before = paymentsList.find(p => p.id === id)
     await updateDoc(doc(db, 'payments', id), updates)
+    logAudit({ action: 'update', collection: 'payments', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён платёж #${id}` })
   }
 
   const deletePayment = async (id) => {
+    const before = paymentsList.find(p => p.id === id)
     await deleteDoc(doc(db, 'payments', id))
+    logAudit({ action: 'delete', collection: 'payments', documentId: id, user: auditUser(), before, description: `Удалён платёж на ${before?.amount || 0} сум` })
   }
 
   // --- Attendance ---
@@ -525,15 +562,20 @@ export function DataProvider({ children }) {
       status: group.status || 'active',
     }
     const docRef = await addDoc(collection(db, 'groups'), newGroup)
+    logAudit({ action: 'create', collection: 'groups', documentId: docRef.id, user: auditUser(), after: newGroup, description: `Создана группа "${newGroup.name}"` })
     return { ...newGroup, id: docRef.id }
   }
 
   const updateGroup = async (id, updates) => {
+    const before = groups.find(g => g.id === id)
     await updateDoc(doc(db, 'groups', id), updates)
+    logAudit({ action: 'update', collection: 'groups', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлена группа "${before?.name || id}"` })
   }
 
   const deleteGroup = async (id) => {
+    const before = groups.find(g => g.id === id)
     await deleteDoc(doc(db, 'groups', id))
+    logAudit({ action: 'delete', collection: 'groups', documentId: id, user: auditUser(), before, description: `Удалена группа "${before?.name || id}"` })
   }
 
   // Count offline students in a group
@@ -549,6 +591,25 @@ export function DataProvider({ children }) {
   // Get all students in a group
   const getGroupStudents = (groupName) => {
     return students.filter(s => s.group === groupName)
+  }
+
+  // --- Schedule CRUD ---
+  const addScheduleEntry = async (entry) => {
+    const docRef = await addDoc(collection(db, 'schedule'), entry)
+    logAudit({ action: 'create', collection: 'schedule', documentId: docRef.id, user: auditUser(), after: entry, description: `Добавлено расписание: ${entry.groupName || ''} — ${entry.dayOfWeek} ${entry.startTime}` })
+    return { ...entry, id: docRef.id }
+  }
+
+  const updateScheduleEntry = async (id, updates) => {
+    const before = schedule.find(s => s.id === id)
+    await updateDoc(doc(db, 'schedule', id), updates)
+    logAudit({ action: 'update', collection: 'schedule', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлено расписание #${id}` })
+  }
+
+  const deleteScheduleEntry = async (id) => {
+    const before = schedule.find(s => s.id === id)
+    await deleteDoc(doc(db, 'schedule', id))
+    logAudit({ action: 'delete', collection: 'schedule', documentId: id, user: auditUser(), before, description: `Удалено расписание: ${before?.groupName || ''} — ${before?.dayOfWeek} ${before?.startTime}` })
   }
 
   return (
@@ -572,6 +633,8 @@ export function DataProvider({ children }) {
       lmsModules, addLmsModule, updateLmsModule, deleteLmsModule,
       lmsProgress, addLmsProgress, deleteLmsProgress,
       studentGameData, updateStudentGameData,
+      schedule, addScheduleEntry, updateScheduleEntry, deleteScheduleEntry,
+      auditLogs,
       loading,
     }}>
       {children}
