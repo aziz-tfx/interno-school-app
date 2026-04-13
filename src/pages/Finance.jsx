@@ -64,12 +64,13 @@ export default function Finance() {
   const [editingKpi, setEditingKpi] = useState(null) // mgr object
   const [kpiForm, setKpiForm] = useState(null)
   const [kpiSaving, setKpiSaving] = useState(false)
+  const [mgrTab, setMgrTab] = useState('sales') // 'kpi' | 'sales'
 
   const canEditKpi = isAdmin || isBranchDirector || isRop
 
   const openKpiEditor = (mgr) => {
-    if (!canEditKpi) return
     setEditingKpi(mgr)
+    setMgrTab('sales')
     setKpiForm({
       planLeads:         mgr.plan.leads,
       planConversations: mgr.plan.conversations,
@@ -140,7 +141,7 @@ export default function Finance() {
     setKpiSaving(false)
   }
 
-  const EDIT_METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
+  const EDIT_METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 
   const openEditPayment = (p) => {
     setEditForm({
@@ -556,18 +557,16 @@ export default function Finance() {
             const isCurrentUser = mgr.id === user?.id
             return (
               <div key={mgr.id}
-                onClick={() => canEditKpi && openKpiEditor(mgr)}
-                className={`glass-card rounded-2xl p-5 border transition-all group relative ${
+                onClick={() => openKpiEditor(mgr)}
+                className={`glass-card rounded-2xl p-5 border transition-all group relative cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${
                   isCurrentUser ? 'border-blue-300 ring-2 ring-blue-100' : 'border-transparent hover:border-slate-200'
-                } ${canEditKpi ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''}`}>
-                {canEditKpi && (
-                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    <div className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-slate-200">
-                      <Pencil size={10} />
-                      {t('finance.edit_kpi_hint')}
-                    </div>
+                }`}>
+                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <div className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-slate-200">
+                    <Eye size={10} />
+                    Продажи
                   </div>
-                )}
+                </div>
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -909,15 +908,15 @@ export default function Finance() {
         )}
       </Modal>
 
-      {/* ─── Manager KPI Edit Modal ─────────────────────────────────────── */}
+      {/* ─── Manager Detail Modal (Sales + KPI) ─────────────────────────── */}
       <Modal
         isOpen={!!editingKpi}
         onClose={closeKpiEditor}
-        title={editingKpi ? `${t('finance.edit_kpi_title')}: ${editingKpi.name}` : ''}
-        size="lg"
+        title={editingKpi ? editingKpi.name : ''}
+        size="xl"
       >
-        {editingKpi && kpiForm && (
-          <div className="space-y-5">
+        {editingKpi && (
+          <div className="space-y-4">
             {/* Header info */}
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
               <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-bold ${
@@ -932,67 +931,186 @@ export default function Finance() {
                   {' · '}
                   {branches.find(b => b.id === editingKpi.branch)?.name || editingKpi.branch}
                   {' · '}
-                  {monthKey}
+                  {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
                 </p>
               </div>
-            </div>
-
-            {/* Plan section */}
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-1.5">
-                <Target size={12} className="text-blue-600" />
-                {t('finance.edit_kpi_plan_section')}
-              </h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <KpiField label={t('finance.leads')}         value={kpiForm.planLeads}         onChange={v => setKpiForm(p => ({ ...p, planLeads: v }))} />
-                <KpiField label={t('finance.conversations')} value={kpiForm.planConversations} onChange={v => setKpiForm(p => ({ ...p, planConversations: v }))} />
-                <KpiField label={t('finance.signups') || 'Записи'} value={kpiForm.planSignups} onChange={v => setKpiForm(p => ({ ...p, planSignups: v }))} />
-                <KpiField label={t('finance.visited_off')}   value={kpiForm.planVisited}      onChange={v => setKpiForm(p => ({ ...p, planVisited: v }))} />
-                <KpiField label={t('finance.sales_short')}   value={kpiForm.planSales}        onChange={v => setKpiForm(p => ({ ...p, planSales: v }))} />
-                <KpiField label={t('finance.revenue')}       value={kpiForm.planRevenue}      onChange={v => setKpiForm(p => ({ ...p, planRevenue: v }))} isMoney />
+              <div className={`px-3 py-1 rounded-full text-sm font-bold ${statusBg(editingKpi.achievedPct)} ${statusColor(editingKpi.achievedPct)}`}>
+                {editingKpi.achievedPct}%
               </div>
             </div>
 
-            {/* Actual section */}
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-1.5">
-                <TrendingUp size={12} className="text-emerald-600" />
-                {t('finance.edit_kpi_actual_section')}
-              </h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <KpiField label={t('finance.leads')}         value={kpiForm.actLeads}         onChange={v => setKpiForm(p => ({ ...p, actLeads: v }))} />
-                <KpiField label={t('finance.conversations')} value={kpiForm.actConversations} onChange={v => setKpiForm(p => ({ ...p, actConversations: v }))} />
-                <KpiField label={t('finance.signups') || 'Записи'} value={kpiForm.actSignups} onChange={v => setKpiForm(p => ({ ...p, actSignups: v }))} />
-                <KpiField label={t('finance.visited_off')}   value={kpiForm.actVisited}      onChange={v => setKpiForm(p => ({ ...p, actVisited: v }))} />
-                <KpiField label={t('finance.sales_short')}   value={kpiForm.actSales}        onChange={v => setKpiForm(p => ({ ...p, actSales: v }))} />
-                <KpiField label={t('finance.revenue')}       value={kpiForm.actRevenue}      onChange={v => setKpiForm(p => ({ ...p, actRevenue: v }))} isMoney />
-              </div>
-              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3 flex items-start gap-1.5">
-                <span className="mt-0.5">⚠</span>
-                <span>{t('finance.edit_kpi_override_note')}</span>
-              </p>
+            {/* Tabs */}
+            <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setMgrTab('sales')}
+                className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-1.5 ${
+                  mgrTab === 'sales'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <ShoppingCart size={14} />
+                Продажи ({(() => {
+                  const mgrPayments = payments.filter(p =>
+                    p.type === 'income' && p.managerId === editingKpi.managerId && (p.date || '').startsWith(monthKey)
+                  )
+                  return mgrPayments.length
+                })()})
+              </button>
+              {canEditKpi && (
+                <button
+                  onClick={() => setMgrTab('kpi')}
+                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-1.5 ${
+                    mgrTab === 'kpi'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Target size={14} />
+                  Показатели
+                </button>
+              )}
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={closeKpiEditor}
-                disabled={kpiSaving}
-                className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                {t('finance.cancel') || 'Отмена'}
-              </button>
-              <button
-                type="button"
-                onClick={saveKpiEditor}
-                disabled={kpiSaving}
-                className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                <Save size={14} />
-                {kpiSaving ? (t('finance.saving') || 'Сохранение...') : (t('finance.save') || 'Сохранить')}
-              </button>
-            </div>
+            {/* Tab: Sales */}
+            {mgrTab === 'sales' && (() => {
+              const mgrPayments = payments
+                .filter(p => p.type === 'income' && p.managerId === editingKpi.managerId && (p.date || '').startsWith(monthKey))
+                .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+              const totalRevenue = mgrPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+
+              return (
+                <div className="space-y-3">
+                  {/* Summary bar */}
+                  <div className="flex items-center justify-between bg-emerald-50 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <p className="text-[11px] text-emerald-700 uppercase font-medium">Продаж</p>
+                        <p className="text-lg font-bold text-emerald-800">{mgrPayments.length}</p>
+                      </div>
+                      <div className="w-px h-8 bg-emerald-200" />
+                      <div>
+                        <p className="text-[11px] text-emerald-700 uppercase font-medium">Выручка</p>
+                        <p className="text-lg font-bold text-emerald-800">{formatRevenue(totalRevenue)}</p>
+                      </div>
+                    </div>
+                    {editingKpi.plan?.revenue > 0 && (
+                      <div className="text-right">
+                        <p className="text-[11px] text-slate-500 uppercase font-medium">План</p>
+                        <p className="text-sm font-semibold text-slate-600">{formatRevenue(editingKpi.plan.revenue)}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sales list */}
+                  {mgrPayments.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      <ShoppingCart size={32} className="mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">Нет продаж за этот период</p>
+                    </div>
+                  ) : (
+                    <div className="max-h-[400px] overflow-y-auto space-y-1.5 pr-1">
+                      {mgrPayments.map((p, idx) => (
+                        <div key={p.id} className="flex items-center justify-between py-2.5 px-4 bg-white border border-slate-100 rounded-xl hover:border-slate-200 hover:shadow-sm transition-all group">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-slate-400 w-5">{idx + 1}.</span>
+                              <p className="text-sm font-medium text-slate-900 truncate">{p.student}</p>
+                              {(p.trancheNumber || 1) > 1 && (
+                                <span className="text-[10px] font-medium bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                  Транш {p.trancheNumber}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 ml-7">
+                              <p className="text-xs text-slate-500">
+                                {p.date} · {p.course || '—'} · {p.method}
+                                {p.group ? ` · ${p.group}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                            <div className="text-right">
+                              <span className="text-sm font-bold text-emerald-600">+{formatCurrency(p.amount)}</span>
+                              {p.debt > 0 && <p className="text-[10px] text-red-500">Долг: {formatCurrency(p.debt)}</p>}
+                            </div>
+                            {canPayments && (
+                              <button onClick={(e) => { e.stopPropagation(); closeKpiEditor(); setTimeout(() => openEditPayment(p), 100) }}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
+                                title="Редактировать">
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Tab: KPI */}
+            {mgrTab === 'kpi' && canEditKpi && kpiForm && (
+              <div className="space-y-5">
+                {/* Plan section */}
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-1.5">
+                    <Target size={12} className="text-blue-600" />
+                    {t('finance.edit_kpi_plan_section')}
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <KpiField label={t('finance.leads')}         value={kpiForm.planLeads}         onChange={v => setKpiForm(p => ({ ...p, planLeads: v }))} />
+                    <KpiField label={t('finance.conversations')} value={kpiForm.planConversations} onChange={v => setKpiForm(p => ({ ...p, planConversations: v }))} />
+                    <KpiField label={t('finance.signups') || 'Записи'} value={kpiForm.planSignups} onChange={v => setKpiForm(p => ({ ...p, planSignups: v }))} />
+                    <KpiField label={t('finance.visited_off')}   value={kpiForm.planVisited}      onChange={v => setKpiForm(p => ({ ...p, planVisited: v }))} />
+                    <KpiField label={t('finance.sales_short')}   value={kpiForm.planSales}        onChange={v => setKpiForm(p => ({ ...p, planSales: v }))} />
+                    <KpiField label={t('finance.revenue')}       value={kpiForm.planRevenue}      onChange={v => setKpiForm(p => ({ ...p, planRevenue: v }))} isMoney />
+                  </div>
+                </div>
+
+                {/* Actual section */}
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 flex items-center gap-1.5">
+                    <TrendingUp size={12} className="text-emerald-600" />
+                    {t('finance.edit_kpi_actual_section')}
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <KpiField label={t('finance.leads')}         value={kpiForm.actLeads}         onChange={v => setKpiForm(p => ({ ...p, actLeads: v }))} />
+                    <KpiField label={t('finance.conversations')} value={kpiForm.actConversations} onChange={v => setKpiForm(p => ({ ...p, actConversations: v }))} />
+                    <KpiField label={t('finance.signups') || 'Записи'} value={kpiForm.actSignups} onChange={v => setKpiForm(p => ({ ...p, actSignups: v }))} />
+                    <KpiField label={t('finance.visited_off')}   value={kpiForm.actVisited}      onChange={v => setKpiForm(p => ({ ...p, actVisited: v }))} />
+                    <KpiField label={t('finance.sales_short')}   value={kpiForm.actSales}        onChange={v => setKpiForm(p => ({ ...p, actSales: v }))} />
+                    <KpiField label={t('finance.revenue')}       value={kpiForm.actRevenue}      onChange={v => setKpiForm(p => ({ ...p, actRevenue: v }))} isMoney />
+                  </div>
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3 flex items-start gap-1.5">
+                    <span className="mt-0.5">⚠</span>
+                    <span>{t('finance.edit_kpi_override_note')}</span>
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={closeKpiEditor}
+                    disabled={kpiSaving}
+                    className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    {t('finance.cancel') || 'Отмена'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveKpiEditor}
+                    disabled={kpiSaving}
+                    className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    {kpiSaving ? (t('finance.saving') || 'Сохранение...') : (t('finance.save') || 'Сохранить')}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>
