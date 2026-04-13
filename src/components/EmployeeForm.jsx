@@ -31,6 +31,7 @@ export default function EmployeeForm({ employee, onClose }) {
     role: 'sales',
     branch: 'tashkent',
     phone: '',
+    funFact: '',
     subject: '',
     salary: '',
   })
@@ -56,6 +57,7 @@ export default function EmployeeForm({ employee, onClose }) {
         role: employee.role || 'sales',
         branch: employee.branch || 'tashkent',
         phone: employee.phone || '',
+        funFact: employee.funFact || '',
         subject,
         salary,
       })
@@ -73,7 +75,8 @@ export default function EmployeeForm({ employee, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const { subject, salary, ...employeeData } = form
+    const { subject, salary, funFact, ...employeeData } = form
+    employeeData.funFact = funFact || ''
 
     // Attach individual permissions if customized
     if (customPermissions) {
@@ -192,6 +195,15 @@ export default function EmployeeForm({ employee, onClose }) {
           <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)}
             placeholder={t('employeeForm.placeholder_phone')}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        {/* Личный факт */}
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Личный факт (для Telegram)</label>
+          <input type="text" value={form.funFact} onChange={e => set('funFact', e.target.value)}
+            placeholder="Например: Любит горный туризм, Фанат шахмат..."
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <p className="text-xs text-slate-400 mt-1">Отображается в уведомлении о продаже в Telegram</p>
         </div>
 
         {/* Teacher-specific fields */}

@@ -28,6 +28,7 @@ export default async function handler(req, res) {
     totalCoursePrice,
     trancheNumber,
     managerName,
+    managerFunFact,
     comment,
     learningFormat,
     contractUrl,
@@ -103,6 +104,7 @@ export default async function handler(req, res) {
   if (contractUrl) message += `📄 Договор: ${contractUrl}\n`
 
   if (managerName) message += `\n👔 Менеджер: ${managerName}`
+  if (managerFunFact) message += `\n💡 Факт: ${managerFunFact}`
 
   // ─── Send via Telegram Bot API ───
   try {

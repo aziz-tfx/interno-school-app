@@ -458,6 +458,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         totalCoursePrice: courseFullPrice || 0,
         trancheNumber: studentPayments.length + 1,
         managerName: user?.name || '',
+        managerFunFact: user?.funFact || '',
         comment: form.comment,
         learningFormat: form.learningFormat,
         contractUrl,
