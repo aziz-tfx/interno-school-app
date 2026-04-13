@@ -29,7 +29,7 @@ function buildMessage(saleData) {
   const {
     clientName, phone, course, group, amount, method, date,
     courseStartDate, tariff, discount, contractNumber, debt,
-    totalCoursePrice, trancheNumber, managerName, managerFunFact, comment, learningFormat,
+    totalCoursePrice, trancheNumber, managerName, salesFact, comment, learningFormat,
     contractUrl,
   } = saleData
 
@@ -69,7 +69,7 @@ function buildMessage(saleData) {
   if (contractUrl) message += `📄 Договор: ${contractUrl}\n`
 
   if (managerName) message += `\n👔 Менеджер: ${managerName}`
-  if (managerFunFact) message += `\n💡 Факт: ${managerFunFact}`
+  if (salesFact) message += `\n📈 ${salesFact}`
 
   return message
 }

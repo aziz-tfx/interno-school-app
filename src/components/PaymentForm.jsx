@@ -440,6 +440,19 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         }
       })
 
+      // Build manager sales fact for this month
+      const now = new Date()
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+      const managerSalesThisMonth = payments.filter(p =>
+        p.type === 'income' &&
+        (p.managerId === user?.managerId || p.createdBy === user?.id) &&
+        p.date >= monthStart
+      )
+      const thisMonthCount = managerSalesThisMonth.length + 1 // +1 for current sale
+      const thisMonthRevenue = managerSalesThisMonth.reduce((s, p) => s + (Number(p.amount) || 0), 0) + Number(form.amount)
+      const fmtRev = (n) => Number(n).toLocaleString('ru-RU').replace(/,/g, ' ')
+      const salesFact = `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
+
       // Push to Telegram group (non-blocking)
       pushSaleToTelegram({
         clientName: form.clientName,
@@ -458,7 +471,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         totalCoursePrice: courseFullPrice || 0,
         trancheNumber: studentPayments.length + 1,
         managerName: user?.name || '',
-        managerFunFact: user?.funFact || '',
+        salesFact,
         comment: form.comment,
         learningFormat: form.learningFormat,
         contractUrl,
