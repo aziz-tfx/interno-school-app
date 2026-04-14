@@ -10,6 +10,7 @@ import { db, storage } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Logo from './Logo'
+import Modal from './Modal'
 import { useLanguage } from '../contexts/LanguageContext'
 
 const METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
@@ -78,6 +79,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   })
 
   const [files, setFiles] = useState([])
+  const [duplicateWarning, setDuplicateWarning] = useState(null) // { matches: [] }
+  const bypassDuplicateRef = useRef(false)
   const [showReceipt, setShowReceipt] = useState(false)
   const [savedPayment, setSavedPayment] = useState(null)
   const [generatingContract, setGeneratingContract] = useState(false)
@@ -231,8 +234,50 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     return <FileText size={14} className="text-orange-500" />
   }
 
+  // Detect potential duplicate payments (same client + amount + date or close)
+  const findDuplicates = () => {
+    if (form.type !== 'income') return []
+    const amount = Number(form.amount) || 0
+    if (!amount) return []
+    const date = form.paymentDate
+    const phoneClean = (form.phone || '').replace(/\D/g, '')
+    const nameClean = (form.clientName || '').trim().toLowerCase()
+    if (!nameClean && !phoneClean) return []
+
+    return payments.filter(p => {
+      if (p.type !== 'income') return false
+      // Exclude existing tranches (those are intentionally separate)
+      // Match by name OR phone
+      const pName = (p.student || '').trim().toLowerCase()
+      const pPhone = (p.phone || '').replace(/\D/g, '')
+      const nameMatch = nameClean && pName && pName === nameClean
+      const phoneMatch = phoneClean && pPhone && pPhone === phoneClean
+      if (!nameMatch && !phoneMatch) return false
+      // Same amount
+      if (Number(p.amount) !== amount) return false
+      // Same date or within 1 day
+      if (date && p.date) {
+        const d1 = new Date(date)
+        const d2 = new Date(p.date)
+        const diffDays = Math.abs(d1 - d2) / (1000 * 60 * 60 * 24)
+        if (diffDays > 1) return false
+      }
+      return true
+    })
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    // Duplicate check (only for new income payments, not for explicit "doplata" mode)
+    if (form.type === 'income' && !isDoplata && !bypassDuplicateRef.current) {
+      const dupes = findDuplicates()
+      if (dupes.length > 0) {
+        setDuplicateWarning({ matches: dupes })
+        return
+      }
+    }
+    bypassDuplicateRef.current = false
 
     const selectedGroup = groups.find(g => g.id === form.groupId)
     let studentId = form.type === 'income' ? form.studentId || null : null
@@ -827,6 +872,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
   // ========== Form View ==========
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Type selector — only show expense tab if user has permission & not doplata */}
       {isDoplata ? (
@@ -1293,5 +1339,63 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         </div>
       </div>
     </form>
+
+    {/* Duplicate payment warning modal */}
+    <Modal
+      isOpen={!!duplicateWarning}
+      onClose={() => setDuplicateWarning(null)}
+      title="Возможный дубликат"
+      size="md"
+    >
+      {duplicateWarning && (
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-sm text-amber-800 font-medium mb-1">
+              ⚠ Найдено похожих продаж: {duplicateWarning.matches.length}
+            </p>
+            <p className="text-xs text-amber-700">
+              Совпадает имя/телефон клиента, сумма и дата. Возможно, эта продажа уже была добавлена.
+            </p>
+          </div>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {duplicateWarning.matches.map(p => (
+              <div key={p.id} className="bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-semibold text-slate-900">{p.student}</p>
+                  <span className="text-sm font-bold text-emerald-600">{formatCurrency(p.amount)}</span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  {p.date} · {p.method} · {p.course || '—'}
+                  {p.createdByName ? ` · ${p.createdByName}` : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setDuplicateWarning(null)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                bypassDuplicateRef.current = true
+                setDuplicateWarning(null)
+                handleSubmit({ preventDefault: () => {} })
+              }}
+              className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors"
+            >
+              Всё равно добавить
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+    </>
   )
 }
