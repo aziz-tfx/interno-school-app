@@ -81,6 +81,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const [files, setFiles] = useState([])
   const [duplicateWarning, setDuplicateWarning] = useState(null) // { matches: [] }
   const bypassDuplicateRef = useRef(false)
+  const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const [showReceipt, setShowReceipt] = useState(false)
   const [savedPayment, setSavedPayment] = useState(null)
   const [generatingContract, setGeneratingContract] = useState(false)
@@ -269,6 +271,12 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const handleSubmit = async (e) => {
     e.preventDefault()
 
+    // ─── Guard against double-submit (ref is synchronous, state is async) ───
+    if (submittingRef.current) {
+      console.warn('PaymentForm: ignoring duplicate submit while previous is in progress')
+      return
+    }
+
     // Duplicate check (only for new income payments, not for explicit "doplata" mode)
     if (form.type === 'income' && !isDoplata && !bypassDuplicateRef.current) {
       const dupes = findDuplicates()
@@ -279,12 +287,30 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
     bypassDuplicateRef.current = false
 
+    // Lock out further submits immediately
+    submittingRef.current = true
+    setSubmitting(true)
+
+    try {
     const selectedGroup = groups.find(g => g.id === form.groupId)
     let studentId = form.type === 'income' ? form.studentId || null : null
 
     // ─── Auto-create student if new client (no studentId selected) ───
     if (form.type === 'income' && !studentId && form.clientName) {
-      try {
+      // First: check if a student with the same phone already exists
+      // (covers race condition where state hasn't refreshed yet OR repeated clicks)
+      const phoneClean = (form.phone || '').replace(/\D/g, '')
+      const nameClean = form.clientName.trim().toLowerCase()
+      const existingStudent = students.find(s => {
+        const sPhone = (s.phone || '').replace(/\D/g, '')
+        const sName = (s.name || '').trim().toLowerCase()
+        if (phoneClean && sPhone && sPhone === phoneClean) return true
+        if (nameClean && sName && sName === nameClean && (s.branch === form.branch || !s.branch)) return true
+        return false
+      })
+      if (existingStudent) {
+        studentId = existingStudent.id
+      } else try {
         const tariffOption = TARIFF_OPTIONS.find(to => to.value === form.tariff)
         const tariffLabel = tariffOption ? t(tariffOption.tKey) : form.tariff
         const newStudent = await addStudent({
@@ -533,6 +559,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           console.warn('Telegram notification skipped:', result.error)
         }
       })
+    }
+    } catch (err) {
+      console.error('PaymentForm submit failed:', err)
+      alert('Не удалось сохранить продажу. Попробуйте ещё раз.')
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
     }
   }
 
@@ -1329,12 +1362,18 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
             {t('paymentForm.btn_cancel')}
           </button>
-          <button type="submit" disabled={form.type === 'income' && (files.length === 0 || (isDoplata && !form.studentId))}
+          <button type="submit" disabled={submitting || (form.type === 'income' && (files.length === 0 || (isDoplata && !form.studentId)))}
             className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
-            <Receipt size={16} />
-            {form.type === 'income'
-              ? (isDoplata && !form.studentId ? t('paymentForm.select_student') : files.length === 0 ? t('paymentForm.attach_files') : isDoplata ? t('paymentForm.btn_submit') : t('paymentForm.btn_submit'))
-              : t('paymentForm.btn_submit_expense')}
+            {submitting ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Receipt size={16} />
+            )}
+            {submitting
+              ? 'Сохранение...'
+              : form.type === 'income'
+                ? (isDoplata && !form.studentId ? t('paymentForm.select_student') : files.length === 0 ? t('paymentForm.attach_files') : isDoplata ? t('paymentForm.btn_submit') : t('paymentForm.btn_submit'))
+                : t('paymentForm.btn_submit_expense')}
           </button>
         </div>
       </div>
