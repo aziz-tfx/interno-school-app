@@ -298,23 +298,26 @@ export default function Finance() {
       const planSales = plan.sales || 0
       const planRevenue = plan.revenue || 0
 
-      // Actual values
+      // External KPI values (manually entered — leads, calls, walk-ins, etc.)
       const actualLeads = actual.leads || 0
       const actualConversations = actual.conversations || 0
       const actualSignups = actual.signups || 0
       const actualVisited = actual.visited || 0
-      const actualSales = actual.sales || 0
-      const actualRevenue = actual.revenue || 0
+
+      // Real payments — source of truth for revenue and sales count
+      // (reportDaily drifts: not updated on payment edit/delete, and is written
+      // under the logged-in user's name, not the payment's assigned manager)
+      const managerPayments = payments.filter(p =>
+        p.type === 'income' && p.managerId === emp.managerId && (p.date || '').startsWith(monthKey)
+      )
+      const paymentsRevenue = managerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+      const actualSales = managerPayments.length
+      const actualRevenue = paymentsRevenue
 
       // Conversions
       const convOpenToSale = actualVisited > 0 ? Math.round((actualSales / actualVisited) * 100) : 0
       const convSignupToVisit = actualSignups > 0 ? Math.round((actualVisited / actualSignups) * 100) : 0
 
-      // Payments from previously sold students (installments this month)
-      // = payments with managerId matching, where student has had a prior payment
-      const managerPayments = payments.filter(p =>
-        p.type === 'income' && p.managerId === emp.managerId && (p.date || '').startsWith(monthKey)
-      )
       // Separate first-time sales vs repeat payments (tranches > 1)
       const doplataPayments = managerPayments.filter(p => (p.trancheNumber || 1) > 1)
       const expectedDoplata = doplataPayments.reduce((s, p) => s + p.amount, 0)
