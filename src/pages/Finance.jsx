@@ -160,6 +160,9 @@ export default function Finance() {
       debt: p.debt || 0,
       branch: p.branch || 'tashkent',
       nextPaymentDate: p.nextPaymentDate || '',
+      createdBy: p.createdBy || '',
+      createdByName: p.createdByName || '',
+      managerId: p.managerId || '',
     })
     setEditingPayment(p)
   }
@@ -184,6 +187,9 @@ export default function Finance() {
         debt: Number(editForm.debt) || 0,
         branch: editForm.branch,
         nextPaymentDate: editForm.nextPaymentDate,
+        createdBy: editForm.createdBy || null,
+        createdByName: editForm.createdByName || '',
+        managerId: editForm.managerId || null,
       })
       setEditingPayment(null)
     } catch (err) {
@@ -843,6 +849,39 @@ export default function Finance() {
                   <option value="Онлайн">Онлайн</option>
                 </select>
               </div>
+            </div>
+
+            {/* Responsible Manager */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Ответственный менеджер</label>
+              <select
+                value={editForm.createdBy || ''}
+                onChange={e => {
+                  const empId = e.target.value
+                  const emp = employees.find(x => String(x.id) === String(empId))
+                  setEditForm(prev => ({
+                    ...prev,
+                    createdBy: empId ? Number(empId) || empId : '',
+                    createdByName: emp?.name || '',
+                    managerId: emp?.managerId || '',
+                  }))
+                }}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— не указан —</option>
+                {employees
+                  .filter(e => e.role === 'sales' || e.role === 'rop')
+                  .filter(e => editForm.branch === 'all' || !editForm.branch || e.branch === editForm.branch || e.branch === 'all')
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                  .map(e => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} · {e.role === 'rop' ? 'РОП' : 'Менеджер'} · {branches.find(b => b.id === e.branch)?.name || e.branch}
+                    </option>
+                  ))}
+              </select>
+              {editForm.createdByName && !editForm.createdBy && (
+                <p className="text-[11px] text-amber-600 mt-1">Старая запись: {editForm.createdByName} — выберите из списка для связи с продажами</p>
+              )}
             </div>
 
             {/* Debt & Comment */}
