@@ -191,7 +191,7 @@ export default function Employees() {
           </div>
 
           {/* Pending Registration Requests */}
-          {pendingEmployees.length > 0 && (user.role === 'owner' || user.role === 'director') && (
+          {pendingEmployees.length > 0 && ['owner', 'admin', 'branch_director'].includes(user.role) && (
             <div className="glass-card rounded-2xl overflow-hidden border border-amber-200 bg-amber-50/50">
               <div className="flex items-center gap-2 px-4 py-3 bg-amber-100/60 border-b border-amber-200">
                 <UserPlus size={18} className="text-amber-600" />
