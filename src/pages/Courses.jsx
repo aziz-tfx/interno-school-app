@@ -55,7 +55,7 @@ function PricingTable({ pricing, region, tariffFeatures }) {
         return (
           <div key={tariff} className="rounded-xl border border-slate-200 overflow-hidden bg-white/60">
             <div className={`bg-gradient-to-r ${TARIFF_HEADER_COLORS[tariff] || 'from-slate-500 to-slate-600'} px-4 py-2.5`}>
-              <h5 className="text-white font-semibold text-sm">{TARIFF_LABELS[tariff] || tariff}</h5>
+              <h5 className="text-white font-semibold text-sm">{tr.label || TARIFF_LABELS[tariff] || tariff}</h5>
             </div>
             <div className="p-4 space-y-2">
               <div className="flex justify-between items-baseline">

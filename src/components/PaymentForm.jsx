@@ -111,9 +111,19 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const region = form.learningFormat === 'Онлайн' ? 'online' : (BRANCH_TO_REGION[form.branch] || 'tashkent')
   const coursePricing = selectedCourse?.pricing?.[region]?.[form.tariff]
   const courseFullPrice = coursePricing?.[form.discount] || coursePricing?.full || 0
-  const availableTariffs = selectedCourse?.pricing?.[region]
-    ? TARIFF_OPTIONS.filter(t => selectedCourse.pricing[region][t.value])
-    : TARIFF_OPTIONS
+  // Build tariff list: include all keys present in course pricing, plus resolve labels
+  // from either the standard TARIFF_OPTIONS or from custom `label` stored on the price entry.
+  const availableTariffs = (() => {
+    const regionPricing = selectedCourse?.pricing?.[region]
+    if (!regionPricing) return TARIFF_OPTIONS
+    const keys = Object.keys(regionPricing)
+    return keys.map(key => {
+      const std = TARIFF_OPTIONS.find(to => to.value === key)
+      const customLabel = regionPricing[key]?.label
+      if (std && !customLabel) return std
+      return { value: key, label: customLabel || key, tKey: std?.tKey || null }
+    })
+  })()
   const availableDiscounts = coursePricing
     ? DISCOUNT_OPTIONS.filter(d => coursePricing[d.value] !== undefined)
     : DISCOUNT_OPTIONS
@@ -312,7 +322,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         studentId = existingStudent.id
       } else try {
         const tariffOption = TARIFF_OPTIONS.find(to => to.value === form.tariff)
-        const tariffLabel = tariffOption ? t(tariffOption.tKey) : form.tariff
+        const customTariffLabel = selectedCourse?.pricing?.[region]?.[form.tariff]?.label
+        const tariffLabel = customTariffLabel || (tariffOption ? t(tariffOption.tKey) : form.tariff)
         const newStudent = await addStudent({
           name: form.clientName,
           phone: form.phone || '',
@@ -357,7 +368,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
 
     const tariffOpt = TARIFF_OPTIONS.find(to => to.value === form.tariff)
-    const tariffLbl = tariffOpt ? t(tariffOpt.tKey) : form.tariff
+    const customLbl = selectedCourse?.pricing?.[region]?.[form.tariff]?.label
+    const tariffLbl = customLbl || (tariffOpt ? t(tariffOpt.tKey) : form.tariff)
     const discountOpt = DISCOUNT_OPTIONS.find(d => d.value === form.discount)
     const discountLbl = discountOpt ? t(discountOpt.tKey) : ''
     const paymentData = {
@@ -1115,7 +1127,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_tariff')}</label>
                     <select value={form.tariff} onChange={(e) => set('tariff', e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {availableTariffs.map(tf => <option key={tf.value} value={tf.value}>{t(tf.tKey)}</option>)}
+                      {availableTariffs.map(tf => <option key={tf.value} value={tf.value}>{tf.tKey ? t(tf.tKey) : (tf.label || tf.value)}</option>)}
                     </select>
                   </div>
 

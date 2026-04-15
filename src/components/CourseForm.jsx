@@ -77,14 +77,29 @@ export default function CourseForm({ course, onClose, onSave }) {
     })
   }
 
-  const addTariff = (regionKey, tariffKey) => {
+  const addTariff = (regionKey, tariffKey, customLabel) => {
     setPricing(prev => ({
       ...prev,
       [regionKey]: {
         ...prev[regionKey],
-        [tariffKey]: emptyTariff(),
+        [tariffKey]: { ...emptyTariff(), ...(customLabel ? { label: customLabel } : {}) },
       },
     }))
+  }
+
+  const addCustomTariff = (regionKey) => {
+    const label = window.prompt('Название нового тарифа:')
+    if (!label || !label.trim()) return
+    const cleanLabel = label.trim()
+    // Generate a stable unique key from label (lowercase + timestamp for uniqueness)
+    const slug = cleanLabel.toLowerCase().replace(/[^\w\u0400-\u04FF]+/g, '_').replace(/^_+|_+$/g, '') || 'custom'
+    let key = slug
+    let i = 1
+    const existing = pricing[regionKey] || {}
+    while (existing[key]) {
+      key = `${slug}_${i++}`
+    }
+    addTariff(regionKey, key, cleanLabel)
   }
 
   const removeTariff = (regionKey, tariffKey) => {
@@ -133,6 +148,7 @@ export default function CourseForm({ course, onClose, onSave }) {
         if (values.d15) cleaned.d15 = Number(values.d15)
         if (values.d20) cleaned.d20 = Number(values.d20)
         if (values.monthly) cleaned.monthly = true
+        if (values.label) cleaned.label = values.label
         if (cleaned.full > 0) {
           cleanedPricing[region][tariff] = cleaned
         }
@@ -317,25 +333,32 @@ export default function CourseForm({ course, onClose, onSave }) {
                     <span className="text-sm font-semibold text-slate-700">{regionLabel}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {availableTariffs.length > 0 && (
-                      <div className="relative group/tariff">
-                        <button type="button" className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                          <Plus size={12} /> {t('courseForm.add_tariff')}
+                    <div className="relative group/tariff">
+                      <button type="button" className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                        <Plus size={12} /> {t('courseForm.add_tariff')}
+                      </button>
+                      <div className="absolute right-0 top-full mt-1 bg-white shadow-xl rounded-xl border border-slate-200 py-1 z-20 hidden group-hover/tariff:block min-w-[180px]">
+                        {availableTariffs.map(tf => (
+                          <button
+                            key={tf.key}
+                            type="button"
+                            onClick={() => addTariff(regionKey, tf.key)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left"
+                          >
+                            <span className={`w-2.5 h-2.5 rounded-full ${tf.color}`} /> {t(tf.tKey)}
+                          </button>
+                        ))}
+                        {availableTariffs.length > 0 && <div className="border-t border-slate-100 my-1" />}
+                        <button
+                          type="button"
+                          onClick={() => addCustomTariff(regionKey)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 text-left font-medium"
+                        >
+                          <Plus size={12} /> Свой тариф...
                         </button>
-                        <div className="absolute right-0 top-full mt-1 bg-white shadow-xl rounded-xl border border-slate-200 py-1 z-20 hidden group-hover/tariff:block min-w-[160px]">
-                          {availableTariffs.map(tf => (
-                            <button
-                              key={tf.key}
-                              type="button"
-                              onClick={() => addTariff(regionKey, tf.key)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left"
-                            >
-                              <span className={`w-2.5 h-2.5 rounded-full ${tf.color}`} /> {t(tf.tKey)}
-                            </button>
-                          ))}
-                        </div>
                       </div>
-                    )}
+                    </div>
+
                     {existingRegions.length > 1 && (
                       <button type="button" onClick={() => removeRegion(regionKey)} className="text-red-400 hover:text-red-600">
                         <Trash2 size={14} />
@@ -348,9 +371,9 @@ export default function CourseForm({ course, onClose, onSave }) {
                 <div className="p-3 space-y-3">
                   {regionTariffs.map(tariffKey => {
                     const tariffOption = TARIFF_OPTIONS.find(to => to.key === tariffKey)
-                    const tariffLabel = tariffOption ? t(tariffOption.tKey) : tariffKey
-                    const tariffColor = tariffOption?.color || 'bg-slate-500'
                     const tp = pricing[regionKey][tariffKey]
+                    const tariffLabel = tp?.label || (tariffOption ? t(tariffOption.tKey) : tariffKey)
+                    const tariffColor = tariffOption?.color || 'bg-slate-500'
 
                     return (
                       <div key={tariffKey} className="bg-white rounded-lg border border-slate-100 p-3">
