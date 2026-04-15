@@ -264,7 +264,12 @@ export default function Finance() {
 
   // ─── Sales staff for current view ────────────────────────────────────────
   const salesStaff = useMemo(() => {
-    let staff = employees.filter(e => e.role === 'sales' || e.role === 'rop')
+    let staff = employees.filter(e =>
+      (e.role === 'sales' || e.role === 'rop') &&
+      e.status !== 'pending' &&
+      e.status !== 'rejected' &&
+      !e.deleted
+    )
     if (branchFilter !== 'all') {
       staff = staff.filter(e => e.branch === branchFilter)
     }

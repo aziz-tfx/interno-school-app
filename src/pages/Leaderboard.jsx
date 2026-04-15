@@ -90,6 +90,8 @@ export default function Leaderboard() {
     return employees.filter(e =>
       (e.role === 'sales' || e.role === 'rop') &&
       !e.deleted &&
+      e.status !== 'pending' &&
+      e.status !== 'rejected' &&
       e.managerId
     )
   }, [employees])
