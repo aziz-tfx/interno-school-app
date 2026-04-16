@@ -1,0 +1,177 @@
+rules_version = '2';
+
+// INTERNO School Firestore Security Rules
+//
+// The app doesn't use Firebase Auth — authentication is custom via the
+// `employees` collection (login/password). So we can't restrict by user
+// identity at the rules level. Instead we rely on App Check to block
+// requests from unauthorized origins, and add structural validation:
+//
+//   - size limits (prevent abuse / runaway docs)
+//   - required App Check token on all requests (except small public paths)
+//   - no wildcard write to critical collections
+//   - payments cannot be created with negative amounts
+//   - soft-delete preferred over hard-delete where possible
+//
+// When Firebase Auth is added later, tighten these rules with
+// request.auth.token.role checks.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helpers ───────────────────────────────────────────────────────
+    function hasAppCheck() {
+      return request.app_check_token.app_id != null;
+    }
+
+    function isNonNegativeNumber(field) {
+      return request.resource.data[field] is number
+          && request.resource.data[field] >= 0;
+    }
+
+    function docSmallEnough() {
+      // Reject anything over 1 MB (Firestore hard limit is 1 MiB anyway)
+      return request.resource.size() < 1000000;
+    }
+
+    // ─── Public read: branches, courses (used on login / register) ─────
+    // These load before user logs in, so they can't require any session.
+    match /branches/{id} {
+      allow read: if hasAppCheck();
+      allow write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /courses/{id} {
+      allow read: if hasAppCheck();
+      allow write: if hasAppCheck() && docSmallEnough();
+    }
+
+    // ─── Employees — readable so login can check credentials ───────────
+    match /employees/{id} {
+      allow read: if hasAppCheck();
+      // Registration creates status='pending' records
+      allow create: if hasAppCheck()
+                    && docSmallEnough()
+                    && request.resource.data.login is string
+                    && request.resource.data.login.size() >= 3;
+      allow update: if hasAppCheck() && docSmallEnough();
+      allow delete: if hasAppCheck();
+    }
+
+    // ─── Students ──────────────────────────────────────────────────────
+    match /students/{id} {
+      allow read: if hasAppCheck();
+      allow create: if hasAppCheck()
+                    && docSmallEnough()
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0;
+      allow update: if hasAppCheck() && docSmallEnough();
+      allow delete: if hasAppCheck();
+    }
+
+    // ─── Groups ────────────────────────────────────────────────────────
+    match /groups/{id} {
+      allow read: if hasAppCheck();
+      allow write: if hasAppCheck() && docSmallEnough();
+    }
+
+    // ─── Teachers ──────────────────────────────────────────────────────
+    match /teachers/{id} {
+      allow read: if hasAppCheck();
+      allow write: if hasAppCheck() && docSmallEnough();
+    }
+
+    // ─── Payments — extra validation (money involved) ──────────────────
+    match /payments/{id} {
+      allow read: if hasAppCheck();
+      allow create: if hasAppCheck()
+                    && docSmallEnough()
+                    && isNonNegativeNumber('amount');
+      allow update: if hasAppCheck()
+                    && docSmallEnough()
+                    && (!('amount' in request.resource.data)
+                        || request.resource.data.amount >= 0);
+      allow delete: if hasAppCheck();
+    }
+
+    // ─── Rooms, Schedule, Attendance ───────────────────────────────────
+    match /rooms/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /schedule/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /attendance/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    // ─── LMS ───────────────────────────────────────────────────────────
+    match /lmsLessons/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /lmsAssignments/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /lmsSubmissions/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /lmsAnnouncements/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /lmsModules/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /lmsProgress/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /studentGameData/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    // ─── Reports (KPI, plans, daily) ───────────────────────────────────
+    match /reportPlans/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /reportDaily/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    // ─── Settings (permissions matrix) ─────────────────────────────────
+    match /settings/{id} {
+      allow read: if hasAppCheck();
+      // Only small config docs allowed here
+      allow write: if hasAppCheck() && request.resource.size() < 100000;
+    }
+
+    // ─── Audit log — append-only ───────────────────────────────────────
+    match /auditLog/{id} {
+      allow read: if hasAppCheck();
+      allow create: if hasAppCheck() && docSmallEnough();
+      // Prevent tampering with audit records
+      allow update, delete: if false;
+    }
+
+    // ─── Telegram notifications / integrations meta ────────────────────
+    match /integrations/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    match /telegramNotifications/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
+    // ─── Catch-all: deny unknown collections ───────────────────────────
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
