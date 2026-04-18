@@ -166,27 +166,68 @@ export default function Employees() {
       {activeTab === 'employees' && (
         <>
           {/* Filters */}
-          <div className="glass-card rounded-2xl p-4 flex flex-wrap gap-4 items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder={t('employees.search_placeholder')} value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter size={16} className="text-slate-400" />
-              <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
-                className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">{t('employees.filter_all_roles')}</option>
-                {usedRoles.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-              </select>
+          <div className="glass-card rounded-2xl p-4 space-y-3">
+            <div className="flex flex-wrap gap-3 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input type="text" placeholder={t('employees.search_placeholder')} value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
               {user.branch === 'all' && (
-                <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
-                  className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="all">{t('employees.filter_all_branches')}</option>
-                  {Object.entries(BRANCH_LABELS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-                </select>
+                <div className="flex items-center gap-2">
+                  <Filter size={16} className="text-slate-400" />
+                  <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
+                    className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="all">{t('employees.filter_all_branches')}</option>
+                    {Object.entries(BRANCH_LABELS).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                  </select>
+                </div>
               )}
+            </div>
+
+            {/* Role chips filter */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setRoleFilter('all')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  roleFilter === 'all'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Users size={12} />
+                {t('employees.filter_all_roles')}
+                <span className={`px-1.5 rounded-full text-[10px] font-bold ${
+                  roleFilter === 'all' ? 'bg-white/25' : 'bg-slate-200'
+                }`}>
+                  {approvedEmployees.length}
+                </span>
+              </button>
+              {usedRoles.map(role => {
+                const count = approvedEmployees.filter(e => e.role === role).length
+                const isActive = roleFilter === role
+                const colorClass = ROLE_COLORS[role] || 'bg-slate-500'
+                return (
+                  <button
+                    key={role}
+                    onClick={() => setRoleFilter(isActive ? 'all' : role)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      isActive
+                        ? `${colorClass} text-white shadow-md`
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Shield size={12} />
+                    {ROLE_LABELS[role] || role}
+                    <span className={`px-1.5 rounded-full text-[10px] font-bold ${
+                      isActive ? 'bg-white/25' : 'bg-slate-200'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
