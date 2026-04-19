@@ -110,8 +110,8 @@ export function DataProvider({ children, currentUser }) {
       const unsub = onSnapshot(doc(db, collectionName, metaDocId), (snapshot) => {
         if (snapshot.exists()) {
           setter(snapshot.data().data)
-        } else {
-          // Fallback: try legacy _meta doc for backward compatibility
+        } else if (tenantId === DEFAULT_TENANT_ID) {
+          // Fallback: try legacy _meta doc only for default tenant (pre-migration)
           const legacyUnsub = onSnapshot(doc(db, collectionName, '_meta'), (legacySnap) => {
             if (legacySnap.exists()) {
               setter(legacySnap.data().data)

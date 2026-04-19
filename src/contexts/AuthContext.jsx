@@ -304,6 +304,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   // Real-time sync with Firestore + seed if empty
+  // Loads ALL employees for login lookup, then filters by tenantId for the UI
   useEffect(() => {
     const unsubscribe = onSnapshot(employeesRef, async (snapshot) => {
       if (snapshot.empty) {
@@ -325,6 +326,15 @@ export function AuthProvider({ children }) {
 
     return () => unsubscribe()
   }, [])
+
+  // Employees filtered by current user's tenantId (for UI display)
+  const tenantEmployees = user
+    ? employees.filter(e => {
+        const empTenant = e.tenantId || DEFAULT_TENANT_ID
+        const userTenant = user.tenantId || DEFAULT_TENANT_ID
+        return empTenant === userTenant
+      })
+    : employees
 
   const login = (loginStr, password) => {
     const found = employees.find(u => u.login === loginStr && u.password === password)
@@ -429,7 +439,7 @@ export function AuthProvider({ children }) {
 
   // Helper: get sales-related staff (for plan tracking)
   const getSalesStaff = (branchId) => {
-    const list = employees.filter(e => e.role === 'sales' || e.role === 'rop')
+    const list = tenantEmployees.filter(e => e.role === 'sales' || e.role === 'rop')
     if (!branchId || branchId === 'all') return list
     return list.filter(e => e.branch === branchId)
   }
@@ -451,7 +461,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, login, logout, error, setError,
       hasPermission, getRoleLabel,
-      employees, addEmployee, updateEmployee, deleteEmployee, resetEmployees,
+      employees: tenantEmployees, addEmployee, updateEmployee, deleteEmployee, resetEmployees,
       getSalesStaff, loading,
       getPermissions, updatePermissions, resetPermissions,
     }}>
