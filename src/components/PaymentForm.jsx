@@ -470,7 +470,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             lang: form.contractLang || 'uz',
           })
           const safeNumber = (form.contractNumber || `sale_${saved.id}`).replace(/[^\w-]/g, '_')
-          const storagePath = `contracts/${safeNumber}_${Date.now()}_${fileName}`
+          const tenantPath = user?.tenantId || 'default'
+          const storagePath = `${tenantPath}/contracts/${safeNumber}_${Date.now()}_${fileName}`
           const fileRef = storageRef(storage, storagePath)
           await uploadBytes(fileRef, blob, {
             contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
