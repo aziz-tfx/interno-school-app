@@ -75,7 +75,7 @@ export default function SuperAdmin() {
     await loadTenants()
   }
 
-  if (!user?.isSuperAdmin) {
+  if (!user?.isSuperAdmin && user?.role !== 'owner') {
     return (
       <div className="text-center py-20">
         <Shield size={48} className="mx-auto text-red-300 mb-4" />
