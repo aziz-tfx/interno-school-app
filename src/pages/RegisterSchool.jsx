@@ -8,7 +8,7 @@ import {
 import Logo from '../components/Logo'
 import { createTenant, DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { db } from '../firebase'
-import { collection, doc, setDoc, getDocs, query, where } from 'firebase/firestore'
+import { collection, doc, setDoc, getDocs, addDoc } from 'firebase/firestore'
 
 export default function RegisterSchool() {
   const navigate = useNavigate()
@@ -63,9 +63,14 @@ export default function RegisterSchool() {
     setError('')
 
     try {
-      // Check if login already exists across all tenants
-      const empSnap = await getDocs(collection(db, 'employees'))
-      const loginExists = empSnap.docs.some(d => d.data().login === form.login.trim())
+      // Check if login already exists
+      let loginExists = false
+      try {
+        const empSnap = await getDocs(collection(db, 'employees'))
+        loginExists = empSnap.docs.some(d => d.data().login === form.login.trim())
+      } catch (e) {
+        console.warn('Could not check login uniqueness:', e)
+      }
       if (loginExists) {
         setError('Этот логин уже занят. Выберите другой.')
         setSaving(false)
@@ -100,7 +105,7 @@ export default function RegisterSchool() {
       await setDoc(doc(collection(db, 'employees'), String(ownerId)), ownerData)
 
       // Create a default branch for the new school
-      const branchData = {
+      await addDoc(collection(db, 'branches'), {
         name: form.schoolName.trim(),
         status: 'active',
         students: 0,
@@ -113,19 +118,21 @@ export default function RegisterSchool() {
         rating: 0,
         color: '#3b82f6',
         tenantId,
-      }
-      const { addDoc } = await import('firebase/firestore')
-      await addDoc(collection(db, 'branches'), branchData)
+      })
 
-      // Auto-login
-      setTimeout(() => {
+      // Wait for Firestore snapshot to sync, then auto-login
+      setSaving(false)
+      const tryLogin = (attempts = 0) => {
         const loginOk = authLogin(form.login.trim(), form.password)
         if (loginOk) {
           navigate('/')
+        } else if (attempts < 5) {
+          setTimeout(() => tryLogin(attempts + 1), 1000)
         } else {
           setSuccess(true)
         }
-      }, 500)
+      }
+      setTimeout(() => tryLogin(), 1000)
 
     } catch (err) {
       console.error('School registration error:', err)
