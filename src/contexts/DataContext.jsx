@@ -9,8 +9,11 @@ import {
   onSnapshot,
   getDocs,
   setDoc,
+  query,
+  where,
 } from 'firebase/firestore'
 import { logAudit } from '../utils/auditLog'
+import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 
 // Цвета для филиалов (используются в графиках и бейджах)
 const BRANCH_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16']
@@ -59,12 +62,15 @@ export function DataProvider({ children, currentUser }) {
     }
   }
 
+  const tenantId = currentUser?.tenantId || DEFAULT_TENANT_ID
+
   useEffect(() => {
     const unsubscribers = []
 
-    // Subscribe to a Firestore collection — no default seeding
+    // Subscribe to a Firestore collection filtered by tenantId
     function subscribeCollection(collectionName, setter, loadKey) {
-      const unsub = onSnapshot(collection(db, collectionName), (snapshot) => {
+      const q = query(collection(db, collectionName), where('tenantId', '==', tenantId))
+      const unsub = onSnapshot(q, (snapshot) => {
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
         setter(items)
         if (!loadedRef.current[loadKey]) {
@@ -82,10 +88,20 @@ export function DataProvider({ children, currentUser }) {
     }
 
     // Subscribe to a single-doc meta collection (attendance, salesPlans)
+    // Meta docs use tenantId as part of their doc key: `_meta_{tenantId}`
     function subscribeMetaDoc(collectionName, setter, loadKey) {
-      const unsub = onSnapshot(doc(db, collectionName, '_meta'), (snapshot) => {
+      const metaDocId = `_meta_${tenantId}`
+      const unsub = onSnapshot(doc(db, collectionName, metaDocId), (snapshot) => {
         if (snapshot.exists()) {
           setter(snapshot.data().data)
+        } else {
+          // Fallback: try legacy _meta doc for backward compatibility
+          const legacyUnsub = onSnapshot(doc(db, collectionName, '_meta'), (legacySnap) => {
+            if (legacySnap.exists()) {
+              setter(legacySnap.data().data)
+            }
+          })
+          unsubscribers.push(legacyUnsub)
         }
         if (!loadedRef.current[loadKey]) {
           loadedRef.current[loadKey] = true
@@ -119,10 +135,13 @@ export function DataProvider({ children, currentUser }) {
     return () => {
       unsubscribers.forEach(unsub => unsub())
     }
-  }, [])
+  }, [tenantId])
 
   // Helper: get user info for audit
   const auditUser = () => currentUser ? { id: currentUser.id || currentUser._docId, name: currentUser.name, role: currentUser.role } : {}
+
+  // Helper: inject tenantId into data objects before writing
+  const withTenant = (data) => ({ ...data, tenantId })
 
   // --- Branches CRUD ---
   const addBranch = async (branch) => {
@@ -139,7 +158,7 @@ export function DataProvider({ children, currentUser }) {
       rating: branch.rating || 0,
       color: branch.color || BRANCH_COLORS[branches.length % BRANCH_COLORS.length],
     }
-    const docRef = await addDoc(collection(db, 'branches'), newBranch)
+    const docRef = await addDoc(collection(db, 'branches'), withTenant(newBranch))
     logAudit({ action: 'create', collection: 'branches', documentId: docRef.id, user: auditUser(), after: newBranch, description: `Создан филиал "${newBranch.name}"` })
     return { ...newBranch, id: docRef.id }
   }
@@ -172,7 +191,7 @@ export function DataProvider({ children, currentUser }) {
 
   // --- Rooms CRUD ---
   const addRoom = async (room) => {
-    const docRef = await addDoc(collection(db, 'rooms'), room)
+    const docRef = await addDoc(collection(db, 'rooms'), withTenant(room))
     return { ...room, id: docRef.id }
   }
 
@@ -186,7 +205,7 @@ export function DataProvider({ children, currentUser }) {
 
   // --- Courses CRUD ---
   const addCourse = async (course) => {
-    const docRef = await addDoc(collection(db, 'courses'), course)
+    const docRef = await addDoc(collection(db, 'courses'), withTenant(course))
     logAudit({ action: 'create', collection: 'courses', documentId: docRef.id, user: auditUser(), after: course, description: `Создан курс "${course.name}"` })
     return { ...course, id: docRef.id }
   }
@@ -209,7 +228,7 @@ export function DataProvider({ children, currentUser }) {
       ...student,
       startDate: new Date().toISOString().split('T')[0],
     }
-    const docRef = await addDoc(collection(db, 'students'), newStudent)
+    const docRef = await addDoc(collection(db, 'students'), withTenant(newStudent))
     logAudit({ action: 'create', collection: 'students', documentId: docRef.id, user: auditUser(), after: newStudent, description: `Добавлен студент "${newStudent.name}"` })
     return { ...newStudent, id: docRef.id }
   }
@@ -229,7 +248,7 @@ export function DataProvider({ children, currentUser }) {
   // --- Teachers CRUD ---
   const addTeacher = async (teacher) => {
     const newTeacher = { ...teacher }
-    const docRef = await addDoc(collection(db, 'teachers'), newTeacher)
+    const docRef = await addDoc(collection(db, 'teachers'), withTenant(newTeacher))
     logAudit({ action: 'create', collection: 'teachers', documentId: docRef.id, user: auditUser(), after: newTeacher, description: `Добавлен преподаватель "${newTeacher.name}"` })
     return { ...newTeacher, id: docRef.id }
   }
@@ -252,7 +271,7 @@ export function DataProvider({ children, currentUser }) {
       ...payment,
       date: payment.date || new Date().toISOString().split('T')[0],
     }
-    const docRef = await addDoc(collection(db, 'payments'), newPayment)
+    const docRef = await addDoc(collection(db, 'payments'), withTenant(newPayment))
     logAudit({ action: 'create', collection: 'payments', documentId: docRef.id, user: auditUser(), after: newPayment, description: `${newPayment.type === 'income' ? 'Оплата' : 'Расход'} ${newPayment.amount} сум — ${newPayment.student || ''}` })
 
     // Update student balance and debt status if it's a student payment
@@ -343,6 +362,7 @@ export function DataProvider({ children, currentUser }) {
                 avatar: student.name?.charAt(0)?.toUpperCase() || '?',
                 phone: studentPhone,
                 studentId: student.id,
+                tenantId,
               }
               await setDoc(doc(employeesRef, String(newId)), studentAccount)
               // Save credentials on student record for receipt display
@@ -395,7 +415,7 @@ export function DataProvider({ children, currentUser }) {
     } else {
       updated.push(record)
     }
-    await setDoc(doc(db, 'attendance', '_meta'), { data: updated })
+    await setDoc(doc(db, 'attendance', `_meta_${tenantId}`), { data: updated, tenantId })
   }
 
   const getAttendanceByGroup = (groupName, date) => {
@@ -448,7 +468,7 @@ export function DataProvider({ children, currentUser }) {
 
   // --- LMS CRUD ---
   const addLmsLesson = async (lesson) => {
-    const docRef = await addDoc(collection(db, 'lmsLessons'), lesson)
+    const docRef = await addDoc(collection(db, 'lmsLessons'), withTenant(lesson))
     return { ...lesson, id: docRef.id }
   }
   const updateLmsLesson = async (id, updates) => {
@@ -459,7 +479,7 @@ export function DataProvider({ children, currentUser }) {
   }
 
   const addLmsAssignment = async (assignment) => {
-    const docRef = await addDoc(collection(db, 'lmsAssignments'), assignment)
+    const docRef = await addDoc(collection(db, 'lmsAssignments'), withTenant(assignment))
     return { ...assignment, id: docRef.id }
   }
   const updateLmsAssignment = async (id, updates) => {
@@ -470,7 +490,7 @@ export function DataProvider({ children, currentUser }) {
   }
 
   const addLmsSubmission = async (submission) => {
-    const docRef = await addDoc(collection(db, 'lmsSubmissions'), submission)
+    const docRef = await addDoc(collection(db, 'lmsSubmissions'), withTenant(submission))
     return { ...submission, id: docRef.id }
   }
   const updateLmsSubmission = async (id, updates) => {
@@ -478,7 +498,7 @@ export function DataProvider({ children, currentUser }) {
   }
 
   const addLmsAnnouncement = async (announcement) => {
-    const docRef = await addDoc(collection(db, 'lmsAnnouncements'), announcement)
+    const docRef = await addDoc(collection(db, 'lmsAnnouncements'), withTenant(announcement))
     return { ...announcement, id: docRef.id }
   }
   const deleteLmsAnnouncement = async (id) => {
@@ -487,7 +507,7 @@ export function DataProvider({ children, currentUser }) {
 
   // --- LMS Modules CRUD ---
   const addLmsModule = async (mod) => {
-    const docRef = await addDoc(collection(db, 'lmsModules'), mod)
+    const docRef = await addDoc(collection(db, 'lmsModules'), withTenant(mod))
     return { ...mod, id: docRef.id }
   }
   const updateLmsModule = async (id, updates) => {
@@ -499,7 +519,7 @@ export function DataProvider({ children, currentUser }) {
 
   // --- LMS Progress CRUD ---
   const addLmsProgress = async (progress) => {
-    const docRef = await addDoc(collection(db, 'lmsProgress'), progress)
+    const docRef = await addDoc(collection(db, 'lmsProgress'), withTenant(progress))
     return { ...progress, id: docRef.id }
   }
   const deleteLmsProgress = async (id) => {
@@ -508,7 +528,7 @@ export function DataProvider({ children, currentUser }) {
 
   // --- Student Game Data (Gamification streaks) ---
   const updateStudentGameData = async (studentId, updates) => {
-    await setDoc(doc(db, 'studentGameData', studentId), updates, { merge: true })
+    await setDoc(doc(db, 'studentGameData', studentId), { ...updates, tenantId }, { merge: true })
   }
 
   // --- Sales Plans ---
@@ -518,7 +538,7 @@ export function DataProvider({ children, currentUser }) {
       ...salesPlans,
       [managerId]: { ...(salesPlans[managerId] || {}), [key]: Number(amount) },
     }
-    await setDoc(doc(db, 'salesPlans', '_meta'), { data: updated })
+    await setDoc(doc(db, 'salesPlans', `_meta_${tenantId}`), { data: updated, tenantId })
   }
 
   const getSalesPlan = (managerId, month) => {
@@ -561,7 +581,7 @@ export function DataProvider({ children, currentUser }) {
       ...group,
       status: group.status || 'active',
     }
-    const docRef = await addDoc(collection(db, 'groups'), newGroup)
+    const docRef = await addDoc(collection(db, 'groups'), withTenant(newGroup))
     logAudit({ action: 'create', collection: 'groups', documentId: docRef.id, user: auditUser(), after: newGroup, description: `Создана группа "${newGroup.name}"` })
     return { ...newGroup, id: docRef.id }
   }
@@ -595,7 +615,7 @@ export function DataProvider({ children, currentUser }) {
 
   // --- Schedule CRUD ---
   const addScheduleEntry = async (entry) => {
-    const docRef = await addDoc(collection(db, 'schedule'), entry)
+    const docRef = await addDoc(collection(db, 'schedule'), withTenant(entry))
     logAudit({ action: 'create', collection: 'schedule', documentId: docRef.id, user: auditUser(), after: entry, description: `Добавлено расписание: ${entry.groupName || ''} — ${entry.dayOfWeek} ${entry.startTime}` })
     return { ...entry, id: docRef.id }
   }
@@ -635,6 +655,7 @@ export function DataProvider({ children, currentUser }) {
       studentGameData, updateStudentGameData,
       schedule, addScheduleEntry, updateScheduleEntry, deleteScheduleEntry,
       auditLogs,
+      tenantId,
       loading,
     }}>
       {children}

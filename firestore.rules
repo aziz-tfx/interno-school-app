@@ -169,6 +169,12 @@ service cloud.firestore {
       allow read, write: if hasAppCheck() && docSmallEnough();
     }
 
+    // ─── Tenants — platform-level management ─────────────────────────
+    match /tenants/{id} {
+      allow read: if hasAppCheck();
+      allow write: if hasAppCheck() && docSmallEnough();
+    }
+
     // ─── Catch-all: deny unknown collections ───────────────────────────
     match /{path=**} {
       allow read, write: if false;
