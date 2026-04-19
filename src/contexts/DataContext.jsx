@@ -67,12 +67,29 @@ export function DataProvider({ children, currentUser }) {
   useEffect(() => {
     const unsubscribers = []
 
-    // Subscribe to a Firestore collection filtered by tenantId
+    // Subscribe to a Firestore collection filtered by tenantId.
+    // Falls back to unfiltered query if tenantId filter returns empty
+    // (pre-migration data without tenantId field).
     function subscribeCollection(collectionName, setter, loadKey) {
+      let fallbackActive = false
       const q = query(collection(db, collectionName), where('tenantId', '==', tenantId))
       const unsub = onSnapshot(q, (snapshot) => {
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
-        setter(items)
+        if (items.length === 0 && !fallbackActive) {
+          // No results with tenantId filter — try unfiltered (pre-migration)
+          fallbackActive = true
+          const fallbackUnsub = onSnapshot(collection(db, collectionName), (fallbackSnap) => {
+            const allItems = fallbackSnap.docs.map(d => ({ ...d.data(), id: d.id }))
+            setter(allItems)
+            if (!loadedRef.current[loadKey]) {
+              loadedRef.current[loadKey] = true
+              checkAllLoaded()
+            }
+          })
+          unsubscribers.push(fallbackUnsub)
+        } else if (!fallbackActive) {
+          setter(items)
+        }
         if (!loadedRef.current[loadKey]) {
           loadedRef.current[loadKey] = true
           checkAllLoaded()
