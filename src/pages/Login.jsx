@@ -82,11 +82,17 @@ export default function Login() {
             {t('login.btn_submit')}
           </button>
 
-          <div className="text-center mt-4 pt-4 border-t border-slate-200/40">
+          <div className="text-center mt-4 pt-4 border-t border-slate-200/40 space-y-2">
             <p className="text-sm text-slate-500">
               Нет аккаунта?{' '}
               <button type="button" onClick={() => navigate('/register')} className="text-blue-600 font-medium hover:text-blue-700">
                 Зарегистрироваться
+              </button>
+            </p>
+            <p className="text-sm text-slate-500">
+              Хотите подключить свою школу?{' '}
+              <button type="button" onClick={() => navigate('/register-school')} className="text-emerald-600 font-medium hover:text-emerald-700">
+                Создать школу
               </button>
             </p>
           </div>

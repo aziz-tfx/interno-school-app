@@ -24,6 +24,7 @@ import SuperAdmin from './pages/SuperAdmin'
 import ContractSign from './pages/ContractSign'
 import StudentCabinet from './pages/StudentCabinet'
 import Register from './pages/Register'
+import RegisterSchool from './pages/RegisterSchool'
 import TelegramApp from './pages/TelegramApp'
 
 function ProtectedRoute({ children, permission }) {
@@ -41,6 +42,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/register-school" element={<RegisterSchool />} />
         <Route path="/contract/:paymentId" element={<ContractSign />} />
         <Route path="/tg" element={<TelegramApp />} />
         <Route path="*" element={<Navigate to="/login" />} />
