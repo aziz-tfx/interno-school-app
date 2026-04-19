@@ -68,15 +68,14 @@ export function DataProvider({ children, currentUser }) {
     const unsubscribers = []
 
     // Subscribe to a Firestore collection filtered by tenantId.
-    // Falls back to unfiltered query if tenantId filter returns empty
-    // (pre-migration data without tenantId field).
+    // Only the default tenant falls back to unfiltered queries
+    // (for pre-migration data without tenantId field).
     function subscribeCollection(collectionName, setter, loadKey) {
       let fallbackActive = false
       const q = query(collection(db, collectionName), where('tenantId', '==', tenantId))
       const unsub = onSnapshot(q, (snapshot) => {
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
-        if (items.length === 0 && !fallbackActive) {
-          // No results with tenantId filter — try unfiltered (pre-migration)
+        if (items.length === 0 && !fallbackActive && tenantId === DEFAULT_TENANT_ID) {
           fallbackActive = true
           const fallbackUnsub = onSnapshot(collection(db, collectionName), (fallbackSnap) => {
             const allItems = fallbackSnap.docs.map(d => ({ ...d.data(), id: d.id }))
