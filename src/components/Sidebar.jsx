@@ -23,6 +23,7 @@ import {
   FileText,
   Calendar,
   ScrollText,
+  Zap,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -57,6 +58,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/finance', icon: DollarSign, label: t('sidebar.finance'), permission: 'finance' },
     { to: '/employees', icon: UserCog, label: t('sidebar.employees'), permission: 'employees' },
     { to: '/reports', icon: FileBarChart, label: t('sidebar.reports'), permission: 'finance' },
+    { to: '/amo', icon: Zap, label: 'amoCRM эффективность', permission: 'finance' },
     { to: '/leaderboard', icon: Trophy, label: t('sidebar.leaderboard'), permission: 'finance' },
     { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
     { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: 'attendance' },

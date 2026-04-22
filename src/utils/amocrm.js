@@ -41,3 +41,20 @@ export async function checkAmoStatus() {
     return { connected: false, message: err.message }
   }
 }
+
+/**
+ * Fetch aggregated manager/ROP effectiveness for a period.
+ * @param {{ from: string, to: string }} params — YYYY-MM-DD dates
+ */
+export async function fetchAmoPerformance({ from, to }) {
+  try {
+    const res = await fetch(`${API_BASE}/performance?from=${from}&to=${to}`)
+    const data = await res.json()
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Unknown error', details: data.details }
+    }
+    return { success: true, ...data }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+}

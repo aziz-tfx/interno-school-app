@@ -18,6 +18,7 @@ import LMSGroupView from './pages/lms/LMSGroupView'
 import LMSCourseView from './pages/lms/LMSCourseView'
 import LMSLessonView from './pages/lms/LMSLessonView'
 import Integrations from './pages/Integrations'
+import AmoPerformance from './pages/AmoPerformance'
 import Schedule from './pages/Schedule'
 import AuditLog from './pages/AuditLog'
 import SuperAdmin from './pages/SuperAdmin'
@@ -107,6 +108,9 @@ export default function App() {
         } />
         <Route path="integrations" element={
           <ProtectedRoute permission="settings"><Integrations /></ProtectedRoute>
+        } />
+        <Route path="amo" element={
+          <ProtectedRoute permission="finance"><AmoPerformance /></ProtectedRoute>
         } />
         <Route path="superadmin" element={<SuperAdmin />} />
         <Route path="profile" element={<Profile />} />
