@@ -76,6 +76,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     passport: '',
     durationMonths: '3',
     schedule: '',
+    // ─── Three-party contract (company pays for student) ───
+    isCompanyPayer: false,
+    payerCompanyName: '',
+    payerCompanyInn: '',
+    payerCompanyAddress: '',
+    payerCompanyDirector: '',
+    payerCompanyBank: '',
+    payerCompanyPhone: '',
   })
 
   const [files, setFiles] = useState([])
@@ -396,6 +404,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       schedule: form.schedule || '',
       passport: form.passport || '',
       contractLang: form.contractLang || 'uz',
+      // Three-party contract
+      isCompanyPayer: !!form.isCompanyPayer,
+      payerCompanyName: form.payerCompanyName || '',
+      payerCompanyInn: form.payerCompanyInn || '',
+      payerCompanyAddress: form.payerCompanyAddress || '',
+      payerCompanyDirector: form.payerCompanyDirector || '',
+      payerCompanyBank: form.payerCompanyBank || '',
+      payerCompanyPhone: form.payerCompanyPhone || '',
       files: files.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size, data: f.data })),
       trancheNumber: studentPayments.length + 1,
       managerId: user?.managerId || null,
@@ -468,6 +484,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             schedule: form.schedule || '',
             learningFormat: form.learningFormat,
             lang: form.contractLang || 'uz',
+            // Three-party (company payer)
+            isCompanyPayer: !!form.isCompanyPayer,
+            payerCompanyName: form.payerCompanyName || '',
+            payerCompanyInn: form.payerCompanyInn || '',
+            payerCompanyAddress: form.payerCompanyAddress || '',
+            payerCompanyDirector: form.payerCompanyDirector || '',
+            payerCompanyBank: form.payerCompanyBank || '',
+            payerCompanyPhone: form.payerCompanyPhone || '',
           })
           const safeNumber = (form.contractNumber || `sale_${saved.id}`).replace(/[^\w-]/g, '_')
           const tenantPath = user?.tenantId || 'default'
@@ -605,6 +629,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         schedule: form.schedule || '',
         learningFormat: payment.learningFormat || form.learningFormat,
         lang: payment.contractLang || form.contractLang || 'uz',
+        // Three-party (company payer)
+        isCompanyPayer: !!(payment.isCompanyPayer ?? form.isCompanyPayer),
+        payerCompanyName: payment.payerCompanyName || form.payerCompanyName || '',
+        payerCompanyInn: payment.payerCompanyInn || form.payerCompanyInn || '',
+        payerCompanyAddress: payment.payerCompanyAddress || form.payerCompanyAddress || '',
+        payerCompanyDirector: payment.payerCompanyDirector || form.payerCompanyDirector || '',
+        payerCompanyBank: payment.payerCompanyBank || form.payerCompanyBank || '',
+        payerCompanyPhone: payment.payerCompanyPhone || form.payerCompanyPhone || '',
       })
     } catch (err) {
       console.error('Contract generation failed:', err)
@@ -1213,6 +1245,66 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                       placeholder={t('paymentForm.placeholder_schedule')}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
                   </div>
+                </div>
+
+                {/* ─── Three-party contract toggle ─── */}
+                <div className="mt-3 pt-3 border-t border-purple-200">
+                  <label className="flex items-start gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={!!form.isCompanyPayer}
+                      onChange={(e) => set('isCompanyPayer', e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-800">Трёхсторонний договор</div>
+                      <div className="text-xs text-slate-500">За студента оплачивает компания. В договоре будут три стороны: Исполнитель, Заказчик, Плательщик.</div>
+                    </div>
+                  </label>
+
+                  {form.isCompanyPayer && (
+                    <div className="mt-3 rounded-lg border border-purple-300 bg-white p-3 space-y-3">
+                      <h5 className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Плательщик (компания)</h5>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Наименование компании *</label>
+                          <input type="text" value={form.payerCompanyName} onChange={(e) => set('payerCompanyName', e.target.value)}
+                            placeholder='ООО "Название"'
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">ИНН / STIR</label>
+                          <input type="text" value={form.payerCompanyInn} onChange={(e) => set('payerCompanyInn', e.target.value)}
+                            placeholder="123 456 789"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Телефон</label>
+                          <input type="tel" value={form.payerCompanyPhone} onChange={(e) => set('payerCompanyPhone', e.target.value)}
+                            placeholder="+998 __ ___ __ __"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Юридический адрес</label>
+                          <input type="text" value={form.payerCompanyAddress} onChange={(e) => set('payerCompanyAddress', e.target.value)}
+                            placeholder="г. Ташкент, ул. ..."
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Директор (ФИО, должность)</label>
+                          <input type="text" value={form.payerCompanyDirector} onChange={(e) => set('payerCompanyDirector', e.target.value)}
+                            placeholder="Иванов И.И., ген. директор"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">Банковские реквизиты</label>
+                          <input type="text" value={form.payerCompanyBank} onChange={(e) => set('payerCompanyBank', e.target.value)}
+                            placeholder="р/с, банк, МФО"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </>

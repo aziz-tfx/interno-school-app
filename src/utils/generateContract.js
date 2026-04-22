@@ -124,6 +124,7 @@ function jp(children, spacing = {}) {
 // UZBEK contract sections builder
 // ═══════════════════════════════════════════════════════════════════════════
 function buildUzbekContract(data, contractDate, courseStartDate, courseNameUz, tariff, duration, schedule, contractNum) {
+  const threeParty = !!data.isCompanyPayer
   return [
     // TITLE
     new Paragraph({
@@ -150,7 +151,25 @@ function buildUzbekContract(data, contractDate, courseStartDate, courseNameUz, t
     new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
       spacing: { after: 80 },
-      children: [
+      children: threeParty ? [
+        r("\u201CInterno Edu\u201D MCHJ, Ustav asosida faoliyat yuritayotgan bosh direktor Toshpulatov A.A. (keyingi o\u2018rinlarda \u2013 "),
+        rb("\u201CBajaruvchi\u201D"),
+        r('), bir tomondan, '),
+        rb(data.clientName || '_______________'),
+        r('  va pasport  '),
+        rb(data.passport || '_______________'),
+        r(" (keyingi o\u2018rinlarda \u2013 "),
+        rb("\u201CBuyurtmachi\u201D"),
+        r('), ikkinchi tomondan, hamda '),
+        rb(data.payerCompanyName || '_______________'),
+        r(' (STIR: '),
+        rb(data.payerCompanyInn || '_______________'),
+        r('), '),
+        rb(data.payerCompanyDirector || '_______________'),
+        r(" shaxsida faoliyat yuritayotgan (keyingi o\u2018rinlarda \u2013 "),
+        rb("\u201CTo\u2018lovchi\u201D"),
+        r("), uchinchi tomondan, quyidagicha uch tomonlama shartnoma tuzdilar:"),
+      ] : [
         r("\u201CInterno Edu\u201D MCHJ, Ustav asosida faoliyat yuritayotgan bosh direktor Toshpulatov A.A. (keyingi o\u2018rinlarda \u2013 "),
         rb("\u201CBajaruvchi\u201D"),
         r('), bir tomondan, '),
@@ -171,7 +190,9 @@ function buildUzbekContract(data, contractDate, courseStartDate, courseNameUz, t
       children: [
         r(`Bajaruvchi \u201C ${courseNameUz} \u201D yo\u2018nalishi bo\u2018yicha`),
         ...(data.courseDetails ? [r(` ( ${data.courseDetails} )`)] : []),
-        r(` guruhli mashg\u2018ulotlar tarzida o\u2018quv kurslarini taqdim etadi, Buyurtmachi esa ushbu xizmatlar uchun to\u2018lovni amalga oshiradi.`),
+        r(threeParty
+          ? ` guruhli mashg\u2018ulotlar tarzida o\u2018quv kurslarini Buyurtmachiga taqdim etadi, To\u2018lovchi esa ushbu xizmatlar uchun to\u2018lovni Buyurtmachi nomidan amalga oshiradi.`
+          : ` guruhli mashg\u2018ulotlar tarzida o\u2018quv kurslarini taqdim etadi, Buyurtmachi esa ushbu xizmatlar uchun to\u2018lovni amalga oshiradi.`),
       ],
     }),
     new Paragraph({ spacing: { before: 40 }, children: [r(`Ta\u2019lim dasturining davomiyligi \u2013 ${duration} oy`)] }),
@@ -228,8 +249,14 @@ function buildUzbekContract(data, contractDate, courseStartDate, courseNameUz, t
         r(`so\u2018mni tashkil qiladi ( ${tariff} ) `),
       ],
     }),
-    jp("To\u2018lov buyurtmachi tomonidan bank orqali yoki o\u2018quv markazi kassasiga amalga oshiriladi."),
-    jp("To\u2018lov amalga oshirilgani Bajaruvchi tomonidan berilgan kvitansiya bilan tasdiqlanadi."),
+    jp(threeParty
+      ? "To\u2018lov To\u2018lovchi (kompaniya) tomonidan bank o\u2018tkazmasi orqali Bajaruvchining hisob raqamiga amalga oshiriladi."
+      : "To\u2018lov buyurtmachi tomonidan bank orqali yoki o\u2018quv markazi kassasiga amalga oshiriladi."),
+    jp("To\u2018lov amalga oshirilgani Bajaruvchi tomonidan berilgan kvitansiya/to\u2018lov topshiriqnomasi bilan tasdiqlanadi."),
+    ...(threeParty ? [
+      jp("To\u2018lovchi ushbu shartnoma bo\u2018yicha Buyurtmachiga ko\u2018rsatilgan ta\u2019lim xizmatlari uchun to\u2018lovni belgilangan muddatlarda to\u2018liq amalga oshirish majburiyatini oladi."),
+      jp("To\u2018lov Buyurtmachi tomonidan amalga oshirilmagan taqdirda, javobgarlik To\u2018lovchi zimmasiga yuklanadi."),
+    ] : []),
 
     // 6. TOPSHIRISH TARTIBI
     new Paragraph({ spacing: { before: 80 }, children: [rb("Xizmatlarni topshirish va qabul qilish tartibi")] }),
@@ -262,6 +289,7 @@ function buildUzbekContract(data, contractDate, courseStartDate, courseNameUz, t
 // ═══════════════════════════════════════════════════════════════════════════
 function buildRussianContract(data, contractDate, courseStartDate, tariff, duration, schedule, contractNum) {
   const courseName = data.course || '___'
+  const threeParty = !!data.isCompanyPayer
   return [
     // TITLE
     new Paragraph({
@@ -288,7 +316,25 @@ function buildRussianContract(data, contractDate, courseStartDate, tariff, durat
     new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
       spacing: { after: 80 },
-      children: [
+      children: threeParty ? [
+        r('ООО \u201CInterno Edu\u201D, в лице генерального директора Тошпулатова А.А., действующего на основании Устава (далее \u2013 '),
+        rb('\u201CИсполнитель\u201D'),
+        r('), с одной стороны, '),
+        rb(data.clientName || '_______________'),
+        r(', паспорт '),
+        rb(data.passport || '_______________'),
+        r(' (далее \u2013 '),
+        rb('\u201CЗаказчик\u201D'),
+        r('), со второй стороны, и '),
+        rb(data.payerCompanyName || '_______________'),
+        r(' (ИНН: '),
+        rb(data.payerCompanyInn || '_______________'),
+        r('), в лице '),
+        rb(data.payerCompanyDirector || '_______________'),
+        r(' (далее \u2013 '),
+        rb('\u201CПлательщик\u201D'),
+        r('), с третьей стороны, заключили настоящий трёхсторонний договор о нижеследующем:'),
+      ] : [
         r('ООО \u201CInterno Edu\u201D, в лице генерального директора Тошпулатова А.А., действующего на основании Устава (далее \u2013 '),
         rb('\u201CИсполнитель\u201D'),
         r('), с одной стороны, и '),
@@ -309,7 +355,9 @@ function buildRussianContract(data, contractDate, courseStartDate, tariff, durat
       children: [
         r(`Исполнитель предоставляет учебные курсы по направлению \u201C${courseName}\u201D`),
         ...(data.courseDetails ? [r(` (${data.courseDetails})`)] : []),
-        r(' в формате групповых занятий, а Заказчик осуществляет оплату за данные услуги.'),
+        r(threeParty
+          ? ' в формате групповых занятий Заказчику, а Плательщик осуществляет оплату за данные услуги от имени Заказчика.'
+          : ' в формате групповых занятий, а Заказчик осуществляет оплату за данные услуги.'),
       ],
     }),
     new Paragraph({ spacing: { before: 40 }, children: [r(`Продолжительность учебной программы \u2013 ${duration} месяцев`)] }),
@@ -366,8 +414,14 @@ function buildRussianContract(data, contractDate, courseStartDate, tariff, durat
         r(`сум ( ${tariff} ) `),
       ],
     }),
-    jp('Оплата производится Заказчиком через банк или в кассу учебного центра.'),
-    jp('Факт оплаты подтверждается квитанцией, выданной Исполнителем.'),
+    jp(threeParty
+      ? 'Оплата производится Плательщиком (компанией) банковским переводом на расчётный счёт Исполнителя.'
+      : 'Оплата производится Заказчиком через банк или в кассу учебного центра.'),
+    jp('Факт оплаты подтверждается квитанцией/платёжным поручением, выданным Исполнителю.'),
+    ...(threeParty ? [
+      jp('Плательщик обязуется осуществить оплату образовательных услуг, оказываемых Заказчику, в полном объёме и в согласованные сроки.'),
+      jp('В случае неисполнения обязанности по оплате со стороны Заказчика, ответственность за оплату несёт Плательщик.'),
+    ] : []),
 
     // 6. ПОРЯДОК СДАЧИ И ПРИЁМКИ УСЛУГ
     new Paragraph({ spacing: { before: 80 }, children: [rb('Порядок сдачи и приёмки услуг')] }),
@@ -400,6 +454,10 @@ function buildRussianContract(data, contractDate, courseStartDate, tariff, durat
 // ═══════════════════════════════════════════════════════════════════════════
 function buildSignatureTable(data, lang) {
   const isRu = lang === 'ru'
+  const threeParty = !!data.isCompanyPayer
+
+  if (threeParty) return buildThreePartySignatureTable(data, lang)
+
   return new Table({
     width: { size: 9360, type: WidthType.DXA },
     columnWidths: [4680, 4680],
@@ -478,6 +536,84 @@ function buildSignatureTable(data, lang) {
         ],
       }),
     ],
+  })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Three-party signature table (Исполнитель | Заказчик | Плательщик)
+// ═══════════════════════════════════════════════════════════════════════════
+function buildThreePartySignatureTable(data, lang) {
+  const isRu = lang === 'ru'
+  // 3 columns across ~9360 dxa total
+  const col = 3120
+  const cellCommon = {
+    borders: cellBorders,
+    width: { size: col, type: WidthType.DXA },
+    margins: { top: 80, bottom: 80, left: 100, right: 100 },
+  }
+
+  const executorCell = new TableCell({
+    ...cellCommon,
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 40 },
+        children: [rb(isRu ? 'Исполнитель \u201CInterno Edu\u201D' : 'Bajaruvchi \u201CInterno Edu\u201D')],
+      }),
+      new Paragraph({ children: [r(isRu
+        ? 'Адрес: г. Ташкент, Мирзо-Улугбекский район, ул. Хирмонтепа, дом 34Б'
+        : 'Manzil: Toshkent shahri, Mirzo Ulug\u2018bek tumani, Xirmontepa ko\u2018chasi, 34B-uy')] }),
+      new Paragraph({ children: [r(isRu
+        ? 'Р/с: 2020 8000 7053 5951 4001, АТБ \u201COrient Finans\u201D, МФО: 01071, ИНН: 308 290 853'
+        : 'Hisob raqami: 2020 8000 7053 5951 4001, ATB \u201COrient Finans\u201D, MFO: 01071, STIR: 308 290 853')] }),
+      new Paragraph({ children: [r(isRu ? 'ОКЭД: 85590' : 'OKED: 85590')] }),
+      new Paragraph({ spacing: { before: 80 }, children: [r(isRu ? 'Телефон: +998 94 676 88 58' : 'Tel: +998 94 676 88 58')] }),
+      new Paragraph({ spacing: { before: 120 }, children: [r(isRu ? 'Генеральный директор' : 'Bosh direktor')] }),
+      new Paragraph({ children: [r(isRu ? 'Тошпулатов А.А.' : 'Toshpulatov A.A.')] }),
+      new Paragraph({ spacing: { before: 40 }, children: [r('_______________________')] }),
+    ],
+  })
+
+  const clientCell = new TableCell({
+    ...cellCommon,
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 40 },
+        children: [rb(isRu ? 'Заказчик' : 'Buyurtmachi')],
+      }),
+      new Paragraph({ children: [rb(data.clientName || '_______________')] }),
+      new Paragraph({ children: [r(`${isRu ? 'Адрес' : 'Manzil'}: ${data.address || (isRu ? 'Ташкент' : 'Toshkent')}`)] }),
+      new Paragraph({ children: [r(`${isRu ? 'Паспорт' : 'Pasport'}: ${data.passport || '_______________'}`)] }),
+      new Paragraph({ children: [r(`${isRu ? 'ПИНФЛ' : 'JShShIR'}: ${data.jshshir || ''}`)] }),
+      new Paragraph({ spacing: { before: 80 }, children: [r(`${isRu ? 'Тел' : 'Tel'}: ${data.phone || '_______________'}`)] }),
+      new Paragraph({ spacing: { before: 120 }, children: [r(isRu ? 'Подпись' : 'Imzo')] }),
+      new Paragraph({ spacing: { before: 40 }, children: [r('_______________________')] }),
+    ],
+  })
+
+  const payerCell = new TableCell({
+    ...cellCommon,
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 40 },
+        children: [rb(isRu ? 'Плательщик' : 'To\u2018lovchi')],
+      }),
+      new Paragraph({ children: [rb(data.payerCompanyName || '_______________')] }),
+      new Paragraph({ children: [r(`${isRu ? 'ИНН' : 'STIR'}: ${data.payerCompanyInn || '_______________'}`)] }),
+      new Paragraph({ children: [r(`${isRu ? 'Адрес' : 'Manzil'}: ${data.payerCompanyAddress || '_______________'}`)] }),
+      new Paragraph({ children: [r(`${isRu ? 'Банк' : 'Bank'}: ${data.payerCompanyBank || '_______________'}`)] }),
+      new Paragraph({ spacing: { before: 80 }, children: [r(`${isRu ? 'Тел' : 'Tel'}: ${data.payerCompanyPhone || '_______________'}`)] }),
+      new Paragraph({ spacing: { before: 120 }, children: [r(`${isRu ? 'Директор' : 'Direktor'}: ${data.payerCompanyDirector || '_______________'}`)] }),
+      new Paragraph({ spacing: { before: 40 }, children: [r('_______________________')] }),
+    ],
+  })
+
+  return new Table({
+    width: { size: 9360, type: WidthType.DXA },
+    columnWidths: [col, col, col],
+    rows: [new TableRow({ children: [executorCell, clientCell, payerCell] })],
   })
 }
 
