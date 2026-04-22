@@ -149,6 +149,7 @@ export default function ContractSign() {
   const isRu = payment.contractLang === 'ru'
   const courseUz = COURSE_MAP[payment.course] || payment.course
   const courseName = isRu ? payment.course : courseUz
+  const isThreeParty = !!payment.isCompanyPayer
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
@@ -163,6 +164,13 @@ export default function ContractSign() {
         <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8 space-y-5" style={{ fontFamily: 'Times New Roman, serif' }}>
           <h2 className="text-center font-bold text-lg">{isRu ? 'ДОГОВОР' : 'SHARTNOMA'} №{payment.contractNumber}</h2>
           <p className="text-center text-sm text-slate-600">{isRu ? 'Об оказании платных образовательных услуг' : "Pullik ta'lim xizmatlari ko'rsatish to'g'risida"}</p>
+          {isThreeParty && (
+            <p className="text-center">
+              <span className="inline-block px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-semibold">
+                {isRu ? 'Трёхсторонний договор' : 'Uch tomonlama shartnoma'}
+              </span>
+            </p>
+          )}
 
           <div className="flex justify-between text-sm text-slate-600">
             <span>{isRu ? 'г. Ташкент' : 'Toshkent shahri'}</span>
@@ -171,9 +179,17 @@ export default function ContractSign() {
 
           <p className="text-sm text-justify leading-relaxed">
             {isRu ? (
-              <>ООО "Interno Edu", в лице генерального директора Тошпулатова А.А., действующего на основании Устава (далее – <b>"Исполнитель"</b>), с одной стороны, и <b>{payment.student}</b>, паспорт <b>{payment.passport || '_______________'}</b> (далее – <b>"Заказчик"</b>), с другой стороны, заключили настоящий договор о нижеследующем:</>
+              isThreeParty ? (
+                <>ООО "Interno Edu", в лице генерального директора Тошпулатова А.А., действующего на основании Устава (далее – <b>"Исполнитель"</b>), с одной стороны, <b>{payment.student}</b>, паспорт <b>{payment.passport || '_______________'}</b> (далее – <b>"Заказчик"</b>), со второй стороны, и <b>{payment.payerCompanyName || '_______________'}</b> (ИНН: <b>{payment.payerCompanyInn || '_______________'}</b>), в лице <b>{payment.payerCompanyDirector || '_______________'}</b> (далее – <b>"Плательщик"</b>), с третьей стороны, заключили настоящий трёхсторонний договор о нижеследующем:</>
+              ) : (
+                <>ООО "Interno Edu", в лице генерального директора Тошпулатова А.А., действующего на основании Устава (далее – <b>"Исполнитель"</b>), с одной стороны, и <b>{payment.student}</b>, паспорт <b>{payment.passport || '_______________'}</b> (далее – <b>"Заказчик"</b>), с другой стороны, заключили настоящий договор о нижеследующем:</>
+              )
             ) : (
-              <>"Interno Edu" MCHJ, Ustav asosida faoliyat yuritayotgan bosh direktor Toshpulatov A.A. (keyingi o'rinlarda – <b>"Bajaruvchi"</b>), bir tomondan, <b>{payment.student}</b> va pasport <b>{payment.passport || '_______________'}</b> (keyingi o'rinlarda – <b>"Buyurtmachi"</b>) ikkinchi tomondan, quyidagicha shartnoma tuzdilar:</>
+              isThreeParty ? (
+                <>"Interno Edu" MCHJ, Ustav asosida faoliyat yuritayotgan bosh direktor Toshpulatov A.A. (keyingi o'rinlarda – <b>"Bajaruvchi"</b>), bir tomondan, <b>{payment.student}</b> va pasport <b>{payment.passport || '_______________'}</b> (keyingi o'rinlarda – <b>"Buyurtmachi"</b>), ikkinchi tomondan, hamda <b>{payment.payerCompanyName || '_______________'}</b> (STIR: <b>{payment.payerCompanyInn || '_______________'}</b>), <b>{payment.payerCompanyDirector || '_______________'}</b> shaxsida faoliyat yuritayotgan (keyingi o'rinlarda – <b>"To'lovchi"</b>), uchinchi tomondan, quyidagicha uch tomonlama shartnoma tuzdilar:</>
+              ) : (
+                <>"Interno Edu" MCHJ, Ustav asosida faoliyat yuritayotgan bosh direktor Toshpulatov A.A. (keyingi o'rinlarda – <b>"Bajaruvchi"</b>), bir tomondan, <b>{payment.student}</b> va pasport <b>{payment.passport || '_______________'}</b> (keyingi o'rinlarda – <b>"Buyurtmachi"</b>) ikkinchi tomondan, quyidagicha shartnoma tuzdilar:</>
+              )
             )}
           </p>
 
@@ -181,8 +197,12 @@ export default function ContractSign() {
             <p><b>{isRu ? 'Предмет договора' : 'Shartnoma predmeti'}</b></p>
             <p className="text-justify">
               {isRu
-                ? <>Исполнитель предоставляет учебные курсы по направлению "{courseName}" в формате групповых занятий, а Заказчик осуществляет оплату за данные услуги.</>
-                : <>Bajaruvchi "{courseName}" yo'nalishi bo'yicha guruhli mashg'ulotlar tarzida o'quv kurslarini taqdim etadi, Buyurtmachi esa ushbu xizmatlar uchun to'lovni amalga oshiradi.</>
+                ? (isThreeParty
+                    ? <>Исполнитель предоставляет учебные курсы по направлению "{courseName}" в формате групповых занятий Заказчику, а Плательщик осуществляет оплату за данные услуги от имени Заказчика.</>
+                    : <>Исполнитель предоставляет учебные курсы по направлению "{courseName}" в формате групповых занятий, а Заказчик осуществляет оплату за данные услуги.</>)
+                : (isThreeParty
+                    ? <>Bajaruvchi "{courseName}" yo'nalishi bo'yicha guruhli mashg'ulotlar tarzida o'quv kurslarini Buyurtmachiga taqdim etadi, To'lovchi esa ushbu xizmatlar uchun to'lovni Buyurtmachi nomidan amalga oshiradi.</>
+                    : <>Bajaruvchi "{courseName}" yo'nalishi bo'yicha guruhli mashg'ulotlar tarzida o'quv kurslarini taqdim etadi, Buyurtmachi esa ushbu xizmatlar uchun to'lovni amalga oshiradi.</>)
               }
             </p>
             <p>{isRu ? `Продолжительность учебной программы – ${payment.durationMonths || 3} месяцев` : `Ta'lim dasturining davomiyligi – ${payment.durationMonths || 3} oy`}</p>
@@ -257,8 +277,31 @@ export default function ContractSign() {
                 : <>Shartnoma bo'yicha umumiy to'lov summasi: <b>{formatCurrency(payment.totalCoursePrice || payment.amount)}</b> so'mni tashkil qiladi {payment.tariff ? ` ( ${payment.tariff} )` : ''}</>
               }
             </p>
-            <p className="text-justify">{isRu ? 'Оплата производится Заказчиком через банк или в кассу учебного центра.' : "To'lov buyurtmachi tomonidan bank orqali yoki o'quv markazi kassasiga amalga oshiriladi."}</p>
-            <p className="text-justify">{isRu ? 'Факт оплаты подтверждается квитанцией, выданной Исполнителем.' : "To'lov amalga oshirilgani Bajaruvchi tomonidan berilgan kvitansiya bilan tasdiqlanadi."}</p>
+            <p className="text-justify">
+              {isRu
+                ? (isThreeParty
+                    ? 'Оплата производится Плательщиком (компанией) банковским переводом на расчётный счёт Исполнителя.'
+                    : 'Оплата производится Заказчиком через банк или в кассу учебного центра.')
+                : (isThreeParty
+                    ? "To'lov To'lovchi (kompaniya) tomonidan bank o'tkazmasi orqali Bajaruvchining hisob raqamiga amalga oshiriladi."
+                    : "To'lov buyurtmachi tomonidan bank orqali yoki o'quv markazi kassasiga amalga oshiriladi.")
+              }
+            </p>
+            <p className="text-justify">{isRu ? 'Факт оплаты подтверждается квитанцией/платёжным поручением, выданным Исполнителю.' : "To'lov amalga oshirilgani Bajaruvchi tomonidan berilgan kvitansiya/to'lov topshiriqnomasi bilan tasdiqlanadi."}</p>
+            {isThreeParty && (
+              <>
+                <p className="text-justify">
+                  {isRu
+                    ? 'Плательщик обязуется осуществить оплату образовательных услуг, оказываемых Заказчику, в полном объёме и в согласованные сроки.'
+                    : "To'lovchi ushbu shartnoma bo'yicha Buyurtmachiga ko'rsatilgan ta'lim xizmatlari uchun to'lovni belgilangan muddatlarda to'liq amalga oshirish majburiyatini oladi."}
+                </p>
+                <p className="text-justify">
+                  {isRu
+                    ? 'В случае неисполнения обязанности по оплате со стороны Заказчика, ответственность за оплату несёт Плательщик.'
+                    : "To'lov Buyurtmachi tomonidan amalga oshirilmagan taqdirda, javobgarlik To'lovchi zimmasiga yuklanadi."}
+                </p>
+              </>
+            )}
 
             <p className="pt-2"><b>{isRu ? 'Порядок сдачи и приёмки услуг' : "Xizmatlarni topshirish va qabul qilish tartibi"}</b></p>
             <p className="text-justify">{isRu ? 'По завершении оплаченного учебного периода и после защиты проекта Исполнитель вручает Заказчику сертификат об окончании учебного курса.' : "To'lov qilingan o'quv davri yakunlangandan so'ng va loyiha taqdimotidan keyin Bajaruvchi Buyurtmachiga o'quv kursini tamomlaganligi haqida sertifikat topshiradi."}</p>
@@ -277,7 +320,7 @@ export default function ContractSign() {
           </div>
 
           {/* Signature Section */}
-          <div className="grid grid-cols-2 gap-6 mt-8 pt-6 border-t border-slate-200">
+          <div className={`grid ${isThreeParty ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-2'} gap-4 mt-8 pt-6 border-t border-slate-200`}>
             <div className="text-sm border border-slate-200 rounded-lg p-3">
               <p className="font-bold text-center mb-3">{isRu ? 'Исполнитель "Interno Edu"' : 'Bajaruvchi "Interno Edu"'}</p>
               <p className="text-xs text-slate-600">{isRu ? 'Адрес: г. Ташкент, Мирзо-Улугбекский район, ул. Хирмонтепа, дом 34Б' : "Manzil: Toshkent shahri, Mirzo Ulug'bek tumani, Xirmontepa ko'chasi, 34B-uy"}</p>
@@ -310,6 +353,22 @@ export default function ContractSign() {
                 <p className="text-xs mt-4 text-slate-400">_______________________</p>
               )}
             </div>
+
+            {isThreeParty && (
+              <div className="text-sm border border-slate-200 rounded-lg p-3">
+                <p className="font-bold text-center mb-3">{isRu ? 'Плательщик' : "To'lovchi"}</p>
+                <p className="text-xs text-slate-600 font-medium">{payment.payerCompanyName || '___'}</p>
+                <p className="text-xs text-slate-600">{isRu ? 'ИНН' : 'STIR'}: {payment.payerCompanyInn || '___'}</p>
+                <p className="text-xs text-slate-600">{isRu ? 'Адрес' : 'Manzil'}: {payment.payerCompanyAddress || '___'}</p>
+                <p className="text-xs text-slate-600">{isRu ? 'Банк' : 'Bank'}: {payment.payerCompanyBank || '___'}</p>
+                <p className="text-xs text-slate-600">{isRu ? 'Тел' : 'Tel'}: {payment.payerCompanyPhone || '___'}</p>
+                <div className="mt-3 pt-2 border-t border-slate-100">
+                  <p className="text-xs text-slate-600">{isRu ? 'Директор' : 'Direktor'}</p>
+                  <p className="text-xs text-slate-600 font-medium">{payment.payerCompanyDirector || '___'}</p>
+                </div>
+                <p className="text-xs mt-3 text-slate-400">_______________________</p>
+              </div>
+            )}
           </div>
 
           {/* Sign Action */}
