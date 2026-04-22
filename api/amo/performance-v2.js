@@ -197,10 +197,14 @@ export default async function handler(req, res) {
     const statusInfo = Object.fromEntries(allStages.map(s => [s.id, s]))
 
     // 5) Агрегация по менеджеру + по дню
+    const postpaymentSet = new Set(postpaymentPipelineIds)
     const emptyMetrics = () => ({
       leadsNew: 0, leadsInWork: 0, qualified: 0,
       trialAssigned: 0, trialAttended: 0, termsAgreed: 0,
       sales: 0, revenue: 0,
+      // Разбивка продаж по источнику
+      salesMainWon: 0, revenueMainWon: 0,
+      salesPostpayment: 0, revenuePostpayment: 0,
     })
     const emptyDaily = () => {
       const obj = {}
@@ -282,10 +286,25 @@ export default async function handler(req, res) {
         const closedInMonth = closedDate.getFullYear() === year && closedDate.getMonth() === monthIdx
         const closedDay = closedInMonth ? closedDate.getDate() : (updatedDay || createdDay)
         const price = Number(lead.price) || 0
+        const isFromPostpayment = postpaymentSet.has(lead.pipeline_id)
+
         bucket.metrics.sales += 1
         bucket.metrics.revenue += price
         totals.metrics.sales += 1
         totals.metrics.revenue += price
+
+        if (isFromPostpayment) {
+          bucket.metrics.salesPostpayment += 1
+          bucket.metrics.revenuePostpayment += price
+          totals.metrics.salesPostpayment += 1
+          totals.metrics.revenuePostpayment += price
+        } else {
+          bucket.metrics.salesMainWon += 1
+          bucket.metrics.revenueMainWon += price
+          totals.metrics.salesMainWon += 1
+          totals.metrics.revenueMainWon += price
+        }
+
         if (closedDay) {
           bucket.daily[closedDay].sales += 1
           bucket.daily[closedDay].revenue += price

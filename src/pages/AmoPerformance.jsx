@@ -136,7 +136,7 @@ export default function AmoPerformance() {
   }
 
   const sumDaily = (daily, startDay, endDay) => {
-    const sum = { leadsNew: 0, leadsInWork: 0, qualified: 0, trialAssigned: 0, trialAttended: 0, termsAgreed: 0, sales: 0, revenue: 0 }
+    const sum = { leadsNew: 0, leadsInWork: 0, qualified: 0, trialAssigned: 0, trialAttended: 0, termsAgreed: 0, sales: 0, revenue: 0, salesMainWon: 0, revenueMainWon: 0, salesPostpayment: 0, revenuePostpayment: 0 }
     for (let d = startDay; d <= endDay; d++) {
       const day = daily?.[d]
       if (!day) continue
@@ -290,10 +290,16 @@ export default function AmoPerformance() {
                 <div className="text-right">
                   <p className="text-xs text-slate-500">Продажи</p>
                   <p className="font-semibold text-slate-900">{fact.sales} / {managerPlan.sales || 0}</p>
+                  {(fact.salesPostpayment > 0) && (
+                    <p className="text-[10px] text-slate-400">осн {fact.salesMainWon} + постопл {fact.salesPostpayment}</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-500">Выручка</p>
                   <p className="font-semibold text-slate-900">{formatMoney(fact.revenue)}</p>
+                  {(fact.revenuePostpayment > 0) && (
+                    <p className="text-[10px] text-slate-400">осн {formatMoney(fact.revenueMainWon)} + постопл {formatMoney(fact.revenuePostpayment)}</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-500">Конв. в продажу</p>
