@@ -51,22 +51,30 @@ const STAGE_PATTERNS = {
   terms_agreed:   [/услов.*соглас/i, /соглас.*услов/i],
 }
 
+// Воронки пост-оплат — все не-lost сделки там считаются как проданные
+const POSTPAYMENT_PIPELINE_PATTERN = /контрол.*постоплат|постоплат|пост[\s-]*оплат|после\s*продаж|post.*payment/i
+
 function detectStages(pipelines) {
   // Собираем ВСЕ статусы со ВСЕХ воронок для корректной классификации won/lost
   const allStatusesById = {}
   const wonStatusIds = new Set()
   const lostStatusIds = new Set()
+  const postpaymentPipelineIds = new Set()
 
   // Legacy system-wide статусы amoCRM
   wonStatusIds.add(142)
   lostStatusIds.add(143)
 
   for (const p of pipelines) {
+    const isPostPayment = POSTPAYMENT_PIPELINE_PATTERN.test(p.name || '')
+    if (isPostPayment) postpaymentPipelineIds.add(p.id)
     const sts = p._embedded?.statuses || []
     for (const s of sts) {
       allStatusesById[s.id] = { ...s, pipelineId: p.id, pipelineName: p.name }
       if (s.type === 1) wonStatusIds.add(s.id)
       if (s.type === 2) lostStatusIds.add(s.id)
+      // Все неликвидированные статусы воронки постоплат засчитываем как won
+      if (isPostPayment && s.type !== 2) wonStatusIds.add(s.id)
     }
   }
 
@@ -99,6 +107,8 @@ function detectStages(pipelines) {
     allStages: stages.map(s => ({ id: s.id, name: s.name, sort: s.sort, type: s.type })),
     wonStatusIds: Array.from(wonStatusIds),
     lostStatusIds: Array.from(lostStatusIds),
+    postpaymentPipelineIds: Array.from(postpaymentPipelineIds),
+    pipelines: pipelines.map(p => ({ id: p.id, name: p.name })),
   }
 }
 
@@ -172,7 +182,7 @@ export default async function handler(req, res) {
       console.warn('pipelines fetch failed:', err.message)
     }
 
-    const { pipelineId, pipelineName, stages, allStages, wonStatusIds, lostStatusIds } = detectStages(pipelines)
+    const { pipelineId, pipelineName, stages, allStages, wonStatusIds, lostStatusIds, postpaymentPipelineIds, pipelines: allPipelines } = detectStages(pipelines)
     const wonSet = new Set(wonStatusIds)
     const lostSet = new Set(lostStatusIds)
     const stageSort = Object.fromEntries(
@@ -300,6 +310,8 @@ export default async function handler(req, res) {
         workingDaysPassed,
         currentDay,
         fetchedAt: new Date().toISOString(),
+        allPipelines,
+        postpaymentPipelineIds,
       },
     })
   } catch (err) {
