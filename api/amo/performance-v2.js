@@ -52,7 +52,25 @@ const STAGE_PATTERNS = {
 }
 
 function detectStages(pipelines) {
-  // Берём первую воронку (обычно основная)
+  // Собираем ВСЕ статусы со ВСЕХ воронок для корректной классификации won/lost
+  const allStatusesById = {}
+  const wonStatusIds = new Set()
+  const lostStatusIds = new Set()
+
+  // Legacy system-wide статусы amoCRM
+  wonStatusIds.add(142)
+  lostStatusIds.add(143)
+
+  for (const p of pipelines) {
+    const sts = p._embedded?.statuses || []
+    for (const s of sts) {
+      allStatusesById[s.id] = { ...s, pipelineId: p.id, pipelineName: p.name }
+      if (s.type === 1) wonStatusIds.add(s.id)
+      if (s.type === 2) lostStatusIds.add(s.id)
+    }
+  }
+
+  // Маппинг по названию — из первой (основной) воронки
   const pipeline = pipelines[0]
   const stages = pipeline?._embedded?.statuses || []
   const detected = {
@@ -63,8 +81,8 @@ function detectStages(pipelines) {
 
   for (const s of stages) {
     const info = { id: s.id, name: s.name, sort: s.sort }
-    if (s.type === 1 || s.type === 142) { if (!detected.won) detected.won = info; continue }
-    if (s.type === 2 || s.type === 143) { if (!detected.lost) detected.lost = info; continue }
+    if (s.type === 1) { if (!detected.won) detected.won = info; continue }
+    if (s.type === 2) { if (!detected.lost) detected.lost = info; continue }
     for (const [key, patterns] of Object.entries(STAGE_PATTERNS)) {
       if (detected[key]) continue
       if (patterns.some(rx => rx.test(s.name))) {
@@ -79,6 +97,8 @@ function detectStages(pipelines) {
     pipelineName: pipeline?.name,
     stages: detected,
     allStages: stages.map(s => ({ id: s.id, name: s.name, sort: s.sort, type: s.type })),
+    wonStatusIds: Array.from(wonStatusIds),
+    lostStatusIds: Array.from(lostStatusIds),
   }
 }
 
@@ -152,7 +172,9 @@ export default async function handler(req, res) {
       console.warn('pipelines fetch failed:', err.message)
     }
 
-    const { pipelineId, pipelineName, stages, allStages } = detectStages(pipelines)
+    const { pipelineId, pipelineName, stages, allStages, wonStatusIds, lostStatusIds } = detectStages(pipelines)
+    const wonSet = new Set(wonStatusIds)
+    const lostSet = new Set(lostStatusIds)
     const stageSort = Object.fromEntries(
       Object.entries(stages).map(([k, v]) => [k, v?.sort ?? null])
     )
@@ -194,8 +216,9 @@ export default async function handler(req, res) {
 
       const currentStage = statusInfo[lead.status_id]
       const currentSort = currentStage?.sort ?? 0
-      const isWon  = stages.won  && lead.status_id === stages.won.id
-      const isLost = stages.lost && lead.status_id === stages.lost.id
+      // Учитываем won/lost по ВСЕМ воронкам (не только первой) + legacy 142/143
+      const isWon  = wonSet.has(lead.status_id)
+      const isLost = lostSet.has(lead.status_id)
 
       // День создания — для "Новая заявка"
       const createdDate = new Date(lead.created_at * 1000)
