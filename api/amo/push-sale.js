@@ -97,11 +97,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // ─── 3. Create lead (deal) ──────────────────────────────────────
-    const pipelineId = AMO_PIPELINE_ID ? Number(AMO_PIPELINE_ID) : undefined
-    const statusId = AMO_STATUS_ID ? Number(AMO_STATUS_ID) : undefined
-
-    // Build note text with all sale details
+    // Build note text with all sale details (shared between create & reuse paths)
     const noteLines = [
       `Курс: ${course || '—'}`,
       `Группа: ${group || '—'}`,
@@ -116,43 +112,109 @@ export default async function handler(req, res) {
       ...(comment ? [`Комментарий: ${comment}`] : []),
     ].join('\n')
 
-    const leadPayload = [{
-      name: `${course || 'Курс'} — ${clientName}`,
-      price: amount || 0,
-      ...(pipelineId ? { pipeline_id: pipelineId } : {}),
-      ...(statusId ? { status_id: statusId } : {}),
-      _embedded: {
-        contacts: [{ id: contactId }],
-        tags: [
-          { name: branch || 'interno' },
-          { name: course || 'course' },
-        ],
-      },
-    }]
+    // ─── 3. Look for an existing lead on this contact ───────────────
+    // amoCRM manager могли уже перевести лид в "Успешно реализовано" вручную.
+    // Если у контакта уже есть лид (открытый или выигранный) — не плодим дубль,
+    // а дописываем заметку с деталями транша и обновляем price.
+    let leadId = null
+    let reusedExisting = false
+    try {
+      const contactRes = await fetch(`${BASE}/contacts/${contactId}?with=leads`, { headers })
+      if (contactRes.ok) {
+        const contactData = await contactRes.json()
+        const leadRefs = contactData?._embedded?.leads || []
+        if (leadRefs.length > 0) {
+          // Fetch each lead to inspect status — pick the most recent non-lost lead.
+          // status_id 143 = общий "закрыто и не реализовано" для всех pipelines.
+          const leadDetails = await Promise.all(
+            leadRefs.slice(-10).map(async (l) => {
+              try {
+                const r = await fetch(`${BASE}/leads/${l.id}`, { headers })
+                if (!r.ok) return null
+                return await r.json()
+              } catch { return null }
+            })
+          )
+          const candidates = leadDetails
+            .filter(Boolean)
+            .filter((l) => l.status_id !== 143) // drop "закрыто и не реализовано"
+            .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
 
-    const leadRes = await fetch(`${BASE}/leads`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(leadPayload),
-    })
-
-    if (!leadRes.ok) {
-      const err = await leadRes.text()
-      console.error('Failed to create lead:', err)
-      return res.status(502).json({ error: 'Failed to create lead in amoCRM', details: err })
+          if (candidates.length > 0) {
+            leadId = candidates[0].id
+            reusedExisting = true
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('amo: existing-lead lookup failed, will create new:', err.message)
     }
 
-    const leadData = await leadRes.json()
-    const leadId = leadData?._embedded?.leads?.[0]?.id
+    // ─── 4. Either reuse or create ──────────────────────────────────
+    if (reusedExisting && leadId) {
+      // Do NOT change status — respect manual placement by the manager.
+      // Bump price to sum of tranches (if new amount is higher) and add a note.
+      try {
+        const existingRes = await fetch(`${BASE}/leads/${leadId}`, { headers })
+        const existing = existingRes.ok ? await existingRes.json() : null
+        const existingPrice = Number(existing?.price) || 0
+        const newPrice = Math.max(existingPrice, Number(amount) || 0)
+        if (newPrice !== existingPrice) {
+          await fetch(`${BASE}/leads/${leadId}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ price: newPrice }),
+          })
+        }
+      } catch (err) {
+        console.warn('amo: failed to update existing lead price:', err.message)
+      }
+    } else {
+      // No existing lead — create a new one as before.
+      const pipelineId = AMO_PIPELINE_ID ? Number(AMO_PIPELINE_ID) : undefined
+      const statusId = AMO_STATUS_ID ? Number(AMO_STATUS_ID) : undefined
 
-    // ─── 4. Add note to lead with full details ──────────────────────
+      const leadPayload = [{
+        name: `${course || 'Курс'} — ${clientName}`,
+        price: amount || 0,
+        ...(pipelineId ? { pipeline_id: pipelineId } : {}),
+        ...(statusId ? { status_id: statusId } : {}),
+        _embedded: {
+          contacts: [{ id: contactId }],
+          tags: [
+            { name: branch || 'interno' },
+            { name: course || 'course' },
+          ],
+        },
+      }]
+
+      const leadRes = await fetch(`${BASE}/leads`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(leadPayload),
+      })
+
+      if (!leadRes.ok) {
+        const err = await leadRes.text()
+        console.error('Failed to create lead:', err)
+        return res.status(502).json({ error: 'Failed to create lead in amoCRM', details: err })
+      }
+
+      const leadData = await leadRes.json()
+      leadId = leadData?._embedded?.leads?.[0]?.id
+    }
+
+    // ─── 5. Add note to lead with full details ──────────────────────
     if (leadId) {
+      const noteHeader = reusedExisting
+        ? `💰 Оплата зарегистрирована в INTERNO App (транш №${trancheNumber || 1})\n\n`
+        : ''
       await fetch(`${BASE}/leads/${leadId}/notes`, {
         method: 'POST',
         headers,
         body: JSON.stringify([{
           note_type: 'common',
-          params: { text: noteLines },
+          params: { text: noteHeader + noteLines },
         }]),
       })
     }
@@ -161,7 +223,10 @@ export default async function handler(req, res) {
       success: true,
       contactId,
       leadId,
-      message: 'Sale pushed to amoCRM',
+      reusedExisting,
+      message: reusedExisting
+        ? 'Payment attached to existing amoCRM lead (no duplicate created)'
+        : 'New lead created in amoCRM',
     })
 
   } catch (err) {
