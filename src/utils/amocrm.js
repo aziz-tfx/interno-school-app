@@ -58,3 +58,20 @@ export async function fetchAmoPerformance({ from, to }) {
     return { success: false, error: err.message }
   }
 }
+
+/**
+ * V2: Детальная аналитика по этапам воронки + дневная разбивка.
+ * @param {{ month: string }} params — 'YYYY-MM'
+ */
+export async function fetchAmoPerformanceV2({ month }) {
+  try {
+    const res = await fetch(`${API_BASE}/performance-v2?month=${month}`)
+    const data = await res.json()
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Unknown error', details: data.details }
+    }
+    return { success: true, ...data }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+}
