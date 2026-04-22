@@ -10,6 +10,7 @@ import {
   writeBatch,
   query,
   where,
+  getDoc,
 } from 'firebase/firestore'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 
@@ -303,25 +304,48 @@ export function AuthProvider({ children }) {
     return () => unsubscribe()
   }, [])
 
-  // Real-time sync with Firestore + seed if empty
+  // Real-time sync with Firestore + seed ONCE (guarded by bootstrap flag)
   // Loads ALL employees for login lookup, then filters by tenantId for the UI
   useEffect(() => {
-    const unsubscribe = onSnapshot(employeesRef, async (snapshot) => {
-      if (snapshot.empty) {
-        const batch = writeBatch(db)
-        DEFAULT_EMPLOYEES.forEach((emp) => {
-          const docRef = doc(employeesRef, String(emp.id))
-          batch.set(docRef, emp)
-        })
-        await batch.commit()
-        return
-      }
+    const bootstrapRef = doc(db, 'settings', 'bootstrap')
 
+    const unsubscribe = onSnapshot(employeesRef, async (snapshot) => {
+      // Always update local state first so UI never blocks on the seed check
       const list = snapshot.docs
         .map((d) => ({ ...d.data(), _docId: d.id }))
         .filter((e) => !e.deleted)
       setEmployees(list)
       setLoading(false)
+
+      // One-time seed: only if the bootstrap flag has never been written.
+      // Prevents re-seeding when the collection becomes empty later
+      // (e.g. after admin cleanup, rules flap, or hard-delete via console).
+      if (snapshot.empty) {
+        try {
+          const bootstrapSnap = await getDoc(bootstrapRef)
+          if (bootstrapSnap.exists() && bootstrapSnap.data()?.employeesSeeded) {
+            return // already seeded at some point — never auto-seed again
+          }
+          const batch = writeBatch(db)
+          DEFAULT_EMPLOYEES.forEach((emp) => {
+            const docRef = doc(employeesRef, String(emp.id))
+            batch.set(docRef, emp)
+          })
+          await batch.commit()
+          await setDoc(bootstrapRef, { employeesSeeded: true, seededAt: new Date().toISOString() }, { merge: true })
+        } catch (err) {
+          console.warn('Employee seed skipped:', err)
+        }
+      } else {
+        // Collection is non-empty — mark as bootstrapped so a future empty
+        // state doesn't accidentally trigger reseed. Only write once.
+        try {
+          const bootstrapSnap = await getDoc(bootstrapRef)
+          if (!bootstrapSnap.exists() || !bootstrapSnap.data()?.employeesSeeded) {
+            await setDoc(bootstrapRef, { employeesSeeded: true, seededAt: new Date().toISOString() }, { merge: true })
+          }
+        } catch (_err) { /* non-critical */ }
+      }
     })
 
     return () => unsubscribe()
