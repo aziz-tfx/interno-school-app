@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, MapPin, Monitor } from 'lucide-react'
+import { Plus, Trash2, MapPin, Monitor, Check, X, Pencil } from 'lucide-react'
 import { useLanguage } from '../contexts/LanguageContext'
 
 const REGION_OPTIONS = [
@@ -52,6 +52,10 @@ export default function CourseForm({ course, onClose, onSave }) {
   })
   const [pricing, setPricing] = useState(buildDefaultPricing())
   const [durationByRegion, setDurationByRegion] = useState({})
+  // Inline creation of custom tariff: { regionKey, label } or null
+  const [customDraft, setCustomDraft] = useState(null)
+  // Inline rename of existing custom tariff: { regionKey, tariffKey, label } or null
+  const [renameDraft, setRenameDraft] = useState(null)
 
   useEffect(() => {
     if (course) {
@@ -101,11 +105,12 @@ export default function CourseForm({ course, onClose, onSave }) {
     }))
   }
 
-  const addCustomTariff = (regionKey) => {
-    const label = window.prompt('Название нового тарифа:')
-    if (!label || !label.trim()) return
-    const cleanLabel = label.trim()
-    // Generate a stable unique key from label (lowercase + timestamp for uniqueness)
+  const commitCustomTariff = (regionKey, rawLabel) => {
+    const cleanLabel = (rawLabel || '').trim()
+    if (!cleanLabel) {
+      setCustomDraft(null)
+      return
+    }
     const slug = cleanLabel.toLowerCase().replace(/[^\w\u0400-\u04FF]+/g, '_').replace(/^_+|_+$/g, '') || 'custom'
     let key = slug
     let i = 1
@@ -114,6 +119,23 @@ export default function CourseForm({ course, onClose, onSave }) {
       key = `${slug}_${i++}`
     }
     addTariff(regionKey, key, cleanLabel)
+    setCustomDraft(null)
+  }
+
+  const renameTariff = (regionKey, tariffKey, newLabel) => {
+    const clean = (newLabel || '').trim()
+    if (!clean) {
+      setRenameDraft(null)
+      return
+    }
+    setPricing(prev => ({
+      ...prev,
+      [regionKey]: {
+        ...prev[regionKey],
+        [tariffKey]: { ...prev[regionKey][tariffKey], label: clean },
+      },
+    }))
+    setRenameDraft(null)
   }
 
   const removeTariff = (regionKey, tariffKey) => {
@@ -373,7 +395,10 @@ export default function CourseForm({ course, onClose, onSave }) {
                           {availableTariffs.length > 0 && <div className="border-t border-slate-100 my-1" />}
                           <button
                             type="button"
-                            onClick={() => { addCustomTariff(regionKey); setOpenDropdown(null) }}
+                            onClick={() => {
+                              setCustomDraft({ regionKey, label: '' })
+                              setOpenDropdown(null)
+                            }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 text-left font-medium"
                           >
                             <Plus size={12} /> Свой тариф...
@@ -392,18 +417,104 @@ export default function CourseForm({ course, onClose, onSave }) {
 
                 {/* Tariff pricing rows */}
                 <div className="p-3 space-y-3">
+                  {/* Быстрая кнопка «Свой тариф» — видна всегда */}
+                  {customDraft?.regionKey !== regionKey && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomDraft({ regionKey, label: '' })}
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium text-blue-600 bg-blue-50/50 hover:bg-blue-100 border border-dashed border-blue-200 rounded-lg transition-colors"
+                    >
+                      <Plus size={12} /> Добавить свой тариф
+                    </button>
+                  )}
+                  {/* Inline draft для нового кастомного тарифа */}
+                  {customDraft?.regionKey === regionKey && (
+                    <div className="bg-blue-50/60 border-2 border-dashed border-blue-300 rounded-lg p-3 flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-400 shrink-0" />
+                      <input
+                        autoFocus
+                        type="text"
+                        value={customDraft.label}
+                        onChange={e => setCustomDraft({ ...customDraft, label: e.target.value })}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); commitCustomTariff(regionKey, customDraft.label) }
+                          if (e.key === 'Escape') setCustomDraft(null)
+                        }}
+                        placeholder="Название тарифа (напр. «Рассрочка», «Группа»)"
+                        className="flex-1 px-2 py-1.5 bg-white border border-blue-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => commitCustomTariff(regionKey, customDraft.label)}
+                        className="p-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        <Check size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomDraft(null)}
+                        className="p-1.5 rounded-md bg-slate-200 text-slate-600 hover:bg-slate-300"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
                   {regionTariffs.map(tariffKey => {
                     const tariffOption = TARIFF_OPTIONS.find(to => to.key === tariffKey)
                     const tp = pricing[regionKey][tariffKey]
                     const tariffLabel = tp?.label || (tariffOption ? t(tariffOption.tKey) : tariffKey)
                     const tariffColor = tariffOption?.color || 'bg-slate-500'
+                    const isCustom = !tariffOption // нет в предустановленных → пользовательский
+                    const isRenaming = renameDraft?.regionKey === regionKey && renameDraft?.tariffKey === tariffKey
 
                     return (
                       <div key={tariffKey} className="bg-white rounded-lg border border-slate-100 p-3">
                         <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2.5 h-2.5 rounded-full ${tariffColor}`} />
-                            <span className="text-xs font-semibold text-slate-700">{tariffLabel}</span>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${tariffColor}`} />
+                            {isRenaming ? (
+                              <>
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  value={renameDraft.label}
+                                  onChange={e => setRenameDraft({ ...renameDraft, label: e.target.value })}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') { e.preventDefault(); renameTariff(regionKey, tariffKey, renameDraft.label) }
+                                    if (e.key === 'Escape') setRenameDraft(null)
+                                  }}
+                                  className="flex-1 min-w-0 px-2 py-1 bg-white border border-blue-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => renameTariff(regionKey, tariffKey, renameDraft.label)}
+                                  className="p-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                                >
+                                  <Check size={10} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setRenameDraft(null)}
+                                  className="p-1 rounded bg-slate-200 text-slate-600 hover:bg-slate-300"
+                                >
+                                  <X size={10} />
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                                {tariffLabel}
+                                {isCustom && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setRenameDraft({ regionKey, tariffKey, label: tariffLabel })}
+                                    className="text-slate-400 hover:text-blue-600"
+                                    title="Переименовать"
+                                  >
+                                    <Pencil size={10} />
+                                  </button>
+                                )}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
