@@ -13,6 +13,7 @@ const TARIFF_OPTIONS = [
   { key: 'vip', tKey: 'courseForm.tariff_vip', color: 'bg-purple-500' },
   { key: 'premium', tKey: 'courseForm.tariff_premium', color: 'bg-amber-500' },
   { key: 'individual', tKey: 'courseForm.tariff_individual', color: 'bg-emerald-500' },
+  { key: 'budget', tKey: 'courseForm.tariff_budget', color: 'bg-cyan-500' },
 ]
 
 const ICON_OPTIONS = ['📚', '🎨', '🇬🇧', '📝', '📐', '💻', '🇷🇺', '🇰🇷', '🎓', '🤖', '📊', '🎵', '🏃', '🔬', '📷', '✏️', '🌐', '🧮', '🎭', '🧪']

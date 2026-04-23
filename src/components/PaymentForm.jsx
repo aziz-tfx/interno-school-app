@@ -20,6 +20,7 @@ const TARIFF_OPTIONS = [
   { tKey: 'paymentForm.tariff_vip', value: 'vip' },
   { tKey: 'paymentForm.tariff_premium', value: 'premium' },
   { tKey: 'paymentForm.tariff_individual', value: 'individual' },
+  { tKey: 'paymentForm.tariff_budget', value: 'budget' },
 ]
 const DISCOUNT_OPTIONS = [
   { tKey: 'paymentForm.discount_none', value: 'full' },
