@@ -1194,9 +1194,9 @@ export default function LMSDashboard() {
                                           </div>
                                         </button>
                                         {(canManage || canEdit) && (
-                                          <div className="flex items-center gap-1 opacity-0 group-hover/lesson:opacity-100 transition-opacity">
+                                          <div className="flex items-center gap-1">
                                             <button onClick={() => setShowLessonModal({ courseId: course.id, lesson })}
-                                              className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"><Pencil size={12} /></button>
+                                              className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition-colors" title={t('lms.lesson_btn_save')}><Pencil size={13} /></button>
                                             {deleteLessonConfirm === lesson.id ? (
                                               <div className="flex items-center gap-1">
                                                 <button onClick={() => handleDeleteLesson(lesson.id)} className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded">{t('lms.btn_delete')}</button>
@@ -1204,7 +1204,7 @@ export default function LMSDashboard() {
                                               </div>
                                             ) : (
                                               <button onClick={() => setDeleteLessonConfirm(lesson.id)}
-                                                className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                                                className="p-1.5 rounded-lg hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors" title={t('lms.btn_delete')}><Trash2 size={13} /></button>
                                             )}
                                           </div>
                                         )}
@@ -1235,9 +1235,9 @@ export default function LMSDashboard() {
                                     </div>
                                   </button>
                                   {(canManage || canEdit) && (
-                                    <div className="flex items-center gap-1 opacity-0 group-hover/lesson:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-1">
                                       <button onClick={() => setShowLessonModal({ courseId: course.id, lesson })}
-                                        className="p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"><Pencil size={12} /></button>
+                                        className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition-colors" title={t('lms.lesson_btn_save')}><Pencil size={13} /></button>
                                       {deleteLessonConfirm === lesson.id ? (
                                         <div className="flex items-center gap-1">
                                           <button onClick={() => handleDeleteLesson(lesson.id)} className="px-2 py-0.5 text-[10px] bg-red-600 text-white rounded">{t('lms.btn_delete')}</button>
@@ -1245,7 +1245,7 @@ export default function LMSDashboard() {
                                         </div>
                                       ) : (
                                         <button onClick={() => setDeleteLessonConfirm(lesson.id)}
-                                          className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 size={12} /></button>
+                                          className="p-1.5 rounded-lg hover:bg-red-50 text-slate-500 hover:text-red-500 transition-colors" title={t('lms.btn_delete')}><Trash2 size={13} /></button>
                                       )}
                                     </div>
                                   )}
