@@ -98,15 +98,23 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const [savedPayment, setSavedPayment] = useState(null)
   const [generatingContract, setGeneratingContract] = useState(false)
   const [customTemplates, setCustomTemplates] = useState([])
-  const [selectedTemplateId, setSelectedTemplateId] = useState('') // '' = INTERNO default
+  const [selectedTemplateId, setSelectedTemplateId] = useState('') // '' = INTERNO default (only allowed for default tenant)
+
+  // Only the default (INTERNO) tenant can use the hardcoded INTERNO contract.
+  // Other schools must upload their own template.
+  const tenantIdForTemplates = user?.tenantId || DEFAULT_TENANT_ID
+  const isDefaultTenant = tenantIdForTemplates === DEFAULT_TENANT_ID
 
   // Загружаем кастомные шаблоны договоров текущей школы
   useEffect(() => {
-    const tid = user?.tenantId || DEFAULT_TENANT_ID
-    listTemplates(tid).then(items => {
+    listTemplates(tenantIdForTemplates).then(items => {
       setCustomTemplates(items)
       const def = items.find(t => t.isDefault)
       if (def) setSelectedTemplateId(def.id)
+      else if (!isDefaultTenant && items.length > 0) {
+        // Non-default tenant: auto-select first template (INTERNO default is forbidden)
+        setSelectedTemplateId(items[0].id)
+      }
     }).catch(e => console.warn('listTemplates failed:', e))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -512,8 +520,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             payerCompanyBank: form.payerCompanyBank || '',
             payerCompanyPhone: form.payerCompanyPhone || '',
           }
-          // Выбран кастомный шаблон — рендерим через docxtemplater
+          // Выбран кастомный шаблон — рендерим через docxtemplater.
+          // Только default-тенант (INTERNO) может использовать встроенный шаблон.
           const selectedTpl = customTemplates.find(t => t.id === selectedTemplateId)
+          if (!selectedTpl && !isDefaultTenant) {
+            console.warn('Non-default tenant without custom template — skipping contract generation.')
+            return null
+          }
           const { blob, fileName } = selectedTpl
             ? await renderTemplateBlob(selectedTpl, contractData)
             : await buildContractBlob(contractData)
@@ -665,8 +678,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       const selectedTpl = customTemplates.find(t => t.id === (payment.templateId || selectedTemplateId))
       if (selectedTpl) {
         await renderTemplateAndDownload(selectedTpl, contractData)
-      } else {
+      } else if (isDefaultTenant) {
         await generateContract(contractData)
+      } else {
+        alert('Для вашей школы не загружен шаблон договора. Добавьте его в разделе «Шаблоны договоров».')
       }
     } catch (err) {
       console.error('Contract generation failed:', err)
@@ -1260,7 +1275,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                     onChange={(e) => setSelectedTemplateId(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="">Стандартный INTERNO</option>
+                    {isDefaultTenant && <option value="">Стандартный INTERNO</option>}
+                    {!isDefaultTenant && customTemplates.length === 0 && (
+                      <option value="">— Шаблон не загружен —</option>
+                    )}
                     {customTemplates.map(tpl => (
                       <option key={tpl.id} value={tpl.id}>
                         {tpl.name}{tpl.isDefault ? ' (по умолчанию)' : ''}
@@ -1269,7 +1287,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                   </select>
                   {customTemplates.length === 0 && (
                     <p className="text-xs text-slate-500 mt-1">
-                      Чтобы добавить свои шаблоны, перейдите в «Шаблоны договоров» в меню.
+                      {isDefaultTenant
+                        ? 'Чтобы добавить свои шаблоны, перейдите в «Шаблоны договоров» в меню.'
+                        : 'Загрузите шаблон договора вашей школы в разделе «Шаблоны договоров» — без него договор не будет сформирован.'}
                     </p>
                   )}
                 </div>
