@@ -191,9 +191,23 @@ export default async function handler(req, res) {
       Object.entries(stages).map(([k, v]) => [k, v?.sort ?? null])
     )
 
-    // 3) Лиды созданные в месяце
-    const leadsPath = `/leads?filter[created_at][from]=${fromTs}&filter[created_at][to]=${toTs}`
-    const leads = await amoGetAll(base, leadsPath, headers, 'leads', { pageSize: 250, maxPages: 100 })
+    // 3) Лиды — объединение двух запросов:
+    //    а) созданные в месяце (для метрик "Новая заявка" и этапов воронки)
+    //    б) закрытые в месяце (для выручки — сделки могли быть созданы раньше,
+    //       но достигли "Успешно реализовано" только в этом месяце)
+    const [leadsByCreated, leadsByClosed] = await Promise.all([
+      amoGetAll(base,
+        `/leads?filter[created_at][from]=${fromTs}&filter[created_at][to]=${toTs}`,
+        headers, 'leads', { pageSize: 250, maxPages: 100 }),
+      amoGetAll(base,
+        `/leads?filter[closed_at][from]=${fromTs}&filter[closed_at][to]=${toTs}`,
+        headers, 'leads', { pageSize: 250, maxPages: 100 }),
+    ])
+    // Дедупликация по lead.id
+    const leadsMap = new Map()
+    for (const l of leadsByCreated) leadsMap.set(l.id, l)
+    for (const l of leadsByClosed) leadsMap.set(l.id, l) // overwrite с более свежими данными
+    const leads = Array.from(leadsMap.values())
 
     // 4) Текущие sort для классификации
     const statusInfo = Object.fromEntries(allStages.map(s => [s.id, s]))
@@ -287,33 +301,33 @@ export default async function handler(req, res) {
         }
       }
 
-      // Продажи и выручка — по closed_at (или updated_at если closed_at нет)
+      // Продажи и выручка — строго по closed_at попадающему в месяц.
+      // Это позволяет учитывать сделки созданные в прошлом месяце,
+      // но перешедшие в "Успешно реализовано" в текущем.
       if (isWon) {
-        const closedDate = lead.closed_at
-          ? new Date(lead.closed_at * 1000)
-          : updatedDate
-        const closedInMonth = closedDate.getFullYear() === year && closedDate.getMonth() === monthIdx
-        const closedDay = closedInMonth ? closedDate.getDate() : (updatedDay || createdDay)
-        const price = Number(lead.price) || 0
+        const closedDate = lead.closed_at ? new Date(lead.closed_at * 1000) : null
+        const closedInMonth = closedDate && closedDate.getFullYear() === year && closedDate.getMonth() === monthIdx
+        if (closedInMonth) {
+          const closedDay = closedDate.getDate()
+          const price = Number(lead.price) || 0
 
-        bucket.metrics.sales += 1
-        bucket.metrics.revenue += price
-        totals.metrics.sales += 1
-        totals.metrics.revenue += price
+          bucket.metrics.sales += 1
+          bucket.metrics.revenue += price
+          totals.metrics.sales += 1
+          totals.metrics.revenue += price
 
-        if (isFromPostpayment) {
-          bucket.metrics.salesPostpayment += 1
-          bucket.metrics.revenuePostpayment += price
-          totals.metrics.salesPostpayment += 1
-          totals.metrics.revenuePostpayment += price
-        } else {
-          bucket.metrics.salesMainWon += 1
-          bucket.metrics.revenueMainWon += price
-          totals.metrics.salesMainWon += 1
-          totals.metrics.revenueMainWon += price
-        }
+          if (isFromPostpayment) {
+            bucket.metrics.salesPostpayment += 1
+            bucket.metrics.revenuePostpayment += price
+            totals.metrics.salesPostpayment += 1
+            totals.metrics.revenuePostpayment += price
+          } else {
+            bucket.metrics.salesMainWon += 1
+            bucket.metrics.revenueMainWon += price
+            totals.metrics.salesMainWon += 1
+            totals.metrics.revenueMainWon += price
+          }
 
-        if (closedDay) {
           bucket.daily[closedDay].sales += 1
           bucket.daily[closedDay].revenue += price
           totals.daily[closedDay].sales += 1
