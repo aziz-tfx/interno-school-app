@@ -61,19 +61,16 @@ function detectStages(pipelines) {
   const lostStatusIds = new Set()
   const postpaymentPipelineIds = new Set()
 
-  // Legacy system-wide статусы amoCRM
-  wonStatusIds.add(142)
-  lostStatusIds.add(143)
-
   for (const p of pipelines) {
     const isPostPayment = POSTPAYMENT_PIPELINE_PATTERN.test(p.name || '')
-    if (isPostPayment) postpaymentPipelineIds.add(p.id)
+    if (isPostPayment) {
+      postpaymentPipelineIds.add(p.id)
+      continue // Полностью игнорируем воронки постоплат — они не содержат новых продаж
+    }
     const sts = p._embedded?.statuses || []
     for (const s of sts) {
       allStatusesById[s.id] = { ...s, pipelineId: p.id, pipelineName: p.name }
-      // Считаем won ТОЛЬКО финальные статусы (type=1). Не помечаем промежуточные
-      // этапы воронки постоплат как won — иначе двойной счёт: сделка выиграна
-      // в основной воронке (+1) → переведена в постоплату новой карточкой (+1 снова).
+      // Won — только финальный статус "Успешно реализовано" (type=1) из основных воронок
       if (s.type === 1) wonStatusIds.add(s.id)
       if (s.type === 2) lostStatusIds.add(s.id)
     }
@@ -217,6 +214,10 @@ export default async function handler(req, res) {
     const totals = { metrics: emptyMetrics(), daily: emptyDaily() }
 
     for (const lead of leads) {
+      // Полностью пропускаем сделки из воронок постоплат — это учёт платежей,
+      // а не новые продажи. Они уже были засчитаны при win в основной воронке.
+      if (postpaymentSet.has(lead.pipeline_id)) continue
+
       const uid = lead.responsible_user_id || 0
       if (!byUser[uid]) {
         byUser[uid] = {
