@@ -75,3 +75,20 @@ export async function fetchAmoPerformanceV2({ month }) {
     return { success: false, error: err.message }
   }
 }
+
+/**
+ * Время реакции менеджеров на новые заявки.
+ * @param {{ month: string }} params — 'YYYY-MM'
+ */
+export async function fetchAmoResponseTimes({ month }) {
+  try {
+    const res = await fetch(`${API_BASE}/response-times?month=${month}`)
+    const data = await res.json()
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Unknown error', details: data.details }
+    }
+    return { success: true, ...data }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+}

@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Zap, RefreshCw, Loader, AlertCircle, ChevronDown, ChevronRight,
   Target, TrendingUp, TrendingDown, Download, Trophy, Award, Medal, AlertTriangle, Minus,
-  Filter, Users,
+  Filter, Users, Clock, Zap as ZapIcon, Timer, PhoneOff,
 } from 'lucide-react'
-import { fetchAmoPerformanceV2 } from '../utils/amocrm'
+import { fetchAmoPerformanceV2, fetchAmoResponseTimes } from '../utils/amocrm'
 import { db } from '../firebase'
 import { doc, getDoc } from 'firebase/firestore'
 import { useAuth } from '../contexts/AuthContext'
@@ -62,6 +62,173 @@ function pctClass(v) {
   if (v >= 0.6) return 'text-amber-600'
   return 'text-red-600'
 }
+// ─── Форматирование времени ────────────────────────────────────────
+function formatMinutes(m) {
+  if (m == null || !isFinite(m)) return '—'
+  if (m < 1) return '< 1 мин'
+  if (m < 60) return `${Math.round(m)} мин`
+  const h = Math.floor(m / 60)
+  const mm = Math.round(m % 60)
+  if (h < 24) return mm > 0 ? `${h}ч ${mm}м` : `${h} ч`
+  const d = Math.floor(h / 24)
+  const rh = h % 24
+  return rh > 0 ? `${d}д ${rh}ч` : `${d} дн`
+}
+function responseTimeColor(m) {
+  if (m == null) return 'text-slate-400'
+  if (m <= 15) return 'text-emerald-600'
+  if (m <= 60) return 'text-amber-600'
+  if (m <= 240) return 'text-orange-600'
+  return 'text-red-600'
+}
+
+// ─── Response Times Card ───────────────────────────────────────────
+function ResponseTimesBlock({ data, prevData }) {
+  if (!data) return null
+  const totals = data.totals
+  const usersSorted = Object.values(data.byUser || {}).sort((a, b) => {
+    // сначала те у кого avg есть, по возрастанию (быстрее — лучше)
+    if (a.avgMinutes == null) return 1
+    if (b.avgMinutes == null) return -1
+    return a.avgMinutes - b.avgMinutes
+  })
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
+            <ZapIcon size={18} className="text-white" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Скорость реакции на заявку</h3>
+            <p className="text-[11px] text-slate-500">Норматив: ≤ 15 мин. Реакция за 5 мин vs 30 мин → конверсия в 21× выше</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wider">Средняя команды</p>
+          <p className={`text-xl font-bold ${responseTimeColor(totals.avgMinutes)}`}>
+            {formatMinutes(totals.avgMinutes)}
+          </p>
+        </div>
+      </div>
+
+      {/* Общая статистика */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Timer size={12} className="text-emerald-600" />
+            <p className="text-[10px] text-emerald-700 uppercase font-semibold">Ответ &lt; 15 мин</p>
+          </div>
+          <p className="text-lg font-bold text-emerald-900">
+            {totals.within15}<span className="text-xs text-emerald-600">/{totals.totalLeads}</span>
+          </p>
+          <p className="text-[10px] text-emerald-700">{formatPct(totals.pctWithin15)}</p>
+        </div>
+        <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Clock size={12} className="text-amber-600" />
+            <p className="text-[10px] text-amber-700 uppercase font-semibold">Ответ &lt; 1 часа</p>
+          </div>
+          <p className="text-lg font-bold text-amber-900">
+            {totals.within60}<span className="text-xs text-amber-600">/{totals.totalLeads}</span>
+          </p>
+          <p className="text-[10px] text-amber-700">{formatPct(totals.pctWithin60)}</p>
+        </div>
+        <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Clock size={12} className="text-slate-600" />
+            <p className="text-[10px] text-slate-600 uppercase font-semibold">Медиана</p>
+          </div>
+          <p className={`text-lg font-bold ${responseTimeColor(totals.medianMinutes)}`}>
+            {formatMinutes(totals.medianMinutes)}
+          </p>
+          <p className="text-[10px] text-slate-500">50% заявок быстрее</p>
+        </div>
+        <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <PhoneOff size={12} className="text-red-600" />
+            <p className="text-[10px] text-red-700 uppercase font-semibold">Без ответа</p>
+          </div>
+          <p className="text-lg font-bold text-red-900">
+            {totals.noResponse}<span className="text-xs text-red-600">/{totals.totalLeads}</span>
+          </p>
+          <p className="text-[10px] text-red-700">{formatPct(totals.pctNoResponse)}</p>
+        </div>
+      </div>
+
+      {/* Таблица по менеджерам */}
+      {usersSorted.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-500 border-b border-slate-100">
+                <th className="text-left px-2 py-2 font-medium">Менеджер</th>
+                <th className="text-right px-2 py-2 font-medium">Заявок</th>
+                <th className="text-right px-2 py-2 font-medium">Средн.</th>
+                <th className="text-right px-2 py-2 font-medium">Медиана</th>
+                <th className="text-right px-2 py-2 font-medium">P90</th>
+                <th className="text-right px-2 py-2 font-medium">≤15 мин</th>
+                <th className="text-right px-2 py-2 font-medium">≤1 час</th>
+                <th className="text-right px-2 py-2 font-medium">Без ответа</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usersSorted.map(u => (
+                <tr key={u.userId} className="border-b border-slate-50 hover:bg-slate-50/40">
+                  <td className="text-left px-2 py-2 font-medium text-slate-800">{u.userName}</td>
+                  <td className="text-right px-2 py-2 text-slate-600">{u.totalLeads}</td>
+                  <td className={`text-right px-2 py-2 font-semibold ${responseTimeColor(u.avgMinutes)}`}>
+                    {formatMinutes(u.avgMinutes)}
+                  </td>
+                  <td className={`text-right px-2 py-2 ${responseTimeColor(u.medianMinutes)}`}>
+                    {formatMinutes(u.medianMinutes)}
+                  </td>
+                  <td className={`text-right px-2 py-2 ${responseTimeColor(u.p90Minutes)}`}>
+                    {formatMinutes(u.p90Minutes)}
+                  </td>
+                  <td className="text-right px-2 py-2">
+                    <span className={pctClass(u.pctWithin15)}>{formatPct(u.pctWithin15)}</span>
+                  </td>
+                  <td className="text-right px-2 py-2">
+                    <span className={pctClass(u.pctWithin60)}>{formatPct(u.pctWithin60)}</span>
+                  </td>
+                  <td className="text-right px-2 py-2">
+                    <span className={u.pctNoResponse > 0.2 ? 'text-red-600 font-semibold' : u.pctNoResponse > 0.05 ? 'text-amber-600' : 'text-slate-400'}>
+                      {u.noResponse} ({formatPct(u.pctNoResponse)})
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {totals.noResponse > 0 && totals.pctNoResponse > 0.1 && (
+        <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2">
+          <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="font-semibold text-red-700">
+              {totals.noResponse} заявок без ответа ({formatPct(totals.pctNoResponse)})
+            </p>
+            <p className="text-red-600 mt-0.5">
+              Это прямые потери бюджета маркетинга. Настройте SLA: новая заявка → первый контакт ≤ 15 мин.
+              Автоуведомления менеджеру через 10 мин после создания — резко снижает показатель.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {data.meta && (
+        <p className="mt-3 text-[10px] text-slate-400 text-right">
+          Учитываются исх. звонки, чат-сообщения, SMS, сервисные уведомления · {data.meta.fetchedEvents} событий / {data.meta.fetchedNotes} заметок
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Funnel Chart ──────────────────────────────────────────────────
 const FUNNEL_STAGES = [
   { key: 'leadsNew',      label: 'Новая заявка',       color: 'from-blue-500 to-blue-400' },
@@ -214,6 +381,7 @@ export default function AmoPerformance() {
   const [month, setMonth] = useState(currentMonthString())
   const [data, setData] = useState(null)
   const [prevData, setPrevData] = useState(null)
+  const [responseData, setResponseData] = useState(null)
   const [plan, setPlan] = useState({ managers: {}, workingDays: 26 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -241,9 +409,10 @@ export default function AmoPerformance() {
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true)
     setError('')
-    const [res, prevRes] = await Promise.all([
+    const [res, prevRes, respRes] = await Promise.all([
       fetchAmoPerformanceV2({ month }),
       fetchAmoPerformanceV2({ month: prevMonthString(month) }),
+      fetchAmoResponseTimes({ month }),
     ])
     if (res.success) {
       setData(res)
@@ -253,6 +422,8 @@ export default function AmoPerformance() {
     }
     if (prevRes?.success) setPrevData(prevRes)
     else setPrevData(null)
+    if (respRes?.success) setResponseData(respRes)
+    else setResponseData(null)
     setLoading(false)
   }
 
@@ -601,6 +772,13 @@ export default function AmoPerformance() {
           </div>
         )
       })()}
+
+      {/* ── Response Times ────────────────────────────────────────────── */}
+      {responseData && (
+        <div className="mb-5">
+          <ResponseTimesBlock data={responseData} prevData={null} />
+        </div>
+      )}
 
       {data && usersSorted.map(u => {
         const fact = calcDerived(u.metrics)
