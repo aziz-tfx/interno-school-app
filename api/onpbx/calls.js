@@ -1,10 +1,7 @@
 // Vercel Serverless — Аналитика звонков из OnlinePBX
 // GET /api/onpbx/calls?from=YYYY-MM-DD&to=YYYY-MM-DD
 //
-// Использует HMAC-SHA256 подпись запросов по схеме OnlinePBX:
-// https://docs.onlinepbx.ru/integracii/api
-
-import crypto from 'crypto'
+// Auth: API v2 — один ключ в заголовке x-pbx-authentication
 
 const TIMEOUT_MS = 20000
 
@@ -15,30 +12,15 @@ function withTimeout(promise, ms) {
   ])
 }
 
-/**
- * OnlinePBX auth: HMAC-SHA256 подпись
- *   signature = hmac_sha256(md5(body_json) + url_path, api_key)
- *   header: x-pbx-authentication: {key_id}:{signature}
- */
-function signRequest(bodyJson, urlPath, keyId, apiKey) {
-  const bodyMd5 = crypto.createHash('md5').update(bodyJson).digest('hex')
-  const signature = crypto
-    .createHmac('sha256', apiKey)
-    .update(bodyMd5 + urlPath)
-    .digest('hex')
-  return `${keyId}:${signature}`
-}
-
-async function onpbxPost(domain, path, body, keyId, apiKey) {
+async function onpbxPost(domain, path, body, apiKey) {
   const bodyJson = JSON.stringify(body)
-  const auth = signRequest(bodyJson, path, keyId, apiKey)
   const url = `https://${domain}${path}`
   const res = await withTimeout(
     fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-pbx-authentication': auth,
+        'x-pbx-authentication': apiKey,
       },
       body: bodyJson,
     }),
@@ -86,11 +68,11 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { ONPBX_DOMAIN, ONPBX_KEY_ID, ONPBX_API_KEY } = process.env
-  if (!ONPBX_DOMAIN || !ONPBX_KEY_ID || !ONPBX_API_KEY) {
+  const { ONPBX_DOMAIN, ONPBX_API_KEY } = process.env
+  if (!ONPBX_DOMAIN || !ONPBX_API_KEY) {
     return res.status(500).json({
       error: 'OnlinePBX не настроен',
-      details: 'Нужны env vars: ONPBX_DOMAIN (например pbx14950.onpbx.ru), ONPBX_KEY_ID, ONPBX_API_KEY',
+      details: 'Нужны env vars: ONPBX_DOMAIN (например pbx14950.onpbx.ru), ONPBX_API_KEY',
     })
   }
 
@@ -118,7 +100,6 @@ export default async function handler(req, res) {
           start,
           limit: pageSize,
         },
-        ONPBX_KEY_ID,
         ONPBX_API_KEY,
       )
       const items = data?.data || data?.items || data?.history || []

@@ -1,26 +1,38 @@
 // Vercel Serverless — проверка подключения к OnlinePBX
 // GET /api/onpbx/status
+// Пробует несколько вариантов auth + endpoints и сообщает какой сработал
 
-import crypto from 'crypto'
+const TIMEOUT_MS = 12000
 
-function signRequest(bodyJson, urlPath, keyId, apiKey) {
-  const bodyMd5 = crypto.createHash('md5').update(bodyJson).digest('hex')
-  const signature = crypto
-    .createHmac('sha256', apiKey)
-    .update(bodyMd5 + urlPath)
-    .digest('hex')
-  return `${keyId}:${signature}`
+async function tryRequest(url, headers, body) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: body ? JSON.stringify(body) : '{}',
+      signal: controller.signal,
+    })
+    const text = await r.text()
+    let json = null
+    try { json = JSON.parse(text) } catch {}
+    return { ok: r.ok, status: r.status, text: text.slice(0, 400), json }
+  } catch (err) {
+    return { ok: false, status: 0, text: err.message, json: null }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' })
 
-  const { ONPBX_DOMAIN, ONPBX_KEY_ID, ONPBX_API_KEY } = process.env
+  const { ONPBX_DOMAIN, ONPBX_API_KEY } = process.env
 
   const missing = []
   if (!ONPBX_DOMAIN) missing.push('ONPBX_DOMAIN')
-  if (!ONPBX_KEY_ID) missing.push('ONPBX_KEY_ID')
   if (!ONPBX_API_KEY) missing.push('ONPBX_API_KEY')
 
   if (missing.length) {
@@ -31,44 +43,49 @@ export default async function handler(req, res) {
     })
   }
 
-  // Пробуем запросить список добавочных — самый дешёвый endpoint для проверки
-  const path = '/mfs/users.json'
-  const body = JSON.stringify({})
-  const auth = signRequest(body, path, ONPBX_KEY_ID, ONPBX_API_KEY)
+  // Пробуем несколько endpoint'ов — пока какой-нибудь не вернёт 200
+  const endpoints = [
+    { path: '/mfs/users.json', body: {} },
+    { path: '/mfs/history.json', body: { start_stamp_from: Math.floor(Date.now() / 1000) - 3600, limit: 1 } },
+  ]
 
-  try {
-    const r = await fetch(`https://${ONPBX_DOMAIN}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-pbx-authentication': auth,
-      },
-      body,
-    })
-    const data = await r.json().catch(() => ({}))
-    if (!r.ok) {
-      return res.status(200).json({
-        connected: false,
-        status: r.status,
-        domain: ONPBX_DOMAIN,
-        error: data?.comment || data?.message || `HTTP ${r.status}`,
+  // Разные варианты auth-заголовков, которые использует OnlinePBX
+  const authVariants = [
+    { name: 'x-pbx-authentication header', headers: { 'x-pbx-authentication': ONPBX_API_KEY } },
+    { name: 'Authorization Bearer', headers: { 'Authorization': `Bearer ${ONPBX_API_KEY}` } },
+    { name: 'Authorization plain', headers: { 'Authorization': ONPBX_API_KEY } },
+    { name: 'x-api-key', headers: { 'x-api-key': ONPBX_API_KEY } },
+  ]
+
+  const attempts = []
+  for (const ep of endpoints) {
+    for (const av of authVariants) {
+      const url = `https://${ONPBX_DOMAIN}${ep.path}`
+      const result = await tryRequest(url, av.headers, ep.body)
+      attempts.push({
+        endpoint: ep.path,
+        auth: av.name,
+        status: result.status,
+        ok: result.ok,
+        sampleResponse: result.text?.slice(0, 200),
       })
+      if (result.ok) {
+        return res.status(200).json({
+          connected: true,
+          domain: ONPBX_DOMAIN,
+          workingAuth: av.name,
+          workingEndpoint: ep.path,
+          response: result.json,
+        })
+      }
     }
-    const users = data?.data || data?.users || []
-    return res.status(200).json({
-      connected: true,
-      domain: ONPBX_DOMAIN,
-      users: Array.isArray(users) ? users.length : 0,
-      sample: Array.isArray(users) ? users.slice(0, 3).map(u => ({
-        ext: u.accountcode || u.number || u.id,
-        name: u.name || u.description,
-      })) : [],
-    })
-  } catch (err) {
-    return res.status(200).json({
-      connected: false,
-      domain: ONPBX_DOMAIN,
-      error: err.message,
-    })
   }
+
+  // Ни один не сработал — возвращаем диагностику
+  return res.status(200).json({
+    connected: false,
+    domain: ONPBX_DOMAIN,
+    message: 'Ни один auth-вариант не сработал. Проверьте, включён ли API и верен ли ключ.',
+    attempts,
+  })
 }
