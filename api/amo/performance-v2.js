@@ -51,8 +51,9 @@ const STAGE_PATTERNS = {
   terms_agreed:   [/услов.*соглас/i, /соглас.*услов/i],
 }
 
-// Воронки пост-оплат — все не-lost сделки там считаются как проданные
+// Воронки пост-оплат — учитываем только финальный этап "клиент полностью оплатил"
 const POSTPAYMENT_PIPELINE_PATTERN = /контрол.*постоплат|постоплат|пост[\s-]*оплат|после\s*продаж|post.*payment/i
+const POSTPAYMENT_FULLY_PAID_PATTERN = /полност.*оплат|оплат.*полност|fully\s*paid|full.*payment/i
 
 function detectStages(pipelines) {
   // Собираем ВСЕ статусы со ВСЕХ воронок для корректной классификации won/lost
@@ -63,16 +64,19 @@ function detectStages(pipelines) {
 
   for (const p of pipelines) {
     const isPostPayment = POSTPAYMENT_PIPELINE_PATTERN.test(p.name || '')
-    if (isPostPayment) {
-      postpaymentPipelineIds.add(p.id)
-      continue // Полностью игнорируем воронки постоплат — они не содержат новых продаж
-    }
+    if (isPostPayment) postpaymentPipelineIds.add(p.id)
     const sts = p._embedded?.statuses || []
     for (const s of sts) {
       allStatusesById[s.id] = { ...s, pipelineId: p.id, pipelineName: p.name }
-      // Won — только финальный статус "Успешно реализовано" (type=1) из основных воронок
-      if (s.type === 1) wonStatusIds.add(s.id)
-      if (s.type === 2) lostStatusIds.add(s.id)
+      if (isPostPayment) {
+        // В воронке постоплат считаем won только этап "Клиент полностью оплатил"
+        if (POSTPAYMENT_FULLY_PAID_PATTERN.test(s.name || '')) wonStatusIds.add(s.id)
+        if (s.type === 2) lostStatusIds.add(s.id)
+      } else {
+        // В основной воронке продаж — won = финальный "Успешно реализовано" (type=1)
+        if (s.type === 1) wonStatusIds.add(s.id)
+        if (s.type === 2) lostStatusIds.add(s.id)
+      }
     }
   }
 
@@ -214,9 +218,10 @@ export default async function handler(req, res) {
     const totals = { metrics: emptyMetrics(), daily: emptyDaily() }
 
     for (const lead of leads) {
-      // Полностью пропускаем сделки из воронок постоплат — это учёт платежей,
-      // а не новые продажи. Они уже были засчитаны при win в основной воронке.
-      if (postpaymentSet.has(lead.pipeline_id)) continue
+      const isFromPostpayment = postpaymentSet.has(lead.pipeline_id)
+      // Из воронок постоплат учитываем ТОЛЬКО сделки на финальном этапе "Клиент полностью оплатил".
+      // Остальные сделки оттуда пропускаем (они уже были won в основной воронке либо ещё в процессе).
+      if (isFromPostpayment && !wonSet.has(lead.status_id)) continue
 
       const uid = lead.responsible_user_id || 0
       if (!byUser[uid]) {
@@ -241,8 +246,9 @@ export default async function handler(req, res) {
       const createdInMonth = createdDate.getFullYear() === year && createdDate.getMonth() === monthIdx
       const createdDay = createdInMonth ? createdDate.getDate() : null
 
-      // Лид вошёл в воронку — считаем как "Новая заявка" в день создания
-      if (createdDay) {
+      // Лид вошёл в воронку — считаем как "Новая заявка" в день создания.
+      // Сделки из воронки постоплат не являются новыми заявками — пропускаем.
+      if (createdDay && !isFromPostpayment) {
         bucket.metrics.leadsNew += 1
         bucket.daily[createdDay].leadsNew += 1
         totals.metrics.leadsNew += 1
@@ -262,7 +268,8 @@ export default async function handler(req, res) {
         ['trialAttended',   'trial_attended'],
         ['termsAgreed',     'terms_agreed'],
       ]
-      for (const [metricKey, stageKey] of stageChecks) {
+      // Этапы воронки считаем только для сделок из основной воронки продаж
+      for (const [metricKey, stageKey] of (isFromPostpayment ? [] : stageChecks)) {
         const targetSort = stageSort[stageKey]
         if (targetSort == null) continue
         // Лид "достиг" этапа если: текущий sort >= target sort ИЛИ выигран ИЛИ (проиграно, но уже прошёл)
@@ -288,7 +295,6 @@ export default async function handler(req, res) {
         const closedInMonth = closedDate.getFullYear() === year && closedDate.getMonth() === monthIdx
         const closedDay = closedInMonth ? closedDate.getDate() : (updatedDay || createdDay)
         const price = Number(lead.price) || 0
-        const isFromPostpayment = postpaymentSet.has(lead.pipeline_id)
 
         bucket.metrics.sales += 1
         bucket.metrics.revenue += price
