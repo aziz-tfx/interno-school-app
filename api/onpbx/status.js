@@ -4,14 +4,24 @@
 
 const TIMEOUT_MS = 12000
 
-async function tryRequest(url, headers, body) {
+async function tryRequest(url, headers, body, contentType = 'application/json') {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
+    let serializedBody
+    if (contentType === 'application/x-www-form-urlencoded') {
+      const form = new URLSearchParams()
+      for (const [k, v] of Object.entries(body || {})) {
+        if (v !== undefined && v !== null) form.append(k, String(v))
+      }
+      serializedBody = form.toString()
+    } else {
+      serializedBody = body ? JSON.stringify(body) : '{}'
+    }
     const r = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: body ? JSON.stringify(body) : '{}',
+      headers: { 'Content-Type': contentType, ...headers },
+      body: serializedBody,
       signal: controller.signal,
     })
     const text = await r.text()
@@ -43,11 +53,13 @@ export default async function handler(req, res) {
     })
   }
 
-  // Пробуем несколько endpoint'ов — пока какой-нибудь не вернёт 200
+  // Пробуем несколько endpoint'ов — пока какой-нибудь не вернёт 200 с валидным JSON
   const endpoints = [
     { path: '/mfs/users.json', body: {} },
-    { path: '/mfs/history.json', body: { start_stamp_from: Math.floor(Date.now() / 1000) - 3600, limit: 1 } },
+    { path: '/mfs/history.json', body: { start_stamp_from: Math.floor(Date.now() / 1000) - 24 * 3600, limit: 5 } },
+    { path: '/mfs/calls.json', body: { start_stamp_from: Math.floor(Date.now() / 1000) - 24 * 3600, limit: 5 } },
   ]
+  const contentTypes = ['application/json', 'application/x-www-form-urlencoded']
 
   // Разные варианты auth-заголовков, которые использует OnlinePBX
   const authVariants = [
@@ -60,23 +72,29 @@ export default async function handler(req, res) {
   const attempts = []
   for (const ep of endpoints) {
     for (const av of authVariants) {
-      const url = `https://${ONPBX_DOMAIN}${ep.path}`
-      const result = await tryRequest(url, av.headers, ep.body)
-      attempts.push({
-        endpoint: ep.path,
-        auth: av.name,
-        status: result.status,
-        ok: result.ok,
-        sampleResponse: result.text?.slice(0, 200),
-      })
-      if (result.ok) {
-        return res.status(200).json({
-          connected: true,
-          domain: ONPBX_DOMAIN,
-          workingAuth: av.name,
-          workingEndpoint: ep.path,
-          response: result.json,
+      for (const ct of contentTypes) {
+        const url = `https://${ONPBX_DOMAIN}${ep.path}`
+        const result = await tryRequest(url, av.headers, ep.body, ct)
+        attempts.push({
+          endpoint: ep.path,
+          auth: av.name,
+          contentType: ct,
+          status: result.status,
+          ok: result.ok,
+          hasJson: !!result.json,
+          sampleResponse: result.text?.slice(0, 200),
         })
+        // Успех — это 200 + валидный JSON (а не HTML error page)
+        if (result.ok && result.json) {
+          return res.status(200).json({
+            connected: true,
+            domain: ONPBX_DOMAIN,
+            workingAuth: av.name,
+            workingEndpoint: ep.path,
+            workingContentType: ct,
+            response: result.json,
+          })
+        }
       }
     }
   }

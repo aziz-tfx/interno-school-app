@@ -243,6 +243,32 @@ function formatSeconds(s) {
 
 function TelephonyBlock({ data }) {
   if (!data) return null
+
+  // Ошибка загрузки
+  if (!data.success) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+            <Phone size={18} className="text-white" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Телефония · OnlinePBX</h3>
+            <p className="text-[11px] text-slate-500">Звонки по добавочным</p>
+          </div>
+        </div>
+        <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2">
+          <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="font-semibold text-red-700">Не удалось загрузить данные OnlinePBX</p>
+            <p className="text-red-600 mt-0.5">{data.error}</p>
+            {data.details && <p className="text-red-500 mt-1 font-mono text-[10px] break-all">{data.details}</p>}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const totals = data.totals
   const rows = Object.values(data.byExt || {})
     .filter(b => b.ext && b.ext !== '—')
@@ -575,8 +601,7 @@ export default function AmoPerformance() {
     else setPrevData(null)
     if (respRes?.success) setResponseData(respRes)
     else setResponseData(null)
-    if (callsRes?.success) setCallsData(callsRes)
-    else setCallsData(null)
+    setCallsData(callsRes)
     setLoading(false)
   }
 

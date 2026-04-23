@@ -13,26 +13,44 @@ function withTimeout(promise, ms) {
 }
 
 async function onpbxPost(domain, path, body, apiKey) {
-  const bodyJson = JSON.stringify(body)
   const url = `https://${domain}${path}`
+  // OnlinePBX часто принимает данные как form-urlencoded, а не JSON
+  const formBody = new URLSearchParams()
+  for (const [k, v] of Object.entries(body)) {
+    if (v !== undefined && v !== null) formBody.append(k, String(v))
+  }
+
   const res = await withTimeout(
     fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
         'x-pbx-authentication': apiKey,
       },
-      body: bodyJson,
+      body: formBody.toString(),
     }),
     TIMEOUT_MS
   )
+  const text = await res.text().catch(() => '')
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    const err = new Error(`OnlinePBX ${res.status} ${path}: ${text.slice(0, 200)}`)
+    const err = new Error(`OnlinePBX ${res.status} ${path}: ${text.slice(0, 300)}`)
     err.status = res.status
     throw err
   }
-  return res.json()
+  let json = null
+  try { json = JSON.parse(text) } catch {
+    const err = new Error(`OnlinePBX ${path} вернул не-JSON: ${text.slice(0, 300)}`)
+    err.status = 500
+    throw err
+  }
+  // OnlinePBX иногда возвращает { status: 'error', comment: '...' } со статусом 200
+  if (json && json.status && json.status !== 1 && json.status !== 'success' && json.status !== 'ok') {
+    const msg = json.comment || json.message || JSON.stringify(json).slice(0, 200)
+    const err = new Error(`OnlinePBX ${path} ошибка: ${msg}`)
+    err.status = 500
+    throw err
+  }
+  return json
 }
 
 function classifyCall(call) {
@@ -102,7 +120,7 @@ export default async function handler(req, res) {
         },
         ONPBX_API_KEY,
       )
-      const items = data?.data || data?.items || data?.history || []
+      const items = data?.data || data?.items || data?.history || data?.calls || (Array.isArray(data) ? data : []) || []
       if (!items.length) break
       allCalls.push(...items)
       if (items.length < pageSize) break
