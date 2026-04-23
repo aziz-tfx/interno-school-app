@@ -92,3 +92,20 @@ export async function fetchAmoResponseTimes({ month }) {
     return { success: false, error: err.message }
   }
 }
+
+/**
+ * Аналитика звонков из OnlinePBX за период.
+ * @param {{ from: string, to: string }} params — YYYY-MM-DD
+ */
+export async function fetchOnpbxCalls({ from, to }) {
+  try {
+    const res = await fetch(`/api/onpbx/calls?from=${from}&to=${to}`)
+    const data = await res.json()
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Unknown error', details: data.details }
+    }
+    return { success: true, ...data }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+}

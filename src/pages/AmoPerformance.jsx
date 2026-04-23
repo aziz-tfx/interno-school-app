@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Zap, RefreshCw, Loader, AlertCircle, ChevronDown, ChevronRight,
   Target, TrendingUp, TrendingDown, Download, Trophy, Award, Medal, AlertTriangle, Minus,
-  Filter, Users, Clock, Zap as ZapIcon, Timer, PhoneOff,
+  Filter, Users, Clock, Zap as ZapIcon, Timer, PhoneOff, Phone, PhoneIncoming, PhoneOutgoing, PhoneCall,
 } from 'lucide-react'
-import { fetchAmoPerformanceV2, fetchAmoResponseTimes } from '../utils/amocrm'
+import { fetchAmoPerformanceV2, fetchAmoResponseTimes, fetchOnpbxCalls } from '../utils/amocrm'
 import { db } from '../firebase'
 import { doc, getDoc } from 'firebase/firestore'
 import { useAuth } from '../contexts/AuthContext'
@@ -229,6 +229,151 @@ function ResponseTimesBlock({ data, prevData }) {
   )
 }
 
+// ─── Telephony (OnlinePBX) ─────────────────────────────────────────
+function formatSeconds(s) {
+  if (s == null || !isFinite(s) || s <= 0) return '—'
+  const m = Math.floor(s / 60)
+  const sec = Math.round(s % 60)
+  if (m === 0) return `${sec}с`
+  if (m < 60) return sec > 0 ? `${m}м ${sec}с` : `${m} мин`
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return rm > 0 ? `${h}ч ${rm}м` : `${h} ч`
+}
+
+function TelephonyBlock({ data }) {
+  if (!data) return null
+  const totals = data.totals
+  const rows = Object.values(data.byExt || {})
+    .filter(b => b.ext && b.ext !== '—')
+    .sort((a, b) => b.totalCalls - a.totalCalls)
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+            <Phone size={18} className="text-white" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Телефония · OnlinePBX</h3>
+            <p className="text-[11px] text-slate-500">Звонки по добавочным менеджеров за период</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wider">Всего звонков</p>
+          <p className="text-xl font-bold text-slate-900">{totals.totalCalls || 0}</p>
+        </div>
+      </div>
+
+      {/* KPI */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <PhoneIncoming size={12} className="text-blue-600" />
+            <p className="text-[10px] text-blue-700 uppercase font-semibold">Входящие</p>
+          </div>
+          <p className="text-lg font-bold text-blue-900">{totals.incoming || 0}</p>
+          <p className="text-[10px] text-blue-700">
+            отвечено {totals.answeredIncoming || 0} · {formatPct(totals.answerRate)}
+          </p>
+        </div>
+        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <PhoneOutgoing size={12} className="text-emerald-600" />
+            <p className="text-[10px] text-emerald-700 uppercase font-semibold">Исходящие</p>
+          </div>
+          <p className="text-lg font-bold text-emerald-900">{totals.outgoing || 0}</p>
+          <p className="text-[10px] text-emerald-700">отвечено {Math.max(0, (totals.answered || 0) - (totals.answeredIncoming || 0))}</p>
+        </div>
+        <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <PhoneOff size={12} className="text-red-600" />
+            <p className="text-[10px] text-red-700 uppercase font-semibold">Пропущено входящих</p>
+          </div>
+          <p className="text-lg font-bold text-red-900">{totals.missedIncoming || 0}</p>
+          <p className="text-[10px] text-red-700">{formatPct(totals.missRate)}</p>
+        </div>
+        <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Clock size={12} className="text-slate-600" />
+            <p className="text-[10px] text-slate-600 uppercase font-semibold">Ср. разговор</p>
+          </div>
+          <p className="text-lg font-bold text-slate-900">{formatSeconds(totals.avgTalkSec)}</p>
+          <p className="text-[10px] text-slate-500">Ср. ожидание: {formatSeconds(totals.avgWaitSec)}</p>
+        </div>
+      </div>
+
+      {rows.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-500 border-b border-slate-100">
+                <th className="text-left px-2 py-2 font-medium">Добавочный</th>
+                <th className="text-right px-2 py-2 font-medium">Всего</th>
+                <th className="text-right px-2 py-2 font-medium">Вход.</th>
+                <th className="text-right px-2 py-2 font-medium">Исх.</th>
+                <th className="text-right px-2 py-2 font-medium">Отвечено</th>
+                <th className="text-right px-2 py-2 font-medium">Пропущено</th>
+                <th className="text-right px-2 py-2 font-medium">% пропуска</th>
+                <th className="text-right px-2 py-2 font-medium">Ср. разговор</th>
+                <th className="text-right px-2 py-2 font-medium">Ср. ожидание</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(b => (
+                <tr key={b.ext} className="border-b border-slate-50 hover:bg-slate-50/40">
+                  <td className="text-left px-2 py-2 font-semibold text-slate-800">{b.ext}</td>
+                  <td className="text-right px-2 py-2 text-slate-700">{b.totalCalls}</td>
+                  <td className="text-right px-2 py-2 text-blue-700">{b.incoming}</td>
+                  <td className="text-right px-2 py-2 text-emerald-700">{b.outgoing}</td>
+                  <td className="text-right px-2 py-2 text-slate-600">{b.answered}</td>
+                  <td className="text-right px-2 py-2">
+                    <span className={b.missedIncoming > 0 ? 'text-red-600 font-semibold' : 'text-slate-400'}>
+                      {b.missedIncoming}
+                    </span>
+                  </td>
+                  <td className="text-right px-2 py-2">
+                    <span className={b.missRate > 0.2 ? 'text-red-600 font-semibold' : b.missRate > 0.05 ? 'text-amber-600' : 'text-emerald-600'}>
+                      {formatPct(b.missRate)}
+                    </span>
+                  </td>
+                  <td className="text-right px-2 py-2 text-slate-600">{formatSeconds(b.avgTalkSec)}</td>
+                  <td className="text-right px-2 py-2 text-slate-600">{formatSeconds(b.avgWaitSec)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400 text-center py-4">
+          Нет данных по добавочным. Возможно, поле accountcode пустое — настройте в OnlinePBX привязку пользователей к номерам.
+        </p>
+      )}
+
+      {totals.missedIncoming > 0 && totals.missRate > 0.1 && (
+        <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2">
+          <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="font-semibold text-red-700">
+              {totals.missedIncoming} пропущенных звонков ({formatPct(totals.missRate)})
+            </p>
+            <p className="text-red-600 mt-0.5">
+              Это потерянные лиды. Настройте переадресацию и оповещения о пропущенных — перезвон в течение 5 минут возвращает ~60% таких заявок.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {data.meta && (
+        <p className="mt-3 text-[10px] text-slate-400 text-right">
+          OnlinePBX · {data.meta.totalCalls} звонков за {data.meta.from} — {data.meta.to}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Funnel Chart ──────────────────────────────────────────────────
 const FUNNEL_STAGES = [
   { key: 'leadsNew',      label: 'Новая заявка',       color: 'from-blue-500 to-blue-400' },
@@ -382,6 +527,7 @@ export default function AmoPerformance() {
   const [data, setData] = useState(null)
   const [prevData, setPrevData] = useState(null)
   const [responseData, setResponseData] = useState(null)
+  const [callsData, setCallsData] = useState(null)
   const [plan, setPlan] = useState({ managers: {}, workingDays: 26 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -409,10 +555,15 @@ export default function AmoPerformance() {
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true)
     setError('')
-    const [res, prevRes, respRes] = await Promise.all([
+    const [y, mm] = month.split('-').map(Number)
+    const daysInMonth = new Date(y, mm, 0).getDate()
+    const fromDate = `${month}-01`
+    const toDate = `${month}-${String(daysInMonth).padStart(2, '0')}`
+    const [res, prevRes, respRes, callsRes] = await Promise.all([
       fetchAmoPerformanceV2({ month }),
       fetchAmoPerformanceV2({ month: prevMonthString(month) }),
       fetchAmoResponseTimes({ month }),
+      fetchOnpbxCalls({ from: fromDate, to: toDate }),
     ])
     if (res.success) {
       setData(res)
@@ -424,6 +575,8 @@ export default function AmoPerformance() {
     else setPrevData(null)
     if (respRes?.success) setResponseData(respRes)
     else setResponseData(null)
+    if (callsRes?.success) setCallsData(callsRes)
+    else setCallsData(null)
     setLoading(false)
   }
 
@@ -777,6 +930,13 @@ export default function AmoPerformance() {
       {responseData && (
         <div className="mb-5">
           <ResponseTimesBlock data={responseData} prevData={null} />
+        </div>
+      )}
+
+      {/* ── Telephony (OnlinePBX) ─────────────────────────────────────── */}
+      {callsData && (
+        <div className="mb-5">
+          <TelephonyBlock data={callsData} />
         </div>
       )}
 
