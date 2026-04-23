@@ -78,22 +78,34 @@ export async function saveTenantIntegration(tenantId, key, patch) {
   }
 }
 
-// ─── Credential resolvers with env-var fallback ───
+// ─── Credential resolvers ───
+// Env-var fallback is SCOPED to the original INTERNO tenant ('default').
+// Other tenants MUST configure their own integrations; otherwise empty config
+// is returned and the endpoint will respond with "not configured for this tenant".
+// This prevents cross-tenant data leakage via the global env vars.
+
+const DEFAULT_TENANT_ID = 'default'
+const isDefaultTenant = (tid) => !tid || tid === DEFAULT_TENANT_ID
+
+function envIf(defaultTenant, value) {
+  return defaultTenant ? (value || '') : ''
+}
 
 export async function resolveTelegram(req) {
   const tenantId = getTenantId(req)
   const cfg = await loadTenantIntegration(tenantId, 'telegram')
   const chats = cfg.chats || {}
+  const useEnv = isDefaultTenant(tenantId)
   return {
     tenantId,
-    source: cfg.botToken ? 'tenant' : 'env',
-    botToken: cfg.botToken || process.env.TG_BOT_TOKEN || '',
+    source: cfg.botToken ? 'tenant' : (useEnv ? 'env' : 'none'),
+    botToken: cfg.botToken || envIf(useEnv, process.env.TG_BOT_TOKEN),
     chats: {
-      tashkent:  chats.tashkent  || process.env.TG_CHAT_TASHKENT  || '',
-      samarkand: chats.samarkand || process.env.TG_CHAT_SAMARKAND || '',
-      fergana:   chats.fergana   || process.env.TG_CHAT_FERGANA   || '',
-      bukhara:   chats.bukhara   || process.env.TG_CHAT_FERGANA   || '',
-      online:    chats.online    || chats.tashkent || process.env.TG_CHAT_TASHKENT || '',
+      tashkent:  chats.tashkent  || envIf(useEnv, process.env.TG_CHAT_TASHKENT),
+      samarkand: chats.samarkand || envIf(useEnv, process.env.TG_CHAT_SAMARKAND),
+      fergana:   chats.fergana   || envIf(useEnv, process.env.TG_CHAT_FERGANA),
+      bukhara:   chats.bukhara   || envIf(useEnv, process.env.TG_CHAT_FERGANA),
+      online:    chats.online    || chats.tashkent || envIf(useEnv, process.env.TG_CHAT_TASHKENT),
     },
     enabled: cfg.enabled !== false,
   }
@@ -102,17 +114,18 @@ export async function resolveTelegram(req) {
 export async function resolveAmo(req) {
   const tenantId = getTenantId(req)
   const cfg = await loadTenantIntegration(tenantId, 'amocrm')
+  const useEnv = isDefaultTenant(tenantId)
   return {
     tenantId,
-    source: cfg.accessToken ? 'tenant' : 'env',
-    subdomain:    cfg.subdomain    || process.env.AMO_SUBDOMAIN    || '',
-    accessToken:  cfg.accessToken  || process.env.AMO_ACCESS_TOKEN || '',
-    refreshToken: cfg.refreshToken || process.env.AMO_REFRESH_TOKEN || '',
-    clientId:     cfg.clientId     || process.env.AMO_CLIENT_ID     || '',
-    clientSecret: cfg.clientSecret || process.env.AMO_CLIENT_SECRET || '',
-    redirectUri:  cfg.redirectUri  || process.env.AMO_REDIRECT_URI  || '',
-    pipelineId:   cfg.pipelineId   || process.env.AMO_PIPELINE_ID   || '',
-    statusId:     cfg.statusId     || process.env.AMO_STATUS_ID     || '',
+    source: cfg.accessToken ? 'tenant' : (useEnv ? 'env' : 'none'),
+    subdomain:    cfg.subdomain    || envIf(useEnv, process.env.AMO_SUBDOMAIN),
+    accessToken:  cfg.accessToken  || envIf(useEnv, process.env.AMO_ACCESS_TOKEN),
+    refreshToken: cfg.refreshToken || envIf(useEnv, process.env.AMO_REFRESH_TOKEN),
+    clientId:     cfg.clientId     || envIf(useEnv, process.env.AMO_CLIENT_ID),
+    clientSecret: cfg.clientSecret || envIf(useEnv, process.env.AMO_CLIENT_SECRET),
+    redirectUri:  cfg.redirectUri  || envIf(useEnv, process.env.AMO_REDIRECT_URI),
+    pipelineId:   cfg.pipelineId   || envIf(useEnv, process.env.AMO_PIPELINE_ID),
+    statusId:     cfg.statusId     || envIf(useEnv, process.env.AMO_STATUS_ID),
     enabled: cfg.enabled !== false,
   }
 }
@@ -127,12 +140,12 @@ function sanitizeOnpbxDomain(raw) {
 export async function resolveOnpbx(req) {
   const tenantId = getTenantId(req)
   const cfg = await loadTenantIntegration(tenantId, 'onpbx')
-  const domain = sanitizeOnpbxDomain(cfg.domain || process.env.ONPBX_DOMAIN || '')
+  const useEnv = isDefaultTenant(tenantId)
   return {
     tenantId,
-    source: cfg.domain || cfg.apiKey ? 'tenant' : 'env',
-    domain,
-    apiKey: cfg.apiKey || process.env.ONPBX_API_KEY || '',
+    source: (cfg.domain || cfg.apiKey) ? 'tenant' : (useEnv ? 'env' : 'none'),
+    domain: sanitizeOnpbxDomain(cfg.domain || envIf(useEnv, process.env.ONPBX_DOMAIN)),
+    apiKey: cfg.apiKey || envIf(useEnv, process.env.ONPBX_API_KEY),
     enabled: cfg.enabled !== false,
   }
 }
