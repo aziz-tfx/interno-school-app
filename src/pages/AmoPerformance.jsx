@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Zap, RefreshCw, Loader, AlertCircle, ChevronDown, ChevronRight,
   Target, TrendingUp, TrendingDown, Download, Trophy, Award, Medal, AlertTriangle, Minus,
+  Filter, Users,
 } from 'lucide-react'
 import { fetchAmoPerformanceV2 } from '../utils/amocrm'
 import { db } from '../firebase'
@@ -61,6 +62,120 @@ function pctClass(v) {
   if (v >= 0.6) return 'text-amber-600'
   return 'text-red-600'
 }
+// ─── Funnel Chart ──────────────────────────────────────────────────
+const FUNNEL_STAGES = [
+  { key: 'leadsNew',      label: 'Новая заявка',       color: 'from-blue-500 to-blue-400' },
+  { key: 'leadsInWork',   label: 'Взято в работу',     color: 'from-indigo-500 to-indigo-400' },
+  { key: 'qualified',     label: 'Квалифицирован',     color: 'from-violet-500 to-violet-400' },
+  { key: 'trialAssigned', label: 'ПУ назначено',       color: 'from-purple-500 to-purple-400' },
+  { key: 'trialAttended', label: 'ПУ проведено',       color: 'from-fuchsia-500 to-fuchsia-400' },
+  { key: 'termsAgreed',   label: 'Условия согласованы', color: 'from-pink-500 to-pink-400' },
+  { key: 'sales',         label: 'Продажа',            color: 'from-emerald-500 to-emerald-400' },
+]
+
+function FunnelChart({ metrics, prevMetrics, title, subtitle }) {
+  // Фильтруем этапы с 0 (например, qualified часто не используется)
+  const stages = FUNNEL_STAGES.filter(s => (metrics[s.key] || 0) > 0 || s.key === 'leadsNew' || s.key === 'sales')
+  const maxVal = Math.max(...stages.map(s => metrics[s.key] || 0), 1)
+
+  // Находим самый большой drop-off для подсветки
+  let worstDropIdx = -1
+  let worstDrop = 0
+  for (let i = 1; i < stages.length; i++) {
+    const prev = metrics[stages[i - 1].key] || 0
+    const cur = metrics[stages[i].key] || 0
+    if (prev > 0) {
+      const lost = (prev - cur) / prev
+      if (lost > worstDrop && lost > 0.3) {
+        worstDrop = lost
+        worstDropIdx = i
+      }
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wider">Общая конверсия</p>
+          <p className={`text-lg font-bold ${pctClass(metrics.leadsNew > 0 ? metrics.sales / metrics.leadsNew : null)}`}>
+            {metrics.leadsNew > 0 ? formatPct(metrics.sales / metrics.leadsNew) : '—'}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        {stages.map((stage, idx) => {
+          const val = metrics[stage.key] || 0
+          const prevVal = idx > 0 ? (metrics[stages[idx - 1].key] || 0) : null
+          const stageConv = prevVal != null && prevVal > 0 ? val / prevVal : null
+          const width = (val / maxVal) * 100
+          const prevPeriodVal = prevMetrics?.[stage.key] ?? null
+          const d = prevPeriodVal != null ? delta(val, prevPeriodVal) : null
+          const isWorst = idx === worstDropIdx
+          const droppedCount = prevVal != null ? prevVal - val : 0
+
+          return (
+            <div key={stage.key}>
+              {/* Drop-off между этапами */}
+              {idx > 0 && prevVal > 0 && (
+                <div className={`flex items-center justify-between gap-2 px-2 py-1 text-[10px] ${isWorst ? 'text-red-600 font-semibold' : 'text-slate-400'}`}>
+                  <span className="flex items-center gap-1">
+                    {isWorst && <AlertTriangle size={10} />}
+                    потеряно {droppedCount.toLocaleString('ru-RU')} ({formatPct((prevVal - val) / prevVal)})
+                  </span>
+                  <span className={stageConv != null ? pctClass(stageConv) : ''}>
+                    конв. {stageConv != null ? formatPct(stageConv) : '—'}
+                  </span>
+                </div>
+              )}
+
+              {/* Этап */}
+              <div className="flex items-center gap-3">
+                <div className="w-32 flex-shrink-0">
+                  <p className="text-xs font-medium text-slate-700 truncate">{stage.label}</p>
+                </div>
+                <div className="flex-1 relative h-10 bg-slate-50 rounded-lg overflow-hidden">
+                  <div
+                    className={`absolute top-0 left-0 h-full bg-gradient-to-r ${stage.color} rounded-lg transition-all`}
+                    style={{ width: `${width}%` }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-between px-3">
+                    <span className="text-sm font-bold text-white drop-shadow-sm">
+                      {width > 15 ? val.toLocaleString('ru-RU') : ''}
+                    </span>
+                    {width <= 15 && (
+                      <span className="text-sm font-bold text-slate-900">{val.toLocaleString('ru-RU')}</span>
+                    )}
+                    <DeltaPill value={d} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {worstDropIdx > 0 && (
+        <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2">
+          <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="font-semibold text-red-700">Узкое место воронки</p>
+            <p className="text-red-600 mt-0.5">
+              Наибольший провал на переходе <strong>«{stages[worstDropIdx - 1].label} → {stages[worstDropIdx].label}»</strong>.
+              Теряется {formatPct(worstDrop)} сделок. Это первое, что нужно исправить.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DeltaPill({ value, inverse = false }) {
   if (value == null || !isFinite(value)) {
     return <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-400"><Minus size={10} /> —</span>
@@ -106,6 +221,7 @@ export default function AmoPerformance() {
   const [nowTick, setNowTick] = useState(Date.now())
   const [expanded, setExpanded] = useState({})
   const [showPlanEditor, setShowPlanEditor] = useState(false)
+  const [funnelUserId, setFunnelUserId] = useState('all') // 'all' | userId
   const refreshRef = useRef(null)
 
   const loadPlan = async () => {
@@ -436,6 +552,55 @@ export default function AmoPerformance() {
           </div>
         </div>
       )}
+
+      {/* ── Funnel Chart ─────────────────────────────────────────────── */}
+      {data && usersSorted.length > 0 && (() => {
+        const funnelMetrics = funnelUserId === 'all'
+          ? data.totals.metrics
+          : (data.byUser[funnelUserId]?.metrics || data.totals.metrics)
+        const funnelPrev = funnelUserId === 'all'
+          ? (prevData?.totals?.metrics || null)
+          : (prevByUser[funnelUserId]?.metrics || null)
+        const selectedUser = funnelUserId === 'all' ? null : data.byUser[funnelUserId]
+        return (
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                <Filter size={14} /> Воронка:
+              </div>
+              <button
+                onClick={() => setFunnelUserId('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  funnelUserId === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <Users size={12} className="inline mr-1" /> Вся команда
+              </button>
+              {usersSorted.slice(0, 10).map(u => (
+                <button
+                  key={u.userId}
+                  onClick={() => setFunnelUserId(u.userId)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    funnelUserId === u.userId
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {u.userName}
+                </button>
+              ))}
+            </div>
+            <FunnelChart
+              metrics={funnelMetrics}
+              prevMetrics={funnelPrev}
+              title={funnelUserId === 'all' ? 'Воронка продаж команды' : `Воронка — ${selectedUser?.userName || ''}`}
+              subtitle={prevData ? `Пилл справа — изменение vs ${prevMonthLabel(month)}` : null}
+            />
+          </div>
+        )
+      })()}
 
       {data && usersSorted.map(u => {
         const fact = calcDerived(u.metrics)
