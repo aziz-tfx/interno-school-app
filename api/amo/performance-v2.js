@@ -71,10 +71,11 @@ function detectStages(pipelines) {
     const sts = p._embedded?.statuses || []
     for (const s of sts) {
       allStatusesById[s.id] = { ...s, pipelineId: p.id, pipelineName: p.name }
+      // Считаем won ТОЛЬКО финальные статусы (type=1). Не помечаем промежуточные
+      // этапы воронки постоплат как won — иначе двойной счёт: сделка выиграна
+      // в основной воронке (+1) → переведена в постоплату новой карточкой (+1 снова).
       if (s.type === 1) wonStatusIds.add(s.id)
       if (s.type === 2) lostStatusIds.add(s.id)
-      // Все неликвидированные статусы воронки постоплат засчитываем как won
-      if (isPostPayment && s.type !== 2) wonStatusIds.add(s.id)
     }
   }
 
