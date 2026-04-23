@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, MapPin, Monitor } from 'lucide-react'
 import { useLanguage } from '../contexts/LanguageContext'
 
@@ -29,6 +29,19 @@ function buildDefaultPricing() {
 export default function CourseForm({ course, onClose, onSave }) {
   const { t } = useLanguage()
   const isEdit = !!course
+  const [openDropdown, setOpenDropdown] = useState(null) // 'region' | `tariff:${regionKey}` | null
+  const dropdownRef = useRef(null)
+
+  // Закрытие dropdown по клику вне
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpenDropdown(null)
+      }
+    }
+    if (openDropdown) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [openDropdown])
 
   const [form, setForm] = useState({
     name: '',
@@ -295,25 +308,28 @@ export default function CourseForm({ course, onClose, onSave }) {
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-semibold text-slate-900">{t('courseForm.pricing_title')}</h4>
           {availableRegions.length > 0 && (
-            <div className="relative group">
+            <div className="relative" ref={openDropdown === 'region' ? dropdownRef : null}>
               <button
                 type="button"
+                onClick={() => setOpenDropdown(openDropdown === 'region' ? null : 'region')}
                 className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
               >
                 <Plus size={14} /> {t('courseForm.add_region')}
               </button>
-              <div className="absolute right-0 top-full mt-1 bg-white shadow-xl rounded-xl border border-slate-200 py-1 z-20 hidden group-hover:block min-w-[180px]">
-                {availableRegions.map(r => (
-                  <button
-                    key={r.key}
-                    type="button"
-                    onClick={() => addRegion(r.key)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left"
-                  >
-                    <r.icon size={14} /> {t(r.tKey)}
-                  </button>
-                ))}
-              </div>
+              {openDropdown === 'region' && (
+                <div className="absolute right-0 top-full mt-1 bg-white shadow-xl rounded-xl border border-slate-200 py-1 z-20 min-w-[180px]">
+                  {availableRegions.map(r => (
+                    <button
+                      key={r.key}
+                      type="button"
+                      onClick={() => { addRegion(r.key); setOpenDropdown(null) }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left"
+                    >
+                      <r.icon size={14} /> {t(r.tKey)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -334,30 +350,36 @@ export default function CourseForm({ course, onClose, onSave }) {
                     <span className="text-sm font-semibold text-slate-700">{regionLabel}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="relative group/tariff">
-                      <button type="button" className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                    <div className="relative" ref={openDropdown === `tariff:${regionKey}` ? dropdownRef : null}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenDropdown(openDropdown === `tariff:${regionKey}` ? null : `tariff:${regionKey}`)}
+                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                      >
                         <Plus size={12} /> {t('courseForm.add_tariff')}
                       </button>
-                      <div className="absolute right-0 top-full mt-1 bg-white shadow-xl rounded-xl border border-slate-200 py-1 z-20 hidden group-hover/tariff:block min-w-[180px]">
-                        {availableTariffs.map(tf => (
+                      {openDropdown === `tariff:${regionKey}` && (
+                        <div className="absolute right-0 top-full mt-1 bg-white shadow-xl rounded-xl border border-slate-200 py-1 z-20 min-w-[220px] max-h-[280px] overflow-y-auto">
+                          {availableTariffs.map(tf => (
+                            <button
+                              key={tf.key}
+                              type="button"
+                              onClick={() => { addTariff(regionKey, tf.key); setOpenDropdown(null) }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left"
+                            >
+                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${tf.color}`} /> {t(tf.tKey)}
+                            </button>
+                          ))}
+                          {availableTariffs.length > 0 && <div className="border-t border-slate-100 my-1" />}
                           <button
-                            key={tf.key}
                             type="button"
-                            onClick={() => addTariff(regionKey, tf.key)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left"
+                            onClick={() => { addCustomTariff(regionKey); setOpenDropdown(null) }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 text-left font-medium"
                           >
-                            <span className={`w-2.5 h-2.5 rounded-full ${tf.color}`} /> {t(tf.tKey)}
+                            <Plus size={12} /> Свой тариф...
                           </button>
-                        ))}
-                        {availableTariffs.length > 0 && <div className="border-t border-slate-100 my-1" />}
-                        <button
-                          type="button"
-                          onClick={() => addCustomTariff(regionKey)}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 text-left font-medium"
-                        >
-                          <Plus size={12} /> Свой тариф...
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </div>
 
                     {existingRegions.length > 1 && (
