@@ -1,9 +1,13 @@
 // Vercel Serverless — Аналитика звонков из OnlinePBX
 // GET /api/onpbx/calls?from=YYYY-MM-DD&to=YYYY-MM-DD
 //
-// Auth: API v2 — один ключ в заголовке x-pbx-authentication
+// Правильный API: https://api.onlinepbx.ru/{domain}/auth.json → получаем key_id:key
+// Затем https://api.onlinepbx.ru/{domain}/mongo_history/search.json с x-pbx-authentication
+// Максимум 1 неделя на запрос → чанкуем период.
 
+const API_BASE = 'https://api.onlinepbx.ru'
 const TIMEOUT_MS = 20000
+const WEEK_SEC = 7 * 24 * 3600
 
 function withTimeout(promise, ms) {
   return Promise.race([
@@ -12,72 +16,89 @@ function withTimeout(promise, ms) {
   ])
 }
 
-async function onpbxPost(domain, path, body, apiKey) {
-  const url = `https://${domain}${path}`
-  // OnlinePBX часто принимает данные как form-urlencoded, а не JSON
-  const formBody = new URLSearchParams()
-  for (const [k, v] of Object.entries(body)) {
-    if (v !== undefined && v !== null) formBody.append(k, String(v))
+function toForm(obj) {
+  const form = new URLSearchParams()
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined && v !== null) form.append(k, String(v))
   }
+  return form.toString()
+}
 
+async function postForm(url, headers, body) {
   const res = await withTimeout(
     fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'x-pbx-authentication': apiKey,
-      },
-      body: formBody.toString(),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...headers },
+      body: toForm(body),
     }),
     TIMEOUT_MS
   )
-  const text = await res.text().catch(() => '')
+  const text = await res.text()
   if (!res.ok) {
-    const err = new Error(`OnlinePBX ${res.status} ${path}: ${text.slice(0, 300)}`)
+    const err = new Error(`OnlinePBX ${res.status} ${url}: ${text.slice(0, 300)}`)
     err.status = res.status
     throw err
   }
   let json = null
   try { json = JSON.parse(text) } catch {
-    const err = new Error(`OnlinePBX ${path} вернул не-JSON: ${text.slice(0, 300)}`)
+    const err = new Error(`OnlinePBX ${url} вернул не-JSON: ${text.slice(0, 300)}`)
     err.status = 500
     throw err
   }
-  // OnlinePBX иногда возвращает { status: 'error', comment: '...' } со статусом 200
-  if (json && json.status && json.status !== 1 && json.status !== 'success' && json.status !== 'ok') {
+  if (json.status && String(json.status) !== '1') {
     const msg = json.comment || json.message || JSON.stringify(json).slice(0, 200)
-    const err = new Error(`OnlinePBX ${path} ошибка: ${msg}`)
-    err.status = 500
+    const err = new Error(`OnlinePBX ${url} ошибка: ${msg}`)
+    err.status = res.status
     throw err
   }
   return json
 }
 
+// Шаг 1: получить key_id + key по api_key
+async function authenticate(domain, apiKey) {
+  const url = `${API_BASE}/${domain}/auth.json`
+  const resp = await postForm(url, {}, { auth_key: apiKey })
+  const data = resp?.data
+  if (!data?.key_id || !data?.key) {
+    throw new Error(`auth.json ответил без key/key_id: ${JSON.stringify(resp).slice(0, 200)}`)
+  }
+  return { keyId: data.key_id, key: data.key }
+}
+
 function classifyCall(call) {
-  // OnlinePBX поля:
-  //   type: 'incoming' | 'outgoing' | 'internal'
-  //   disposition: 'ANSWERED' | 'NO ANSWER' | 'BUSY' | 'FAILED'
-  //   billsec: длительность разговора в секундах (0 = не отвечен)
-  //   duration: общая длительность включая гудки
-  //   from / to: номера
-  //   uuid: идентификатор звонка
-  //   start_stamp: unix timestamp начала
-  //   answer_stamp / end_stamp
-  //   record: URL записи (если есть)
-  //   caller_id_number / caller_id_name
-  //   dest / destination_number
-  //   cdr_from_nc / cdr_to_nc — добавочные (extensions)
-  //   accountcode — внутренний номер менеджера
-  const type = call.type || (call.direction === 'inbound' ? 'incoming' : 'outgoing')
-  const answered = (call.disposition === 'ANSWERED') || (Number(call.billsec) > 0)
-  const duration = Number(call.billsec) || 0
-  const waitTime = Number(call.duration) && Number(call.billsec)
-    ? Number(call.duration) - Number(call.billsec)
-    : 0
-  // Добавочный менеджера — берём из разных возможных полей
-  const ext = call.accountcode || call.cdr_from_nc || call.cdr_to_nc
-    || call.user_id || call.operator || ''
-  return { type, answered, duration, waitTime, ext: String(ext || '') }
+  // OnlinePBX mongo_history формат:
+  //   accountcode: 'inbound' | 'outbound' | 'local' | 'missed' (missed хранится как inbound с duration=0)
+  //   duration: длительность звонка
+  //   user_talk_time: время разговора менеджера
+  //   hangup_cause: NORMAL_CLEARING = успешно завершён, USER_BUSY = занято, NO_ANSWER = нет ответа
+  //   caller_id_number / destination_number
+  //   from_uuid / to_uuid
+  //   events[]: массив событий (user переводы, hold, dtmf и т.д.)
+  const acc = String(call.accountcode || '').toLowerCase()
+  const isIncoming = acc === 'inbound' || acc === 'missed'
+  const isOutgoing = acc === 'outbound'
+  const type = isIncoming ? 'incoming' : isOutgoing ? 'outgoing' : 'internal'
+  const talkTime = Number(call.user_talk_time) || 0
+  const duration = Number(call.duration) || 0
+  const answered = talkTime > 0
+  const waitTime = answered && duration > talkTime ? duration - talkTime : 0
+
+  // Добавочный менеджера: у исходящих — caller_id_number (internal), у входящих — destination_number
+  // Но если звонок прошёл через очередь, реальный оператор в events[].number
+  let ext = ''
+  if (isOutgoing) {
+    ext = String(call.caller_id_number || '')
+  } else if (isIncoming) {
+    // ищем в events оператора который взял трубку (type='user' с answered_stamp > 0)
+    const userEvents = (call.events || []).filter(e => e.type === 'user' && e.answered_stamp)
+    if (userEvents.length) {
+      ext = String(userEvents[0].number || '')
+    } else {
+      ext = String(call.destination_number || '')
+    }
+  }
+
+  return { type, answered, duration: talkTime, waitTime, ext }
 }
 
 export default async function handler(req, res) {
@@ -90,7 +111,7 @@ export default async function handler(req, res) {
   if (!ONPBX_DOMAIN || !ONPBX_API_KEY) {
     return res.status(500).json({
       error: 'OnlinePBX не настроен',
-      details: 'Нужны env vars: ONPBX_DOMAIN (например pbx14950.onpbx.ru), ONPBX_API_KEY',
+      details: 'Нужны env vars: ONPBX_DOMAIN (pbx14950.onpbx.ru), ONPBX_API_KEY',
     })
   }
 
@@ -103,32 +124,28 @@ export default async function handler(req, res) {
   const toTs   = Math.floor(new Date(`${to}T23:59:59Z`).getTime() / 1000)
 
   try {
-    // Получаем историю звонков. Пагинация — limit 1000 на страницу
+    // Шаг 1: авторизация
+    const { keyId, key } = await authenticate(ONPBX_DOMAIN, ONPBX_API_KEY)
+    const authHeaders = { 'x-pbx-authentication': `${keyId}:${key}` }
+
+    // Шаг 2: получаем историю, чанкуя по неделям (ограничение API)
+    const historyUrl = `${API_BASE}/${ONPBX_DOMAIN}/mongo_history/search.json`
     const allCalls = []
-    let start = 0
-    const pageSize = 1000
+    let chunkStart = fromTs
     let safety = 0
-    while (safety < 20) {
-      const data = await onpbxPost(
-        ONPBX_DOMAIN,
-        '/mfs/history.json',
-        {
-          start_stamp_from: fromTs,
-          start_stamp_to: toTs,
-          start,
-          limit: pageSize,
-        },
-        ONPBX_API_KEY,
-      )
-      const items = data?.data || data?.items || data?.history || data?.calls || (Array.isArray(data) ? data : []) || []
-      if (!items.length) break
+    while (chunkStart < toTs && safety < 20) {
+      const chunkEnd = Math.min(chunkStart + WEEK_SEC - 1, toTs)
+      const resp = await postForm(historyUrl, authHeaders, {
+        start_stamp_from: chunkStart,
+        start_stamp_to: chunkEnd,
+      })
+      const items = Array.isArray(resp?.data) ? resp.data : []
       allCalls.push(...items)
-      if (items.length < pageSize) break
-      start += pageSize
+      chunkStart = chunkEnd + 1
       safety += 1
     }
 
-    // Агрегация по extension (добавочному)
+    // Шаг 3: агрегация по extension
     const byExt = {}
     const totals = {
       totalCalls: 0,
@@ -189,7 +206,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // Финализируем: avg talk time, avg wait time, miss rate
     const finalize = (b) => ({
       ...b,
       avgTalkSec: b.answered > 0 ? b.totalTalkSec / b.answered : null,
