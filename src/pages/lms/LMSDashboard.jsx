@@ -551,6 +551,15 @@ export default function LMSDashboard() {
   const [searchCourse, setSearchCourse] = useState('')
   const [expandedCourse, setExpandedCourse] = useState(null)
   const [expandedGroup, setExpandedGroup] = useState(null)
+  const [expandedModules, setExpandedModules] = useState(new Set())
+  const toggleExpandedModule = (modId) => {
+    setExpandedModules(prev => {
+      const next = new Set(prev)
+      if (next.has(modId)) next.delete(modId)
+      else next.add(modId)
+      return next
+    })
+  }
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [showLessonModal, setShowLessonModal] = useState(null) // { courseId, lesson? }
   const [deleteLessonConfirm, setDeleteLessonConfirm] = useState(null)
@@ -1144,11 +1153,11 @@ export default function LMSDashboard() {
                           {/* Modules */}
                           {courseModules.map((mod, modIdx) => {
                             const modLessons = lessonsByModule[mod.id] || []
-                            const isModOpen = expandedGroup === `mod_${mod.id}`
+                            const isModOpen = expandedModules.has(mod.id)
                             return (
                               <div key={mod.id} className="border-b border-slate-100 last:border-b-0">
                                 <div className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/50 transition-colors">
-                                  <button onClick={() => setExpandedGroup(isModOpen ? `course_${course.id}` : `mod_${mod.id}`)}
+                                  <button onClick={() => toggleExpandedModule(mod.id)}
                                     className="flex items-center gap-3 flex-1 text-left">
                                     <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
                                       <span className="text-xs font-bold text-purple-600">{modIdx + 1}</span>
