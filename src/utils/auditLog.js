@@ -20,6 +20,7 @@ export async function logAudit({ action, collection: col, documentId, user, befo
       action,
       collection: col,
       documentId: String(documentId || ''),
+      tenantId: user?.tenantId || 'default',
       userId: user?.id || user?._docId || '',
       userName: user?.name || '',
       userRole: user?.role || '',

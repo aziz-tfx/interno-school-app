@@ -169,35 +169,49 @@ export default function TelegramApp() {
     }
   }
 
+  // ─── Tenant isolation: once student is authed, scope every collection
+  //     to the student's tenant so cross-tenant rows are never shown. ───
+  const studentTenantId = student?.tenantId || 'default'
+  const tenantFilter = (arr) => arr.filter(x => (x.tenantId || 'default') === studentTenantId)
+
+  const tenantGroups = useMemo(() => tenantFilter(groups), [groups, studentTenantId])
+  const tenantCourses = useMemo(() => tenantFilter(courses), [courses, studentTenantId])
+  const tenantLessons = useMemo(() => tenantFilter(lessons), [lessons, studentTenantId])
+  const tenantModules = useMemo(() => tenantFilter(modules), [modules, studentTenantId])
+  const tenantProgress = useMemo(() => tenantFilter(progress), [progress, studentTenantId])
+  const tenantPayments = useMemo(() => tenantFilter(payments), [payments, studentTenantId])
+  const tenantSubmissions = useMemo(() => tenantFilter(submissions), [submissions, studentTenantId])
+  const tenantGameData = useMemo(() => tenantFilter(gameData), [gameData, studentTenantId])
+
   // ─── Derived data ──────────────────────────────────────────────
   const myGroup = useMemo(() => {
     if (!student) return null
-    return groups.find(g => g.name === student.group || g.id === student.groupId)
-  }, [student, groups])
+    return tenantGroups.find(g => g.name === student.group || g.id === student.groupId)
+  }, [student, tenantGroups])
 
   const myCourse = useMemo(() => {
     if (!myGroup) return null
-    return courses.find(c => c.name === myGroup.course)
-  }, [myGroup, courses])
+    return tenantCourses.find(c => c.name === myGroup.course)
+  }, [myGroup, tenantCourses])
 
   const myLessons = useMemo(() => {
     if (!myCourse) return []
-    return lessons
+    return tenantLessons
       .filter(l => l.courseId === myCourse.id)
       .sort((a, b) => (a.order || 0) - (b.order || 0))
-  }, [lessons, myCourse])
+  }, [tenantLessons, myCourse])
 
   const myModules = useMemo(() => {
     if (!myCourse) return []
-    return modules
+    return tenantModules
       .filter(m => m.courseId === myCourse.id)
       .sort((a, b) => (a.order || 0) - (b.order || 0))
-  }, [modules, myCourse])
+  }, [tenantModules, myCourse])
 
   const myProgress = useMemo(() => {
     if (!student) return []
-    return progress.filter(p => p.studentId === student.id)
-  }, [progress, student])
+    return tenantProgress.filter(p => p.studentId === student.id)
+  }, [tenantProgress, student])
 
   const completedLessonIds = new Set(myProgress.filter(p => p.completed).map(p => p.lessonId))
 
@@ -205,8 +219,8 @@ export default function TelegramApp() {
   const gamData = useMemo(() => {
     if (!student) return null
     const myAtt = attendance.filter(a => a.studentId === student.id)
-    const mySubs = submissions.filter(s => s.studentId === student.id)
-    const gd = gameData.find(d => d.id === student.id) || {}
+    const mySubs = tenantSubmissions.filter(s => s.studentId === student.id)
+    const gd = tenantGameData.find(d => d.id === student.id) || {}
     const xp = computeXP({
       completedLessons: myProgress.length,
       submissions: mySubs,
@@ -220,17 +234,17 @@ export default function TelegramApp() {
       levelProgress: getLevelProgress(xp.total),
       streak: gd.currentStreak || 0,
     }
-  }, [student, myProgress, attendance, submissions, gameData])
+  }, [student, myProgress, attendance, tenantSubmissions, tenantGameData])
 
   // ─── Debt calculation ──────────────────────────────────────────
   const studentDebt = useMemo(() => {
     if (!student) return 0
-    const totalPaid = payments
+    const totalPaid = tenantPayments
       .filter(p => p.type === 'income' && String(p.studentId) === String(student.id))
       .reduce((s, p) => s + (p.amount || 0), 0)
     const coursePrice = student.totalCoursePrice || 0
     return Math.max(0, coursePrice - totalPaid)
-  }, [payments, student])
+  }, [tenantPayments, student])
 
   // ─── Accessible lessons count ──────────────────────────────────
   const accessibleLessonIds = useMemo(() => {

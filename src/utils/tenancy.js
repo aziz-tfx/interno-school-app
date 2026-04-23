@@ -9,6 +9,7 @@ export const TENANT_COLLECTIONS = [
   'lmsLessons', 'lmsAssignments', 'lmsSubmissions',
   'lmsAnnouncements', 'lmsModules', 'lmsProgress',
   'studentGameData', 'contractTemplates',
+  'employees', 'auditLog', 'reportPlans', 'reportDaily', 'settings',
 ]
 
 export const TENANT_META_DOCS = [
@@ -57,24 +58,6 @@ export async function migrateExistingData(tenantId = DEFAULT_TENANT_ID) {
       console.error(`Migration error for ${colName}:`, err)
       results.errors++
     }
-  }
-
-  // Employees
-  try {
-    const empSnap = await getDocs(collection(db, 'employees'))
-    const batch = writeBatch(db)
-    let bc = 0
-    for (const d of empSnap.docs) {
-      if (d.data().tenantId) { results.skipped++; continue }
-      batch.update(doc(db, 'employees', d.id), { tenantId })
-      bc++
-      results.updated++
-      if (bc >= 400) { await batch.commit(); bc = 0 }
-    }
-    if (bc > 0) await batch.commit()
-  } catch (err) {
-    console.error('Migration error for employees:', err)
-    results.errors++
   }
 
   // Meta docs (attendance, salesPlans)

@@ -450,13 +450,15 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         const managerName = user?.name || ''
 
         if (managerName) {
-          const docId = `${monthKey}_${managerName}_${day}`
+          const tenantId = user?.tenantId || 'default'
+          const docId = `${monthKey}_${tenantId}_${managerName}_${day}`
           const dailyRef = doc(db, 'reportDaily', docId)
           const existing = await getDoc(dailyRef)
           const existingData = existing.exists() ? existing.data() : {}
 
           await setDoc(dailyRef, {
             monthKey,
+            tenantId,
             manager: managerName,
             day,
             leads: existingData.leads || 0,

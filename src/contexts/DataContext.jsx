@@ -68,27 +68,12 @@ export function DataProvider({ children, currentUser }) {
     const unsubscribers = []
 
     // Subscribe to a Firestore collection filtered by tenantId.
-    // Only the default tenant falls back to unfiltered queries
-    // (for pre-migration data without tenantId field).
+    // No cross-tenant fallback — empty means empty.
     function subscribeCollection(collectionName, setter, loadKey) {
-      let fallbackActive = false
       const q = query(collection(db, collectionName), where('tenantId', '==', tenantId))
       const unsub = onSnapshot(q, (snapshot) => {
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
-        if (items.length === 0 && !fallbackActive && tenantId === DEFAULT_TENANT_ID) {
-          fallbackActive = true
-          const fallbackUnsub = onSnapshot(collection(db, collectionName), (fallbackSnap) => {
-            const allItems = fallbackSnap.docs.map(d => ({ ...d.data(), id: d.id }))
-            setter(allItems)
-            if (!loadedRef.current[loadKey]) {
-              loadedRef.current[loadKey] = true
-              checkAllLoaded()
-            }
-          })
-          unsubscribers.push(fallbackUnsub)
-        } else if (!fallbackActive) {
-          setter(items)
-        }
+        setter(items)
         if (!loadedRef.current[loadKey]) {
           loadedRef.current[loadKey] = true
           checkAllLoaded()
@@ -111,13 +96,15 @@ export function DataProvider({ children, currentUser }) {
         if (snapshot.exists()) {
           setter(snapshot.data().data)
         } else if (tenantId === DEFAULT_TENANT_ID) {
-          // Fallback: try legacy _meta doc only for default tenant (pre-migration)
+          // Legacy _meta doc only for the original default tenant (pre-migration)
           const legacyUnsub = onSnapshot(doc(db, collectionName, '_meta'), (legacySnap) => {
             if (legacySnap.exists()) {
               setter(legacySnap.data().data)
             }
           })
           unsubscribers.push(legacyUnsub)
+        } else {
+          setter({})
         }
         if (!loadedRef.current[loadKey]) {
           loadedRef.current[loadKey] = true
@@ -358,9 +345,10 @@ export function DataProvider({ children, currentUser }) {
         if (studentPhone && !student.lmsLogin) {
           try {
             const employeesRef = collection(db, 'employees')
-            const empSnap = await getDocs(employeesRef)
+            // Tenant-scoped query so phone collisions don't cross schools
+            const empSnap = await getDocs(query(employeesRef, where('tenantId', '==', tenantId)))
             const allEmps = empSnap.docs.map(d => d.data())
-            // Check if account already exists (by phone)
+            // Check if account already exists (by phone) within this tenant
             const existing = allEmps.find(e => e.phone === studentPhone && e.role === 'student')
             if (!existing) {
               // Generate 6-digit password

@@ -8,8 +8,9 @@ import { doc, setDoc, getDoc, collection } from 'firebase/firestore'
 
 export default function SalesPlanModal({ onClose }) {
   const { getSalesPlan, setSalesPlan, branches } = useData()
-  const { getSalesStaff } = useAuth()
+  const { getSalesStaff, user } = useAuth()
   const managers = getSalesStaff('all')
+  const tenantId = user?.tenantId || 'default'
 
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
   const [drafts, setDrafts] = useState({})
@@ -37,7 +38,7 @@ export default function SalesPlanModal({ onClose }) {
       overallRevenue += amount
 
       // Sync to reportPlans (used by Reports page)
-      const reportPlanDocId = `${month}_${m.name}`
+      const reportPlanDocId = `${month}_${tenantId}_${m.name}`
       const reportPlanRef = doc(db, 'reportPlans', reportPlanDocId)
       try {
         const existing = await getDoc(reportPlanRef)
@@ -45,6 +46,7 @@ export default function SalesPlanModal({ onClose }) {
         await setDoc(reportPlanRef, {
           ...existingData,
           monthKey: month,
+          tenantId,
           manager: m.name,
           revenue: amount,
           leads: existingData.leads || 0,
@@ -60,8 +62,8 @@ export default function SalesPlanModal({ onClose }) {
 
     // Update overall plan in reportPlans
     try {
-      await setDoc(doc(db, 'reportPlans', `${month}___overall__`), {
-        monthKey: month, manager: '__overall__', revenue: overallRevenue,
+      await setDoc(doc(db, 'reportPlans', `${month}_${tenantId}___overall__`), {
+        monthKey: month, tenantId, manager: '__overall__', revenue: overallRevenue,
       })
     } catch (err) {
       console.error('Failed to sync overall plan:', err)

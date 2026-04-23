@@ -163,6 +163,8 @@ export default function Reports() {
 
   const monthKey = getMonthKey(selectedYear, selectedMonth)
   const daysInMonth = getDaysInMonth(selectedYear, selectedMonth)
+  const tenantId = user?.tenantId || 'default'
+  const isDefaultTenant = tenantId === 'default'
 
   const MONTH_NAMES = [
     'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -174,11 +176,11 @@ export default function Reports() {
   // Load plans
   useEffect(() => {
     const plansRef = collection(db, 'reportPlans')
-    const q = query(plansRef, where('monthKey', '==', monthKey))
+    const q = query(plansRef, where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
     const unsub = onSnapshot(q, async (snapshot) => {
       if (snapshot.empty) {
-        // Seed with March 2026 data if it matches, otherwise empty
-        if (selectedYear === 2026 && selectedMonth === 3) {
+        // Seed with March 2026 data ONLY for the default (INTERNO) tenant.
+        if (isDefaultTenant && selectedYear === 2026 && selectedMonth === 3) {
           await seedPlans()
         } else {
           setPlans({})
@@ -208,14 +210,14 @@ export default function Reports() {
       setLoading(false)
     })
     return () => unsub()
-  }, [monthKey])
+  }, [monthKey, tenantId])
 
   // Load daily data
   useEffect(() => {
     const dailyRef = collection(db, 'reportDaily')
-    const q = query(dailyRef, where('monthKey', '==', monthKey))
+    const q = query(dailyRef, where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
     const unsub = onSnapshot(q, async (snapshot) => {
-      if (snapshot.empty && selectedYear === 2026 && selectedMonth === 3) {
+      if (snapshot.empty && isDefaultTenant && selectedYear === 2026 && selectedMonth === 3) {
         await seedDailyData()
       } else {
         const dd = {}
@@ -237,21 +239,21 @@ export default function Reports() {
       }
     })
     return () => unsub()
-  }, [monthKey])
+  }, [monthKey, tenantId])
 
-  // Seed functions
+  // Seed functions (default tenant — INTERNO historical data only)
   async function seedPlans() {
     const plansRef = collection(db, 'reportPlans')
     for (const mgr of managers) {
       const plan = SEED_PLANS[mgr]
       if (plan) {
-        await setDoc(doc(plansRef, `${monthKey}_${mgr}`), {
-          monthKey, manager: mgr, ...plan,
+        await setDoc(doc(plansRef, `${monthKey}_${tenantId}_${mgr}`), {
+          monthKey, tenantId, manager: mgr, ...plan,
         })
       }
     }
-    await setDoc(doc(plansRef, `${monthKey}___overall__`), {
-      monthKey, manager: '__overall__', revenue: OVERALL_PLAN,
+    await setDoc(doc(plansRef, `${monthKey}_${tenantId}___overall__`), {
+      monthKey, tenantId, manager: '__overall__', revenue: OVERALL_PLAN,
     })
   }
 
@@ -262,8 +264,8 @@ export default function Reports() {
       if (!totals) continue
       const distributed = distributeSeedData(totals, 2026, 3)
       for (const [day, values] of Object.entries(distributed)) {
-        await setDoc(doc(dailyRef, `${monthKey}_${mgr}_${day}`), {
-          monthKey, manager: mgr, day: Number(day), ...values,
+        await setDoc(doc(dailyRef, `${monthKey}_${tenantId}_${mgr}_${day}`), {
+          monthKey, tenantId, manager: mgr, day: Number(day), ...values,
         })
       }
     }
@@ -402,10 +404,10 @@ export default function Reports() {
     const { manager, metric, day } = editingCell
     const numVal = Number(editValue) || 0
     const dailyRef = collection(db, 'reportDaily')
-    const docId = `${monthKey}_${manager}_${day}`
+    const docId = `${monthKey}_${tenantId}_${manager}_${day}`
     const existing = dailyData[manager]?.[day] || {}
     await setDoc(doc(dailyRef, docId), {
-      monthKey, manager, day,
+      monthKey, tenantId, manager, day,
       leads: existing.leads || 0,
       conversations: existing.conversations || 0,
       signups: existing.signups || 0,
@@ -495,8 +497,8 @@ export default function Reports() {
   const savePlans = async () => {
     const plansRef = collection(db, 'reportPlans')
     for (const mgr of managers) {
-      await setDoc(doc(plansRef, `${monthKey}_${mgr}`), {
-        monthKey, manager: mgr, ...planForm[mgr],
+      await setDoc(doc(plansRef, `${monthKey}_${tenantId}_${mgr}`), {
+        monthKey, tenantId, manager: mgr, ...planForm[mgr],
       })
 
       // Sync revenue to salesPlans (used by Dashboard Sales tab)
@@ -505,8 +507,8 @@ export default function Reports() {
         setSalesPlan(emp.managerId, planForm[mgr].revenue, monthKey)
       }
     }
-    await setDoc(doc(plansRef, `${monthKey}___overall__`), {
-      monthKey, manager: '__overall__', revenue: planForm.__overall__ || 0,
+    await setDoc(doc(plansRef, `${monthKey}_${tenantId}___overall__`), {
+      monthKey, tenantId, manager: '__overall__', revenue: planForm.__overall__ || 0,
     })
     setPlanModalOpen(false)
   }

@@ -32,6 +32,7 @@ export default function Finance() {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const { user, hasPermission, employees, getSalesStaff } = useAuth()
+  const tenantId = user?.tenantId || 'default'
   const { branches, payments, getSalesPlan, getManagerPerf, setSalesPlan, updatePayment, deletePayment, courses } = useData()
 
   function formatRevenue(val) {
@@ -99,8 +100,9 @@ export default function Finance() {
       const mgrName = editingKpi.name
       // 1) Save plan to reportPlans (same doc Reports.jsx uses)
       const plansRef = collection(db, 'reportPlans')
-      await setDoc(doc(plansRef, `${monthKey}_${mgrName}`), {
+      await setDoc(doc(plansRef, `${monthKey}_${tenantId}_${mgrName}`), {
         monthKey,
+        tenantId,
         manager: mgrName,
         leads:         Number(kpiForm.planLeads)         || 0,
         conversations: Number(kpiForm.planConversations) || 0,
@@ -121,8 +123,9 @@ export default function Finance() {
 
       // 3) Save actuals as an "override" entry in reportDaily
       const dailyRef = collection(db, 'reportDaily')
-      await setDoc(doc(dailyRef, `${monthKey}_${mgrName}_override`), {
+      await setDoc(doc(dailyRef, `${monthKey}_${tenantId}_${mgrName}_override`), {
         monthKey,
+        tenantId,
         manager: mgrName,
         day: 'override',
         leads:         Number(kpiForm.actLeads)         || 0,
@@ -210,7 +213,7 @@ export default function Finance() {
 
   // ─── Firestore: Load reportPlans for this month ─────────────────────────
   useEffect(() => {
-    const q = query(collection(db, 'reportPlans'), where('monthKey', '==', monthKey))
+    const q = query(collection(db, 'reportPlans'), where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
     const unsub = onSnapshot(q, (snap) => {
       const p = {}
       snap.docs.forEach(d => {
@@ -220,13 +223,13 @@ export default function Finance() {
       setReportPlans(p)
     })
     return unsub
-  }, [monthKey])
+  }, [monthKey, tenantId])
 
   // ─── Firestore: Load reportDaily for this month ─────────────────────────
   // Supports per-manager "override" entries (day='override') that REPLACE
   // the aggregated daily totals for that manager.
   useEffect(() => {
-    const q = query(collection(db, 'reportDaily'), where('monthKey', '==', monthKey))
+    const q = query(collection(db, 'reportDaily'), where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
     const unsub = onSnapshot(q, (snap) => {
       const daily = {}
       const overrides = {}
@@ -260,7 +263,7 @@ export default function Finance() {
       setReportDaily(merged)
     })
     return unsub
-  }, [monthKey])
+  }, [monthKey, tenantId])
 
   // ─── Sales staff for current view ────────────────────────────────────────
   const salesStaff = useMemo(() => {

@@ -213,51 +213,38 @@ export const DEFAULT_PERMISSIONS = {
 export let PERMISSIONS = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
 
 // ─── Сотрудники по умолчанию ───────────────────────────────────────────────
+// Seeded ONLY for the original INTERNO tenant (tenantId = 'default').
+// Other tenants start with an empty employee list — no INTERNO defaults.
 const DEFAULT_EMPLOYEES = [
-  // Владелец
-  { id: 1,  login: 'owner',   password: 'owner123',  name: 'Тошполатов Азиз',     role: 'owner',   branch: 'all',       avatar: 'А', phone: '', tenantId: DEFAULT_TENANT_ID, isSuperAdmin: true },
-  // Демо-аккаунт для презентации
-  { id: 100, login: 'demo',   password: 'demo123',   name: 'DEMO Аккаунт',         role: 'owner',   branch: 'all',       avatar: 'D', phone: '', tenantId: DEFAULT_TENANT_ID },
-  // Администратор
-  { id: 2,  login: 'admin',   password: 'admin123',  name: 'Каримов Азиз',         role: 'admin',   branch: 'all',       avatar: 'К', phone: '' },
-  // Руководители филиалов
-  { id: 3,  login: 'dir_t',   password: 'dir123',    name: 'Усманов Фарход',       role: 'branch_director', branch: 'tashkent',  avatar: 'У', phone: '' },
-  { id: 4,  login: 'dir_s',   password: 'dir123',    name: 'Жураев Бекзод',        role: 'branch_director', branch: 'samarkand', avatar: 'Ж', phone: '' },
-  { id: 5,  login: 'dir_f',   password: 'dir123',    name: 'Мухамедов Алишер',     role: 'branch_director', branch: 'fergana',   avatar: 'М', phone: '' },
-  // РОПы
-  { id: 6,  login: 'rop1',    password: 'rop123',    name: 'Хасанова Мадина',      role: 'rop', branch: 'tashkent',  managerId: 'rop_t1', avatar: 'Х', phone: '' },
-  { id: 7,  login: 'rop2',    password: 'rop123',    name: 'Каримов Отабек',       role: 'rop', branch: 'samarkand', managerId: 'rop_s1', avatar: 'О', phone: '' },
-  { id: 8,  login: 'rop3',    password: 'rop123',    name: 'Садуллаева Нилуфар',   role: 'rop', branch: 'fergana',   managerId: 'rop_f1', avatar: 'Н', phone: '' },
-  // Менеджеры по продажам — Ташкент
-  { id: 10, login: 'sales1',  password: 'sales123',  name: 'Нурматова Гулнора',    role: 'sales', branch: 'tashkent',  managerId: 'mgr_t1', avatar: 'Г', phone: '' },
-  { id: 11, login: 'sales4',  password: 'sales123',  name: 'Абдуллаев Камил',      role: 'sales', branch: 'tashkent',  managerId: 'mgr_t2', avatar: 'А', phone: '' },
-  { id: 12, login: 'sales5',  password: 'sales123',  name: 'Юсупова Лейла',        role: 'sales', branch: 'tashkent',  managerId: 'mgr_t3', avatar: 'Л', phone: '' },
-  { id: 13, login: 'sales6',  password: 'sales123',  name: 'Холматов Шахзод',      role: 'sales', branch: 'tashkent',  managerId: 'mgr_t4', avatar: 'Ш', phone: '' },
-  // Менеджеры по продажам — Самарканд
-  { id: 14, login: 'sales2',  password: 'sales123',  name: 'Исмаилов Руслан',      role: 'sales', branch: 'samarkand', managerId: 'mgr_s1', avatar: 'Р', phone: '' },
-  { id: 15, login: 'sales7',  password: 'sales123',  name: 'Рахимова Замира',      role: 'sales', branch: 'samarkand', managerId: 'mgr_s2', avatar: 'З', phone: '' },
-  { id: 16, login: 'sales8',  password: 'sales123',  name: 'Садиков Тимур',        role: 'sales', branch: 'samarkand', managerId: 'mgr_s3', avatar: 'Т', phone: '' },
-  { id: 17, login: 'sales9',  password: 'sales123',  name: 'Норматова Афина',      role: 'sales', branch: 'samarkand', managerId: 'mgr_s4', avatar: 'А', phone: '' },
-  // Менеджеры по продажам — Фергана
-  { id: 18, login: 'sales3',  password: 'sales123',  name: 'Файзуллаева Дина',     role: 'sales', branch: 'fergana',   managerId: 'mgr_f1', avatar: 'Д', phone: '' },
-  { id: 19, login: 'sales10', password: 'sales123',  name: 'Курбанов Икром',       role: 'sales', branch: 'fergana',   managerId: 'mgr_f2', avatar: 'И', phone: '' },
-  { id: 20, login: 'sales11', password: 'sales123',  name: 'Тураева Максима',      role: 'sales', branch: 'fergana',   managerId: 'mgr_f3', avatar: 'М', phone: '' },
-  { id: 21, login: 'sales12', password: 'sales123',  name: 'Каримова Ясмина',      role: 'sales', branch: 'fergana',   managerId: 'mgr_f4', avatar: 'Я', phone: '' },
-  // Бухгалтер
-  { id: 22, login: 'buh1',    password: 'buh123',    name: 'Ташпулатова Сабина',   role: 'accountant', branch: 'all', avatar: 'С', phone: '' },
-  // Финансист
-  { id: 23, login: 'fin1',    password: 'fin123',    name: 'Закирова Ольга',       role: 'financier',  branch: 'all', avatar: 'О', phone: '' },
-  // HR менеджер
-  { id: 24, login: 'hr1',     password: 'hr123',     name: 'Аминова Шахло',        role: 'hr',  branch: 'all', avatar: 'Ш', phone: '' },
-  // СММ менеджер
-  { id: 25, login: 'smm1',    password: 'smm123',    name: 'Турсунова Малика',     role: 'smm', branch: 'all', avatar: 'М', phone: '' },
-  // Учителя
-  { id: 26, login: 'teacher1', password: 'teach123', name: 'Смирнова Елена',       role: 'teacher', branch: 'tashkent',  teacherId: 1, avatar: 'Е', phone: '' },
-  { id: 27, login: 'teacher2', password: 'teach123', name: 'Эргашев Бобур',        role: 'teacher', branch: 'samarkand', teacherId: 5, avatar: 'Б', phone: '' },
-  { id: 28, login: 'teacher3', password: 'teach123', name: 'Холматова Наргиза',    role: 'teacher', branch: 'fergana',   teacherId: 8, avatar: 'Н', phone: '' },
-
-  // Student test account
-  { id: 50, login: 'student1', password: 'student123', name: 'Иванов Алексей',     role: 'student', branch: 'tashkent', avatar: 'И', phone: '+998 90 123-45-67' },
+  { id: 1,   login: 'owner',    password: 'owner123',  name: 'Тошполатов Азиз',   role: 'owner',   branch: 'all',       avatar: 'А', phone: '', tenantId: DEFAULT_TENANT_ID, isSuperAdmin: true },
+  { id: 100, login: 'demo',     password: 'demo123',   name: 'DEMO Аккаунт',       role: 'owner',   branch: 'all',       avatar: 'D', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 2,   login: 'admin',    password: 'admin123',  name: 'Каримов Азиз',       role: 'admin',   branch: 'all',       avatar: 'К', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 3,   login: 'dir_t',    password: 'dir123',    name: 'Усманов Фарход',     role: 'branch_director', branch: 'tashkent',  avatar: 'У', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 4,   login: 'dir_s',    password: 'dir123',    name: 'Жураев Бекзод',      role: 'branch_director', branch: 'samarkand', avatar: 'Ж', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 5,   login: 'dir_f',    password: 'dir123',    name: 'Мухамедов Алишер',   role: 'branch_director', branch: 'fergana',   avatar: 'М', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 6,   login: 'rop1',     password: 'rop123',    name: 'Хасанова Мадина',    role: 'rop', branch: 'tashkent',  managerId: 'rop_t1', avatar: 'Х', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 7,   login: 'rop2',     password: 'rop123',    name: 'Каримов Отабек',     role: 'rop', branch: 'samarkand', managerId: 'rop_s1', avatar: 'О', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 8,   login: 'rop3',     password: 'rop123',    name: 'Садуллаева Нилуфар', role: 'rop', branch: 'fergana',   managerId: 'rop_f1', avatar: 'Н', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 10,  login: 'sales1',   password: 'sales123',  name: 'Нурматова Гулнора',  role: 'sales', branch: 'tashkent',  managerId: 'mgr_t1', avatar: 'Г', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 11,  login: 'sales4',   password: 'sales123',  name: 'Абдуллаев Камил',    role: 'sales', branch: 'tashkent',  managerId: 'mgr_t2', avatar: 'А', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 12,  login: 'sales5',   password: 'sales123',  name: 'Юсупова Лейла',      role: 'sales', branch: 'tashkent',  managerId: 'mgr_t3', avatar: 'Л', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 13,  login: 'sales6',   password: 'sales123',  name: 'Холматов Шахзод',    role: 'sales', branch: 'tashkent',  managerId: 'mgr_t4', avatar: 'Ш', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 14,  login: 'sales2',   password: 'sales123',  name: 'Исмаилов Руслан',    role: 'sales', branch: 'samarkand', managerId: 'mgr_s1', avatar: 'Р', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 15,  login: 'sales7',   password: 'sales123',  name: 'Рахимова Замира',    role: 'sales', branch: 'samarkand', managerId: 'mgr_s2', avatar: 'З', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 16,  login: 'sales8',   password: 'sales123',  name: 'Садиков Тимур',      role: 'sales', branch: 'samarkand', managerId: 'mgr_s3', avatar: 'Т', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 17,  login: 'sales9',   password: 'sales123',  name: 'Норматова Афина',    role: 'sales', branch: 'samarkand', managerId: 'mgr_s4', avatar: 'А', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 18,  login: 'sales3',   password: 'sales123',  name: 'Файзуллаева Дина',   role: 'sales', branch: 'fergana',   managerId: 'mgr_f1', avatar: 'Д', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 19,  login: 'sales10',  password: 'sales123',  name: 'Курбанов Икром',     role: 'sales', branch: 'fergana',   managerId: 'mgr_f2', avatar: 'И', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 20,  login: 'sales11',  password: 'sales123',  name: 'Тураева Максима',    role: 'sales', branch: 'fergana',   managerId: 'mgr_f3', avatar: 'М', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 21,  login: 'sales12',  password: 'sales123',  name: 'Каримова Ясмина',    role: 'sales', branch: 'fergana',   managerId: 'mgr_f4', avatar: 'Я', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 22,  login: 'buh1',     password: 'buh123',    name: 'Ташпулатова Сабина', role: 'accountant', branch: 'all', avatar: 'С', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 23,  login: 'fin1',     password: 'fin123',    name: 'Закирова Ольга',     role: 'financier',  branch: 'all', avatar: 'О', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 24,  login: 'hr1',      password: 'hr123',     name: 'Аминова Шахло',      role: 'hr',  branch: 'all', avatar: 'Ш', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 25,  login: 'smm1',     password: 'smm123',    name: 'Турсунова Малика',   role: 'smm', branch: 'all', avatar: 'М', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 26,  login: 'teacher1', password: 'teach123',  name: 'Смирнова Елена',     role: 'teacher', branch: 'tashkent',  teacherId: 1, avatar: 'Е', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 27,  login: 'teacher2', password: 'teach123',  name: 'Эргашев Бобур',      role: 'teacher', branch: 'samarkand', teacherId: 5, avatar: 'Б', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 28,  login: 'teacher3', password: 'teach123',  name: 'Холматова Наргиза',  role: 'teacher', branch: 'fergana',   teacherId: 8, avatar: 'Н', phone: '', tenantId: DEFAULT_TENANT_ID },
+  { id: 50,  login: 'student1', password: 'student123', name: 'Иванов Алексей',    role: 'student', branch: 'tashkent', avatar: 'И', phone: '+998 90 123-45-67', tenantId: DEFAULT_TENANT_ID },
 ]
 
 const employeesRef = collection(db, 'employees')
