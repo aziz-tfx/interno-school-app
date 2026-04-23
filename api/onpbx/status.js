@@ -53,11 +53,23 @@ export default async function handler(req, res) {
     })
   }
 
-  // Пробуем несколько endpoint'ов — пока какой-нибудь не вернёт 200 с валидным JSON
+  const lastDay = Math.floor(Date.now() / 1000) - 24 * 3600
+  // Пробуем разные базовые URL — OnlinePBX имеет несколько возможных endpoint'ов
+  const bases = [
+    `https://${ONPBX_DOMAIN}`,
+    `https://api.onpbx.ru`,
+    `https://api.onlinepbx.ru`,
+    `https://${ONPBX_DOMAIN}/api/v2`,
+    `https://${ONPBX_DOMAIN}/api/v1`,
+  ]
+  // Пробуем несколько путей — разные версии API
   const endpoints = [
     { path: '/mfs/users.json', body: {} },
-    { path: '/mfs/history.json', body: { start_stamp_from: Math.floor(Date.now() / 1000) - 24 * 3600, limit: 5 } },
-    { path: '/mfs/calls.json', body: { start_stamp_from: Math.floor(Date.now() / 1000) - 24 * 3600, limit: 5 } },
+    { path: '/mfs/history.json', body: { start_stamp_from: lastDay, limit: 5 } },
+    { path: '/mfs/calls.json', body: { start_stamp_from: lastDay, limit: 5 } },
+    { path: '/users.json', body: {} },
+    { path: '/history.json', body: { start_stamp_from: lastDay, limit: 5 } },
+    { path: '/calls', body: { start_stamp_from: lastDay, limit: 5 } },
   ]
   const contentTypes = ['application/json', 'application/x-www-form-urlencoded']
 
@@ -70,30 +82,36 @@ export default async function handler(req, res) {
   ]
 
   const attempts = []
-  for (const ep of endpoints) {
-    for (const av of authVariants) {
-      for (const ct of contentTypes) {
-        const url = `https://${ONPBX_DOMAIN}${ep.path}`
-        const result = await tryRequest(url, av.headers, ep.body, ct)
-        attempts.push({
-          endpoint: ep.path,
-          auth: av.name,
-          contentType: ct,
-          status: result.status,
-          ok: result.ok,
-          hasJson: !!result.json,
-          sampleResponse: result.text?.slice(0, 200),
-        })
-        // Успех — это 200 + валидный JSON (а не HTML error page)
-        if (result.ok && result.json) {
-          return res.status(200).json({
-            connected: true,
-            domain: ONPBX_DOMAIN,
-            workingAuth: av.name,
-            workingEndpoint: ep.path,
-            workingContentType: ct,
-            response: result.json,
-          })
+  // Только тестируем первые 2 auth'а на каждой комбинации чтобы не перегружать
+  for (const base of bases) {
+    for (const ep of endpoints) {
+      for (const av of authVariants) {
+        for (const ct of contentTypes) {
+          const url = `${base}${ep.path}`
+          const result = await tryRequest(url, av.headers, ep.body, ct)
+          // Логируем только интересные попытки — 200 с JSON или не-404 ошибки
+          if (result.ok || (result.status && result.status !== 404 && result.status !== 0)) {
+            attempts.push({
+              url,
+              auth: av.name,
+              contentType: ct,
+              status: result.status,
+              hasJson: !!result.json,
+              sampleResponse: result.text?.slice(0, 150),
+            })
+          }
+          // Успех — это 200 + валидный JSON (а не HTML error page)
+          if (result.ok && result.json) {
+            return res.status(200).json({
+              connected: true,
+              base,
+              endpoint: ep.path,
+              fullUrl: url,
+              workingAuth: av.name,
+              workingContentType: ct,
+              response: result.json,
+            })
+          }
         }
       }
     }
