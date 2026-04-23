@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Zap, RefreshCw, Loader, AlertCircle, ChevronDown, ChevronRight,
-  Target, TrendingUp, Download,
+  Target, TrendingUp, TrendingDown, Download, Trophy, Award, Medal, AlertTriangle, Minus,
 } from 'lucide-react'
 import { fetchAmoPerformanceV2 } from '../utils/amocrm'
 import { db } from '../firebase'
@@ -32,6 +32,21 @@ function currentMonthString() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
+function prevMonthString(month) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 2, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+function prevMonthLabel(month) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 2, 1)
+  const names = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+  return names[d.getMonth()]
+}
+function delta(cur, prev) {
+  if (!prev || prev === 0) return null
+  return (cur - prev) / prev
+}
 function formatMoney(n) {
   if (!n) return '0'
   return new Intl.NumberFormat('ru-RU').format(Math.round(n))
@@ -46,6 +61,25 @@ function pctClass(v) {
   if (v >= 0.6) return 'text-amber-600'
   return 'text-red-600'
 }
+function DeltaPill({ value, inverse = false }) {
+  if (value == null || !isFinite(value)) {
+    return <span className="inline-flex items-center gap-0.5 text-[10px] text-slate-400"><Minus size={10} /> —</span>
+  }
+  const pct = Math.round(value * 100)
+  const isZero = pct === 0
+  const positive = inverse ? pct < 0 : pct > 0
+  const color = isZero ? 'text-slate-400 bg-slate-100'
+    : positive ? 'text-emerald-700 bg-emerald-50'
+    : 'text-red-700 bg-red-50'
+  const Icon = isZero ? Minus : (pct > 0 ? TrendingUp : TrendingDown)
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${color}`}>
+      <Icon size={10} />
+      {pct > 0 ? '+' : ''}{pct}%
+    </span>
+  )
+}
+
 function calcDerived(metrics) {
   const safe = (num, den) => (den > 0 ? num / den : null)
   return {
@@ -64,6 +98,7 @@ export default function AmoPerformance() {
 
   const [month, setMonth] = useState(currentMonthString())
   const [data, setData] = useState(null)
+  const [prevData, setPrevData] = useState(null)
   const [plan, setPlan] = useState({ managers: {}, workingDays: 26 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -90,13 +125,18 @@ export default function AmoPerformance() {
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true)
     setError('')
-    const res = await fetchAmoPerformanceV2({ month })
+    const [res, prevRes] = await Promise.all([
+      fetchAmoPerformanceV2({ month }),
+      fetchAmoPerformanceV2({ month: prevMonthString(month) }),
+    ])
     if (res.success) {
       setData(res)
       setLastFetched(new Date())
     } else {
       setError(res.error || 'Ошибка')
     }
+    if (prevRes?.success) setPrevData(prevRes)
+    else setPrevData(null)
     setLoading(false)
   }
 
@@ -186,6 +226,47 @@ export default function AmoPerformance() {
 
   const lastFetchedAgo = lastFetched ? Math.floor((nowTick - lastFetched.getTime()) / 1000) : null
   const usersSorted = data ? Object.values(data.byUser).sort((a, b) => b.metrics.revenue - a.metrics.revenue) : []
+
+  // Для MoM — снапшот прошлого месяца по userId
+  const prevByUser = prevData?.byUser || {}
+  const prevTotals = prevData?.totals?.metrics || null
+
+  // Строим leaderboard: rank по % выполнения плана выручки (или по выручке, если плана нет)
+  const leaderboardEntries = usersSorted.map(u => {
+    const managerPlan = plan.managers[u.userId] || {}
+    const revPlan = managerPlan.revenue || 0
+    const revFact = u.metrics.revenue || 0
+    const completion = revPlan > 0 ? revFact / revPlan : null
+    const prevRev = prevByUser[u.userId]?.metrics?.revenue || 0
+    const revDelta = delta(revFact, prevRev)
+    const salesFact = u.metrics.sales || 0
+    const salesPlan = managerPlan.sales || 0
+    const salesCompletion = salesPlan > 0 ? salesFact / salesPlan : null
+    return {
+      user: u,
+      completion,
+      revFact,
+      revPlan,
+      revDelta,
+      salesFact,
+      salesPlan,
+      salesCompletion,
+    }
+  })
+  // Сортировка: с планом — по %выполнения, без плана — по выручке
+  const sortedByCompletion = [...leaderboardEntries].sort((a, b) => {
+    const av = a.completion ?? -1
+    const bv = b.completion ?? -1
+    if (av !== bv) return bv - av
+    return b.revFact - a.revFact
+  })
+  const top3 = sortedByCompletion.slice(0, 3)
+  const laggards = sortedByCompletion.filter(e => e.completion != null && e.completion < 0.6).slice(-3)
+
+  const totalDeltaRev = prevTotals ? delta(data?.totals?.metrics?.revenue || 0, prevTotals.revenue) : null
+  const totalDeltaSales = prevTotals ? delta(data?.totals?.metrics?.sales || 0, prevTotals.sales) : null
+  const totalDeltaLeads = prevTotals ? delta(data?.totals?.metrics?.leadsNew || 0, prevTotals.leadsNew) : null
+  const totalDeltaTrial = prevTotals ? delta(data?.totals?.metrics?.trialAttended || 0, prevTotals.trialAttended) : null
   const stages = data?.stages || {}
   const unmappedStages = []
   for (const [k, label] of [
@@ -266,6 +347,96 @@ export default function AmoPerformance() {
         <div className="py-12 text-center text-slate-400 text-sm">Нет сделок за выбранный период</div>
       )}
 
+      {/* ── Leaderboard: топ-3 + отстающие ────────────────────────────── */}
+      {data && usersSorted.length > 0 && (
+        <div className="mb-5 grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {/* Топ-3 */}
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Trophy size={16} className="text-amber-600" />
+              <h3 className="text-sm font-bold text-amber-900">Топ-3 по выполнению плана</h3>
+            </div>
+            <div className="space-y-2">
+              {top3.length === 0 && (
+                <p className="text-xs text-slate-500 py-2">Нет данных</p>
+              )}
+              {top3.map((e, idx) => {
+                const ranks = [
+                  { icon: Trophy, color: 'text-amber-500', bg: 'bg-amber-100', emoji: '🥇' },
+                  { icon: Award, color: 'text-slate-500', bg: 'bg-slate-100', emoji: '🥈' },
+                  { icon: Medal, color: 'text-orange-500', bg: 'bg-orange-100', emoji: '🥉' },
+                ][idx]
+                return (
+                  <div key={e.user.userId} className="flex items-center gap-3 p-2.5 bg-white rounded-xl border border-amber-100">
+                    <div className={`w-8 h-8 rounded-lg ${ranks.bg} flex items-center justify-center text-lg flex-shrink-0`}>
+                      {ranks.emoji}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{e.user.userName}</p>
+                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                        <span className="text-[11px] text-slate-500">
+                          {formatMoney(e.revFact)} ₽
+                        </span>
+                        <DeltaPill value={e.revDelta} />
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      {e.completion != null ? (
+                        <>
+                          <p className={`text-sm font-bold ${pctClass(e.completion)}`}>{formatPct(e.completion)}</p>
+                          <p className="text-[10px] text-slate-400">{e.salesFact}/{e.salesPlan} продаж</p>
+                        </>
+                      ) : (
+                        <p className="text-[10px] text-slate-400">план не задан</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Отстающие */}
+          <div className={`rounded-2xl p-4 border ${laggards.length > 0 ? 'bg-red-50/50 border-red-200' : 'bg-emerald-50/50 border-emerald-200'}`}>
+            <div className="flex items-center gap-2 mb-3">
+              {laggards.length > 0 ? (
+                <>
+                  <AlertTriangle size={16} className="text-red-600" />
+                  <h3 className="text-sm font-bold text-red-900">Требуют внимания (&lt;60% плана)</h3>
+                </>
+              ) : (
+                <>
+                  <Trophy size={16} className="text-emerald-600" />
+                  <h3 className="text-sm font-bold text-emerald-900">Все менеджеры в графике 🎉</h3>
+                </>
+              )}
+            </div>
+            <div className="space-y-2">
+              {laggards.length === 0 ? (
+                <p className="text-xs text-emerald-700 py-2">Никто не отстаёт ниже 60% — отличный темп!</p>
+              ) : laggards.map(e => (
+                <div key={e.user.userId} className="flex items-center gap-3 p-2.5 bg-white rounded-xl border border-red-100">
+                  <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle size={14} className="text-red-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{e.user.userName}</p>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      <span className="text-[11px] text-slate-500">{formatMoney(e.revFact)} / {formatMoney(e.revPlan)} ₽</span>
+                      <DeltaPill value={e.revDelta} />
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-sm font-bold ${pctClass(e.completion)}`}>{formatPct(e.completion)}</p>
+                    <p className="text-[10px] text-slate-400">{e.salesFact}/{e.salesPlan} продаж</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {data && usersSorted.map(u => {
         const fact = calcDerived(u.metrics)
         const managerPlan = plan.managers[u.userId] || {}
@@ -289,14 +460,20 @@ export default function AmoPerformance() {
               <div className="flex items-center gap-4 text-sm">
                 <div className="text-right">
                   <p className="text-xs text-slate-500">Продажи</p>
-                  <p className="font-semibold text-slate-900">{fact.sales} / {managerPlan.sales || 0}</p>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <p className="font-semibold text-slate-900">{fact.sales} / {managerPlan.sales || 0}</p>
+                    <DeltaPill value={delta(fact.sales, prevByUser[u.userId]?.metrics?.sales || 0)} />
+                  </div>
                   {(fact.salesPostpayment > 0) && (
                     <p className="text-[10px] text-slate-400">осн {fact.salesMainWon} + постопл {fact.salesPostpayment}</p>
                   )}
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-500">Выручка</p>
-                  <p className="font-semibold text-slate-900">{formatMoney(fact.revenue)}</p>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <p className="font-semibold text-slate-900">{formatMoney(fact.revenue)}</p>
+                    <DeltaPill value={delta(fact.revenue, prevByUser[u.userId]?.metrics?.revenue || 0)} />
+                  </div>
                   {(fact.revenuePostpayment > 0) && (
                     <p className="text-[10px] text-slate-400">осн {formatMoney(fact.revenueMainWon)} + постопл {formatMoney(fact.revenuePostpayment)}</p>
                   )}
@@ -417,22 +594,40 @@ export default function AmoPerformance() {
 
       {data && usersSorted.length > 0 && (
         <div className="mt-6 p-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-slate-400 uppercase tracking-wider">Итоги команды</p>
+            {prevData && (
+              <p className="text-[10px] text-slate-500">vs {prevMonthLabel(month)}</p>
+            )}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-xs text-slate-400">Всего заявок</p>
-              <p className="text-2xl font-bold">{data.totals.metrics.leadsNew}</p>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <p className="text-2xl font-bold">{data.totals.metrics.leadsNew}</p>
+                <DeltaPill value={totalDeltaLeads} />
+              </div>
             </div>
             <div>
               <p className="text-xs text-slate-400">ПУ проведено</p>
-              <p className="text-2xl font-bold">{data.totals.metrics.trialAttended}</p>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <p className="text-2xl font-bold">{data.totals.metrics.trialAttended}</p>
+                <DeltaPill value={totalDeltaTrial} />
+              </div>
             </div>
             <div>
               <p className="text-xs text-slate-400">Продаж</p>
-              <p className="text-2xl font-bold">{data.totals.metrics.sales}</p>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <p className="text-2xl font-bold">{data.totals.metrics.sales}</p>
+                <DeltaPill value={totalDeltaSales} />
+              </div>
             </div>
             <div>
               <p className="text-xs text-slate-400">Выручка</p>
-              <p className="text-2xl font-bold">{formatMoney(data.totals.metrics.revenue)}</p>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <p className="text-2xl font-bold">{formatMoney(data.totals.metrics.revenue)}</p>
+                <DeltaPill value={totalDeltaRev} />
+              </div>
             </div>
           </div>
         </div>
