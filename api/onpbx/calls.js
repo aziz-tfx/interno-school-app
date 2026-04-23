@@ -107,11 +107,20 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { ONPBX_DOMAIN, ONPBX_API_KEY } = process.env
+  const rawDomain = process.env.ONPBX_DOMAIN
+  const ONPBX_API_KEY = process.env.ONPBX_API_KEY
+  // Санитизация: убираем https://, пробелы, слэши, запятые
+  const ONPBX_DOMAIN = (rawDomain || '').trim().replace(/^https?:\/\//, '').replace(/[\s/,]+$/, '').replace(/^[\s/,]+/, '')
   if (!ONPBX_DOMAIN || !ONPBX_API_KEY) {
     return res.status(500).json({
       error: 'OnlinePBX не настроен',
-      details: 'Нужны env vars: ONPBX_DOMAIN (pbx14950.onpbx.ru), ONPBX_API_KEY',
+      details: 'Нужны env vars: ONPBX_DOMAIN (например pbx14950.onpbx.ru — ваш клиентский домен, НЕ api.onlinepbx.ru) и ONPBX_API_KEY',
+    })
+  }
+  if (ONPBX_DOMAIN.startsWith('api.')) {
+    return res.status(500).json({
+      error: 'Неверный ONPBX_DOMAIN',
+      details: `Нужен ваш клиентский домен (pbx14950.onpbx.ru), а не ${ONPBX_DOMAIN}. api.onlinepbx.ru уже прописан в коде как базовый URL.`,
     })
   }
 

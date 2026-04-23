@@ -38,7 +38,9 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' })
 
-  const { ONPBX_DOMAIN, ONPBX_API_KEY } = process.env
+  const rawDomain = process.env.ONPBX_DOMAIN
+  const ONPBX_API_KEY = process.env.ONPBX_API_KEY
+  const ONPBX_DOMAIN = (rawDomain || '').trim().replace(/^https?:\/\//, '').replace(/[\s/,]+$/, '').replace(/^[\s/,]+/, '')
   const missing = []
   if (!ONPBX_DOMAIN) missing.push('ONPBX_DOMAIN')
   if (!ONPBX_API_KEY) missing.push('ONPBX_API_KEY')
@@ -47,6 +49,12 @@ export default async function handler(req, res) {
       connected: false,
       missing,
       message: `Не заданы env vars: ${missing.join(', ')}`,
+    })
+  }
+  if (ONPBX_DOMAIN.startsWith('api.')) {
+    return res.status(200).json({
+      connected: false,
+      message: `ONPBX_DOMAIN должен быть клиентским доменом (pbx14950.onpbx.ru), а не ${ONPBX_DOMAIN}. api.onlinepbx.ru — это базовый URL, уже прописанный в коде.`,
     })
   }
 
