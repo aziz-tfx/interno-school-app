@@ -1,6 +1,8 @@
 // Vercel Serverless Function — push sale data to amoCRM
 // POST /api/amo/push-sale
 
+import { resolveAmo } from '../_lib/tenantConfig.js'
+
 export default async function handler(req, res) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -9,15 +11,17 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const {
-    AMO_SUBDOMAIN,
-    AMO_ACCESS_TOKEN,
-    AMO_PIPELINE_ID,
-    AMO_STATUS_ID,
-  } = process.env
+  const amo = await resolveAmo(req)
+  const AMO_SUBDOMAIN = amo.subdomain
+  const AMO_ACCESS_TOKEN = amo.accessToken
+  const AMO_PIPELINE_ID = amo.pipelineId
+  const AMO_STATUS_ID = amo.statusId
 
+  if (!amo.enabled) {
+    return res.status(400).json({ error: 'amoCRM integration is disabled for this tenant' })
+  }
   if (!AMO_SUBDOMAIN || !AMO_ACCESS_TOKEN) {
-    return res.status(500).json({ error: 'amoCRM not configured. Set AMO_SUBDOMAIN and AMO_ACCESS_TOKEN in Vercel env.' })
+    return res.status(500).json({ error: 'amoCRM not configured for this tenant. Add credentials on the Integrations page.' })
   }
 
   const BASE = `https://${AMO_SUBDOMAIN}.amocrm.ru/api/v4`

@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
 import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor } from 'lucide-react'
 import { generateContract, buildContractBlob } from '../utils/generateContract'
+import { listTemplates, renderTemplateBlob, renderTemplateAndDownload } from '../utils/contractTemplates'
+import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { pushSaleToAmo } from '../utils/amocrm'
 import { pushSaleToTelegram } from '../utils/telegram'
 import { db, storage } from '../firebase'
@@ -95,6 +97,19 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const [showReceipt, setShowReceipt] = useState(false)
   const [savedPayment, setSavedPayment] = useState(null)
   const [generatingContract, setGeneratingContract] = useState(false)
+  const [customTemplates, setCustomTemplates] = useState([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('') // '' = INTERNO default
+
+  // Загружаем кастомные шаблоны договоров текущей школы
+  useEffect(() => {
+    const tid = user?.tenantId || DEFAULT_TENANT_ID
+    listTemplates(tid).then(items => {
+      setCustomTemplates(items)
+      const def = items.find(t => t.isDefault)
+      if (def) setSelectedTemplateId(def.id)
+    }).catch(e => console.warn('listTemplates failed:', e))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [signatureData, setSignatureData] = useState(null)
   const [signing, setSigning] = useState(false)
   const canvasRef = useRef(null)
@@ -413,6 +428,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       payerCompanyDirector: form.payerCompanyDirector || '',
       payerCompanyBank: form.payerCompanyBank || '',
       payerCompanyPhone: form.payerCompanyPhone || '',
+      templateId: selectedTemplateId || '',
       files: files.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size, data: f.data })),
       trancheNumber: studentPayments.length + 1,
       managerId: user?.managerId || null,
@@ -471,7 +487,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     if (form.type === 'income') {
       contractUploadPromise = (async () => {
         try {
-          const { blob, fileName } = await buildContractBlob({
+          const contractData = {
             clientName: form.clientName,
             passport: form.passport || '',
             phone: form.phone,
@@ -493,7 +509,12 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             payerCompanyDirector: form.payerCompanyDirector || '',
             payerCompanyBank: form.payerCompanyBank || '',
             payerCompanyPhone: form.payerCompanyPhone || '',
-          })
+          }
+          // Выбран кастомный шаблон — рендерим через docxtemplater
+          const selectedTpl = customTemplates.find(t => t.id === selectedTemplateId)
+          const { blob, fileName } = selectedTpl
+            ? await renderTemplateBlob(selectedTpl, contractData)
+            : await buildContractBlob(contractData)
           const safeNumber = (form.contractNumber || `sale_${saved.id}`).replace(/[^\w-]/g, '_')
           const tenantPath = user?.tenantId || 'default'
           const storagePath = `${tenantPath}/contracts/${safeNumber}_${Date.now()}_${fileName}`
@@ -615,7 +636,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     setGeneratingContract(true)
     try {
       const payment = savedPayment || {}
-      await generateContract({
+      const contractData = {
         clientName: payment.student || form.clientName,
         passport: form.passport || '',
         phone: payment.phone || form.phone,
@@ -638,7 +659,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         payerCompanyDirector: payment.payerCompanyDirector || form.payerCompanyDirector || '',
         payerCompanyBank: payment.payerCompanyBank || form.payerCompanyBank || '',
         payerCompanyPhone: payment.payerCompanyPhone || form.payerCompanyPhone || '',
-      })
+      }
+      const selectedTpl = customTemplates.find(t => t.id === (payment.templateId || selectedTemplateId))
+      if (selectedTpl) {
+        await renderTemplateAndDownload(selectedTpl, contractData)
+      } else {
+        await generateContract(contractData)
+      }
     } catch (err) {
       console.error('Contract generation failed:', err)
       alert(t('paymentForm.error_contract'))
@@ -1222,6 +1249,29 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               {/* Section: Contract / Shartnoma Info */}
               <div className="bg-purple-50 rounded-lg p-4 space-y-3">
                 <h4 className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Данные для договора (Шартнома)</h4>
+
+                {/* Template selector (custom tenant templates) */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Шаблон договора</label>
+                  <select
+                    value={selectedTemplateId}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Стандартный INTERNO</option>
+                    {customTemplates.map(tpl => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}{tpl.isDefault ? ' (по умолчанию)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {customTemplates.length === 0 && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Чтобы добавить свои шаблоны, перейдите в «Шаблоны договоров» в меню.
+                    </p>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_passport')}</label>

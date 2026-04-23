@@ -8,7 +8,7 @@ export const TENANT_COLLECTIONS = [
   'payments', 'rooms', 'schedule',
   'lmsLessons', 'lmsAssignments', 'lmsSubmissions',
   'lmsAnnouncements', 'lmsModules', 'lmsProgress',
-  'studentGameData',
+  'studentGameData', 'contractTemplates',
 ]
 
 export const TENANT_META_DOCS = [

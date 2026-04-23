@@ -5,6 +5,8 @@
 // Затем https://api.onlinepbx.ru/{domain}/mongo_history/search.json с x-pbx-authentication
 // Максимум 1 неделя на запрос → чанкуем период.
 
+import { resolveOnpbx } from '../_lib/tenantConfig.js'
+
 const API_BASE = 'https://api.onlinepbx.ru'
 const TIMEOUT_MS = 20000
 const WEEK_SEC = 7 * 24 * 3600
@@ -107,14 +109,13 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const rawDomain = process.env.ONPBX_DOMAIN
-  const ONPBX_API_KEY = process.env.ONPBX_API_KEY
-  // Санитизация: убираем https://, пробелы, слэши, запятые
-  const ONPBX_DOMAIN = (rawDomain || '').trim().replace(/^https?:\/\//, '').replace(/[\s/,]+$/, '').replace(/^[\s/,]+/, '')
+  const pbx = await resolveOnpbx(req)
+  const ONPBX_DOMAIN = pbx.domain
+  const ONPBX_API_KEY = pbx.apiKey
   if (!ONPBX_DOMAIN || !ONPBX_API_KEY) {
     return res.status(500).json({
-      error: 'OnlinePBX не настроен',
-      details: 'Нужны env vars: ONPBX_DOMAIN (например pbx14950.onpbx.ru — ваш клиентский домен, НЕ api.onlinepbx.ru) и ONPBX_API_KEY',
+      error: 'OnlinePBX не настроен для этой школы',
+      details: 'Заполните domain (например pbx14950.onpbx.ru) и apiKey на странице «Интеграции»',
     })
   }
   if (ONPBX_DOMAIN.startsWith('api.')) {

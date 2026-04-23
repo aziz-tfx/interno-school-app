@@ -4,6 +4,8 @@
 // Для каждого лида, созданного в месяце, находит первое исходящее событие
 // (звонок, сообщение, SMS, заметка) и считает разницу в минутах.
 
+import { resolveAmo } from '../_lib/tenantConfig.js'
+
 const AMO_API_TIMEOUT_MS = 20000
 
 function withTimeout(promise, ms) {
@@ -73,9 +75,11 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { AMO_SUBDOMAIN, AMO_ACCESS_TOKEN } = process.env
+  const amo = await resolveAmo(req)
+  const AMO_SUBDOMAIN = amo.subdomain
+  const AMO_ACCESS_TOKEN = amo.accessToken
   if (!AMO_SUBDOMAIN || !AMO_ACCESS_TOKEN) {
-    return res.status(500).json({ error: 'amoCRM не настроен' })
+    return res.status(500).json({ error: 'amoCRM не настроен для этой школы' })
   }
 
   const base = `https://${AMO_SUBDOMAIN}.amocrm.ru/api/v4`

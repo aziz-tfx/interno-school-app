@@ -1,23 +1,11 @@
 // Telegram sales notification
-// 1) Tries server-side API (/api/telegram/notify) which uses Vercel env vars
-// 2) Falls back to client-side localStorage config if server returns error
+// Server-side API (/api/telegram/notify) loads per-tenant credentials from
+// Firestore based on tenantId attached to each request.
 
-const BRANCH_CHAT_MAP = {
-  tashkent: 'chatTashkent',
-  samarkand: 'chatSamarkand',
-  fergana: 'chatFergana',
-  bukhara: 'chatFergana',
-  online: 'chatTashkent',
-}
-
-function getConfig() {
-  try {
-    const raw = localStorage.getItem('interno_tg_config')
-    if (!raw) return null
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+// Module-level tenant — set by AuthContext after login
+let _tenantId = ''
+export function setApiTenantId(tid) {
+  _tenantId = tid || ''
 }
 
 function fmt(n) {
@@ -74,83 +62,27 @@ function buildMessage(saleData) {
   return message
 }
 
-// Try server-side endpoint first (uses Vercel env vars)
-async function tryServerSide(saleData) {
+export async function pushSaleToTelegram(saleData) {
   try {
     const res = await fetch('/api/telegram/notify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(saleData),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(_tenantId ? { 'X-Tenant-Id': _tenantId } : {}),
+      },
+      body: JSON.stringify({ ...saleData, tenantId: _tenantId }),
     })
-
     const data = await res.json()
-
     if (data.success) {
       return { success: true, messageId: data.messageId, chatId: data.chatId, via: 'server' }
     }
-
-    // Server responded but with error — return it so we can try client-side
-    return { success: false, error: data.error }
+    console.warn('Telegram notify failed:', data.error)
+    return { success: false, error: data.error || 'Unknown error' }
   } catch (err) {
+    console.error('Telegram notify error:', err)
     return { success: false, error: err.message }
   }
 }
 
-// Fallback: send directly from client via localStorage config
-async function tryClientSide(saleData) {
-  const config = getConfig()
-  if (!config || !config.botToken || !config.enabled) {
-    return { success: false, error: 'Telegram не настроен (ни сервер, ни локально)' }
-  }
-
-  const chatField = BRANCH_CHAT_MAP[saleData.branch] || 'chatTashkent'
-  const chatId = config[chatField]
-  if (!chatId) {
-    return { success: false, error: `Chat ID не настроен для ${saleData.branch}` }
-  }
-
-  const message = buildMessage(saleData)
-
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: message,
-        disable_web_page_preview: true,
-      }),
-    })
-
-    const data = await res.json()
-
-    if (!data.ok) {
-      return { success: false, error: data.description }
-    }
-
-    return { success: true, messageId: data.result?.message_id, chatId, via: 'client' }
-  } catch (err) {
-    return { success: false, error: err.message }
-  }
-}
-
-export async function pushSaleToTelegram(saleData) {
-  // 1) Try server-side (Vercel env vars)
-  const serverResult = await tryServerSide(saleData)
-  if (serverResult.success) {
-    console.log('Telegram: отправлено через сервер', serverResult)
-    return serverResult
-  }
-
-  console.warn('Telegram: сервер не сработал:', serverResult.error, '→ пробуем клиент')
-
-  // 2) Fallback to client-side (localStorage)
-  const clientResult = await tryClientSide(saleData)
-  if (clientResult.success) {
-    console.log('Telegram: отправлено через клиент (localStorage)', clientResult)
-  } else {
-    console.error('Telegram: не удалось отправить ни через сервер, ни через клиент:', clientResult.error)
-  }
-
-  return clientResult
-}
+// Kept exported for potential future debug usage
+export { buildMessage }

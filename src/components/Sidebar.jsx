@@ -65,6 +65,7 @@ export default function Sidebar({ open, onClose }) {
     { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
     { to: '/audit', icon: ScrollText, label: t('sidebar.audit'), permission: 'audit' },
     { to: '/integrations', icon: Plug, label: t('sidebar.integrations'), permission: 'settings' },
+    { to: '/contract-templates', icon: FileText, label: 'Шаблоны договоров', permission: 'settings' },
     ...(user?.isSuperAdmin ? [{ to: '/superadmin', icon: Settings, label: 'SaaS панель', permission: null }] : []),
   ]
 

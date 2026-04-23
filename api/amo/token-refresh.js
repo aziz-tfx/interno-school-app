@@ -1,11 +1,12 @@
 // Vercel Serverless Function — refresh amoCRM OAuth token
-// POST /api/amo/token-refresh
+// POST /api/amo/token-refresh  body: { tenantId }
 //
-// amoCRM access tokens expire. Call this to refresh.
-// Set env vars: AMO_SUBDOMAIN, AMO_CLIENT_ID, AMO_CLIENT_SECRET, AMO_REDIRECT_URI, AMO_REFRESH_TOKEN
-//
-// After refreshing, update AMO_ACCESS_TOKEN and AMO_REFRESH_TOKEN in Vercel env vars.
-// For production, store tokens in a database (e.g., Firestore) instead.
+// Uses per-tenant OAuth credentials stored in Firestore
+// (tenantIntegrations/{tenantId}.amocrm). Falls back to env vars if absent.
+// On success, the new tokens are persisted back to Firestore so subsequent
+// requests use the refreshed pair automatically.
+
+import { resolveAmo, saveTenantIntegration, getTenantId } from '../_lib/tenantConfig.js'
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -14,16 +15,18 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  const amo = await resolveAmo(req)
+  const tenantId = getTenantId(req)
   const {
-    AMO_SUBDOMAIN,
-    AMO_CLIENT_ID,
-    AMO_CLIENT_SECRET,
-    AMO_REDIRECT_URI,
-    AMO_REFRESH_TOKEN,
-  } = process.env
+    subdomain: AMO_SUBDOMAIN,
+    clientId: AMO_CLIENT_ID,
+    clientSecret: AMO_CLIENT_SECRET,
+    redirectUri: AMO_REDIRECT_URI,
+    refreshToken: AMO_REFRESH_TOKEN,
+  } = amo
 
   if (!AMO_SUBDOMAIN || !AMO_CLIENT_ID || !AMO_CLIENT_SECRET || !AMO_REFRESH_TOKEN) {
-    return res.status(500).json({ error: 'OAuth credentials not configured in Vercel env.' })
+    return res.status(500).json({ error: 'OAuth credentials not configured for this tenant.' })
   }
 
   try {
@@ -46,12 +49,22 @@ export default async function handler(req, res) {
 
     const tokens = await tokenRes.json()
 
+    // Persist fresh tokens to Firestore so future calls pick them up
+    const saved = await saveTenantIntegration(tenantId, 'amocrm', {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      tokenRefreshedAt: new Date().toISOString(),
+    })
+
     return res.status(200).json({
       success: true,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       expires_in: tokens.expires_in,
-      message: 'Update AMO_ACCESS_TOKEN and AMO_REFRESH_TOKEN in Vercel environment variables.',
+      persisted: saved,
+      message: saved
+        ? 'Новые токены сохранены в настройках школы.'
+        : 'Токены получены, но не сохранены (Firestore недоступен). Обновите вручную.',
     })
 
   } catch (err) {

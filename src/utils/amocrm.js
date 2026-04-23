@@ -1,7 +1,26 @@
 // amoCRM integration — client-side helper
 // Calls our Vercel serverless API which forwards to amoCRM
+// Every request is tagged with the current tenantId so the server can
+// load the right school's credentials from Firestore.
 
 const API_BASE = '/api/amo'
+
+// Module-level tenantId; AuthContext sets this on login via setApiTenantId()
+let _tenantId = ''
+export function setApiTenantId(tid) {
+  _tenantId = tid || ''
+}
+function tenantHeaders(extra = {}) {
+  return {
+    'Content-Type': 'application/json',
+    ...(_tenantId ? { 'X-Tenant-Id': _tenantId } : {}),
+    ...extra,
+  }
+}
+function withTenant(url) {
+  if (!_tenantId) return url
+  return url + (url.includes('?') ? '&' : '?') + 'tenantId=' + encodeURIComponent(_tenantId)
+}
 
 /**
  * Push a sale (payment) to amoCRM.
@@ -11,8 +30,8 @@ export async function pushSaleToAmo(saleData) {
   try {
     const res = await fetch(`${API_BASE}/push-sale`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(saleData),
+      headers: tenantHeaders(),
+      body: JSON.stringify({ ...saleData, tenantId: _tenantId }),
     })
 
     const data = await res.json()
@@ -35,7 +54,7 @@ export async function pushSaleToAmo(saleData) {
  */
 export async function checkAmoStatus() {
   try {
-    const res = await fetch(`${API_BASE}/status`)
+    const res = await fetch(withTenant(`${API_BASE}/status`), { headers: tenantHeaders() })
     return await res.json()
   } catch (err) {
     return { connected: false, message: err.message }
@@ -44,11 +63,12 @@ export async function checkAmoStatus() {
 
 /**
  * Fetch aggregated manager/ROP effectiveness for a period.
- * @param {{ from: string, to: string }} params — YYYY-MM-DD dates
  */
 export async function fetchAmoPerformance({ from, to }) {
   try {
-    const res = await fetch(`${API_BASE}/performance?from=${from}&to=${to}`)
+    const res = await fetch(withTenant(`${API_BASE}/performance?from=${from}&to=${to}`), {
+      headers: tenantHeaders(),
+    })
     const data = await res.json()
     if (!res.ok) {
       return { success: false, error: data.error || 'Unknown error', details: data.details }
@@ -61,11 +81,12 @@ export async function fetchAmoPerformance({ from, to }) {
 
 /**
  * V2: Детальная аналитика по этапам воронки + дневная разбивка.
- * @param {{ month: string }} params — 'YYYY-MM'
  */
 export async function fetchAmoPerformanceV2({ month }) {
   try {
-    const res = await fetch(`${API_BASE}/performance-v2?month=${month}`)
+    const res = await fetch(withTenant(`${API_BASE}/performance-v2?month=${month}`), {
+      headers: tenantHeaders(),
+    })
     const data = await res.json()
     if (!res.ok) {
       return { success: false, error: data.error || 'Unknown error', details: data.details }
@@ -78,11 +99,12 @@ export async function fetchAmoPerformanceV2({ month }) {
 
 /**
  * Время реакции менеджеров на новые заявки.
- * @param {{ month: string }} params — 'YYYY-MM'
  */
 export async function fetchAmoResponseTimes({ month }) {
   try {
-    const res = await fetch(`${API_BASE}/response-times?month=${month}`)
+    const res = await fetch(withTenant(`${API_BASE}/response-times?month=${month}`), {
+      headers: tenantHeaders(),
+    })
     const data = await res.json()
     if (!res.ok) {
       return { success: false, error: data.error || 'Unknown error', details: data.details }
@@ -95,11 +117,12 @@ export async function fetchAmoResponseTimes({ month }) {
 
 /**
  * Аналитика звонков из OnlinePBX за период.
- * @param {{ from: string, to: string }} params — YYYY-MM-DD
  */
 export async function fetchOnpbxCalls({ from, to }) {
   try {
-    const res = await fetch(`/api/onpbx/calls?from=${from}&to=${to}`)
+    const res = await fetch(withTenant(`/api/onpbx/calls?from=${from}&to=${to}`), {
+      headers: tenantHeaders(),
+    })
     const data = await res.json()
     if (!res.ok) {
       return { success: false, error: data.error || 'Unknown error', details: data.details }
@@ -107,5 +130,33 @@ export async function fetchOnpbxCalls({ from, to }) {
     return { success: true, ...data }
   } catch (err) {
     return { success: false, error: err.message }
+  }
+}
+
+/**
+ * Refresh amoCRM OAuth token for current tenant.
+ */
+export async function refreshAmoToken() {
+  try {
+    const res = await fetch(`${API_BASE}/token-refresh`, {
+      method: 'POST',
+      headers: tenantHeaders(),
+      body: JSON.stringify({ tenantId: _tenantId }),
+    })
+    return await res.json()
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+}
+
+/**
+ * Status probe for OnlinePBX.
+ */
+export async function checkOnpbxStatus() {
+  try {
+    const res = await fetch(withTenant('/api/onpbx/status'), { headers: tenantHeaders() })
+    return await res.json()
+  } catch (err) {
+    return { connected: false, message: err.message }
   }
 }

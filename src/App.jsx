@@ -18,6 +18,7 @@ import LMSGroupView from './pages/lms/LMSGroupView'
 import LMSCourseView from './pages/lms/LMSCourseView'
 import LMSLessonView from './pages/lms/LMSLessonView'
 import Integrations from './pages/Integrations'
+import ContractTemplates from './pages/ContractTemplates'
 import AmoPerformance from './pages/AmoPerformance'
 import Schedule from './pages/Schedule'
 import AuditLog from './pages/AuditLog'
@@ -108,6 +109,9 @@ export default function App() {
         } />
         <Route path="integrations" element={
           <ProtectedRoute permission="settings"><Integrations /></ProtectedRoute>
+        } />
+        <Route path="contract-templates" element={
+          <ProtectedRoute permission="settings"><ContractTemplates /></ProtectedRoute>
         } />
         <Route path="amo" element={
           <ProtectedRoute permission="finance"><AmoPerformance /></ProtectedRoute>

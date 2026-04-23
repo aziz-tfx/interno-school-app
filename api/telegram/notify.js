@@ -2,6 +2,8 @@
 // POST /api/telegram/notify
 // Sends sale/payment notification to branch-specific Telegram group
 
+import { resolveTelegram } from '../_lib/tenantConfig.js'
+
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -38,22 +40,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'clientName and amount are required' })
   }
 
-  // ─── Bot token ───
-  const botToken = process.env.TG_BOT_TOKEN
+  // ─── Per-tenant bot token + chat mapping ───
+  const tg = await resolveTelegram(req)
+  if (!tg.enabled) {
+    return res.status(400).json({ error: 'Telegram integration is disabled for this tenant' })
+  }
+  const botToken = tg.botToken
   if (!botToken) {
-    return res.status(500).json({ error: 'TG_BOT_TOKEN not configured' })
+    return res.status(500).json({ error: 'Telegram bot token not configured for this tenant' })
   }
-
-  // ─── Branch → Chat ID mapping ───
-  const chatMap = {
-    tashkent:  process.env.TG_CHAT_TASHKENT,
-    samarkand: process.env.TG_CHAT_SAMARKAND,
-    fergana:   process.env.TG_CHAT_FERGANA,
-    bukhara:   process.env.TG_CHAT_FERGANA,
-    online:    process.env.TG_CHAT_TASHKENT,
-  }
-
-  const chatId = chatMap[branch] || process.env.TG_CHAT_TASHKENT
+  const chatId = tg.chats[branch] || tg.chats.tashkent
   if (!chatId) {
     return res.status(400).json({ error: `No Telegram chat configured for branch: ${branch}` })
   }

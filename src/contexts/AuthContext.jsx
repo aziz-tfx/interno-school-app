@@ -13,6 +13,8 @@ import {
   getDoc,
 } from 'firebase/firestore'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
+import { setApiTenantId as setAmoTenantId } from '../utils/amocrm'
+import { setApiTenantId as setTgTenantId } from '../utils/telegram'
 
 const AuthContext = createContext(null)
 
@@ -276,6 +278,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (user) localStorage.setItem('interno_user', JSON.stringify(user))
     else localStorage.removeItem('interno_user')
+    // Propagate tenantId to integration helpers so every API call carries it
+    const tid = user?.tenantId || ''
+    setAmoTenantId(tid)
+    setTgTenantId(tid)
   }, [user])
 
   // Real-time sync for permissions from Firestore

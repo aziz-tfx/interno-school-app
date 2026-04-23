@@ -2,6 +2,8 @@
 // GET /api/onpbx/status
 // Выполняет auth.json → получает key_id:key → делает тестовый запрос истории
 
+import { resolveOnpbx } from '../_lib/tenantConfig.js'
+
 const API_BASE = 'https://api.onlinepbx.ru'
 const TIMEOUT_MS = 12000
 
@@ -38,17 +40,17 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' })
 
-  const rawDomain = process.env.ONPBX_DOMAIN
-  const ONPBX_API_KEY = process.env.ONPBX_API_KEY
-  const ONPBX_DOMAIN = (rawDomain || '').trim().replace(/^https?:\/\//, '').replace(/[\s/,]+$/, '').replace(/^[\s/,]+/, '')
+  const pbx = await resolveOnpbx(req)
+  const ONPBX_DOMAIN = pbx.domain
+  const ONPBX_API_KEY = pbx.apiKey
   const missing = []
-  if (!ONPBX_DOMAIN) missing.push('ONPBX_DOMAIN')
-  if (!ONPBX_API_KEY) missing.push('ONPBX_API_KEY')
+  if (!ONPBX_DOMAIN) missing.push('domain')
+  if (!ONPBX_API_KEY) missing.push('apiKey')
   if (missing.length) {
     return res.status(200).json({
       connected: false,
       missing,
-      message: `Не заданы env vars: ${missing.join(', ')}`,
+      message: `Не заполнено для этой школы: ${missing.join(', ')}`,
     })
   }
   if (ONPBX_DOMAIN.startsWith('api.')) {
