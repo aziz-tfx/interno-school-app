@@ -293,6 +293,16 @@ export default function Finance() {
     return staff
   }, [employees, branchFilter, isSales, isRop, isBranchDirector, user])
 
+  // Match a payment to a sales-staff employee. Legacy branch_director
+  // accounts may not have a managerId, so fall back to createdBy / name.
+  const matchesManager = (p, emp) => {
+    if (!emp) return false
+    if (emp.managerId && p.managerId === emp.managerId) return true
+    if (p.createdBy && p.createdBy === emp.id) return true
+    if (p.createdByName && p.createdByName === emp.name) return true
+    return false
+  }
+
   // ─── Build manager KPI data from reports ─────────────────────────────────
   const managerKPIs = useMemo(() => {
     return salesStaff.map(emp => {
@@ -316,16 +326,11 @@ export default function Finance() {
       // Real payments — source of truth for revenue and sales count
       // (reportDaily drifts: not updated on payment edit/delete, and is written
       // under the logged-in user's name, not the payment's assigned manager)
-      // Match by managerId when set, otherwise fall back to createdBy / name —
-      // legacy branch_director accounts may not yet have a managerId assigned.
-      const managerPayments = payments.filter(p => {
-        if (p.type !== 'income') return false
-        if (!(p.date || '').startsWith(monthKey)) return false
-        if (emp.managerId && p.managerId === emp.managerId) return true
-        if (p.createdBy && p.createdBy === emp.id) return true
-        if (p.createdByName && p.createdByName === emp.name) return true
-        return false
-      })
+      const managerPayments = payments.filter(p =>
+        p.type === 'income' &&
+        (p.date || '').startsWith(monthKey) &&
+        matchesManager(p, emp)
+      )
       const paymentsRevenue = managerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
       const actualSales = managerPayments.length
       const actualRevenue = paymentsRevenue
@@ -1029,7 +1034,7 @@ export default function Finance() {
                 <ShoppingCart size={14} />
                 Продажи ({(() => {
                   const mgrPayments = payments.filter(p =>
-                    p.type === 'income' && p.managerId === editingKpi.managerId && (p.date || '').startsWith(monthKey)
+                    p.type === 'income' && (p.date || '').startsWith(monthKey) && matchesManager(p, editingKpi)
                   )
                   return mgrPayments.length
                 })()})
@@ -1052,7 +1057,7 @@ export default function Finance() {
             {/* Tab: Sales */}
             {mgrTab === 'sales' && (() => {
               const mgrPayments = payments
-                .filter(p => p.type === 'income' && p.managerId === editingKpi.managerId && (p.date || '').startsWith(monthKey))
+                .filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey) && matchesManager(p, editingKpi))
                 .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
               const totalRevenue = mgrPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
 
