@@ -51,6 +51,12 @@ export default function Finance() {
   const isRop = user?.role === 'rop'
   const isBranchDirector = user?.role === 'branch_director'
   const isAdmin = user?.role === 'owner' || user?.role === 'admin'
+  // Individual sales records are visible only to the business roles that
+  // actually work with sales: owner/admin, ROP (for their branch), branch
+  // director (for their branch), and the sales reps themselves (own only).
+  // Other finance-adjacent roles (accountant, financier, HR, SMM, …) can
+  // still see aggregate finance numbers but never individual transactions.
+  const canSeeSalesList = isAdmin || isRop || isBranchDirector || isSales
 
   // ─── State ──────────────────────────────────────────────────────────────
   const [paymentModal, setPaymentModal] = useState(false)
@@ -415,6 +421,7 @@ export default function Finance() {
   // Management roles (admin/owner/rop/branch_director) see EVERY sale for
   // their scope; sales-only users still get a short preview.
   const recentTransactions = useMemo(() => {
+    if (!canSeeSalesList) return []
     let filtered = payments.filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey))
     if (branchFilter !== 'all') filtered = filtered.filter(p => p.branch === branchFilter)
     if (isSales && user?.managerId) filtered = filtered.filter(p => p.managerId === user.managerId)
@@ -423,7 +430,7 @@ export default function Finance() {
     }
     const sorted = filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     return isSales ? sorted.slice(0, 10) : sorted
-  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user])
+  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, canSeeSalesList])
 
   // Status helpers
   const statusColor = (pct) => {
@@ -457,7 +464,7 @@ export default function Finance() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Action buttons */}
-          {canPayments && (
+          {canPayments && canSeeSalesList && (
             <>
               <button onClick={openNewSale}
                 className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/25 flex items-center gap-2">
@@ -558,6 +565,7 @@ export default function Finance() {
       )}
 
       {/* ─── Manager KPI Cards ──────────────────────────────────────────── */}
+      {canSeeSalesList && (
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           <BarChart3 size={20} className="text-blue-600" />
@@ -708,8 +716,10 @@ export default function Finance() {
           })}
         </div>
       </div>
+      )}
 
       {/* ─── Recent Transactions ─────────────────────────────────────────── */}
+      {canSeeSalesList && (
       <div className="glass-card rounded-2xl p-4 md:p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <ArrowUpRight size={20} className="text-emerald-600" />
@@ -757,6 +767,7 @@ export default function Finance() {
           </div>
         )}
       </div>
+      )}
 
       {/* ─── Payment Modal ──────────────────────────────────────────────── */}
       <Modal isOpen={paymentModal} onClose={() => setPaymentModal(false)}
