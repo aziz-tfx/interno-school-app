@@ -79,7 +79,6 @@ export default function Sidebar({ open, onClose }) {
         { to: '/leaderboard', icon: Trophy, label: t('sidebar.leaderboard'), permission: 'finance' },
       ],
     },
-    { to: '/employees', icon: UserCog, label: t('sidebar.employees'), permission: 'employees' },
     {
       group: 'schedule',
       icon: Calendar,
@@ -94,6 +93,7 @@ export default function Sidebar({ open, onClose }) {
       icon: Sliders,
       label: 'Настройки школы',
       children: [
+        { to: '/employees', icon: UserCog, label: t('sidebar.employees'), permission: 'employees' },
         { to: '/integrations', icon: Plug, label: t('sidebar.integrations'), permission: 'settings' },
         { to: '/contract-templates', icon: FileText, label: 'Шаблоны договоров', permission: 'settings' },
         { to: '/audit', icon: ScrollText, label: t('sidebar.audit'), permission: 'audit' },
