@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -154,6 +155,39 @@ export default function Sidebar({ open, onClose }) {
 
   const toggleGroup = (id) => setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }))
 
+  // ─── Hover flyout ────────────────────────────────────────────────────
+  // On desktop (hover-capable pointers) we show an elegant floating panel
+  // with the group's children to the right of the sidebar when the user
+  // hovers the group header. On touch devices this is disabled and users
+  // tap the header to expand the group inline.
+  const canHover = useMemo(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return true
+    return window.matchMedia('(hover: hover) and (pointer: fine)').matches
+  }, [])
+  const [flyout, setFlyout] = useState(null) // { groupId, top, left, item }
+  const hideTimer = useRef(null)
+
+  const showFlyout = (item, rect) => {
+    if (!canHover) return
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null }
+    setFlyout({
+      groupId: item.group,
+      item,
+      top: Math.max(8, rect.top),
+      left: rect.right + 8,
+    })
+  }
+  const scheduleHideFlyout = () => {
+    if (!canHover) return
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+    hideTimer.current = setTimeout(() => setFlyout(null), 150)
+  }
+  const cancelHideFlyout = () => {
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null }
+  }
+  // Close flyout on route change
+  useEffect(() => { setFlyout(null) }, [location.pathname])
+
   const roleColors = {
     owner: 'bg-rose-600',
     admin: 'bg-blue-600',
@@ -202,19 +236,24 @@ export default function Sidebar({ open, onClose }) {
           {navItems.map((item, idx) => {
             if (item.divider) return <div key={`div-${idx}`} className="my-2 border-t border-white/10" />
 
-            // ─── Group (expandable) ────────────────────────────────
+            // ─── Group (expandable on click, flyout on hover) ──────
             if (item.group) {
               const Icon = item.icon
               const isExpanded = !!openGroups[item.group]
               const hasActiveChild = item.children.some(c => location.pathname.startsWith(c.to))
+              const isHovered = flyout?.groupId === item.group
               const Chev = isExpanded ? ChevronDown : ChevronRight
               return (
-                <div key={`grp-${item.group}`}>
+                <div
+                  key={`grp-${item.group}`}
+                  onMouseEnter={(e) => showFlyout(item, e.currentTarget.getBoundingClientRect())}
+                  onMouseLeave={scheduleHideFlyout}
+                >
                   <button
                     type="button"
-                    onClick={() => toggleGroup(item.group)}
+                    onClick={() => { if (!canHover) toggleGroup(item.group) }}
                     className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      hasActiveChild && !isExpanded
+                      hasActiveChild || isHovered
                         ? 'bg-white/10 text-white'
                         : 'text-slate-300 hover:bg-white/8 hover:text-white'
                     }`}
@@ -223,7 +262,8 @@ export default function Sidebar({ open, onClose }) {
                     <span className="flex-1 text-left">{item.label}</span>
                     <Chev size={16} className="text-slate-500" />
                   </button>
-                  {isExpanded && (
+                  {/* Inline expansion only on touch devices */}
+                  {!canHover && isExpanded && (
                     <div className="mt-1 space-y-1">
                       {item.children.map(child => {
                         const ChildIcon = child.icon
@@ -314,6 +354,54 @@ export default function Sidebar({ open, onClose }) {
           </button>
         </div>
       </aside>
+
+      {/* ─── Hover flyout (desktop only) ───────────────────────────── */}
+      {flyout && typeof document !== 'undefined' && (() => {
+        const HeaderIcon = flyout.item.icon
+        return createPortal(
+        <div
+          onMouseEnter={cancelHideFlyout}
+          onMouseLeave={scheduleHideFlyout}
+          style={{ top: flyout.top, left: flyout.left }}
+          className="fixed z-[60] min-w-[220px] rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/40 p-2 animate-[flyoutIn_120ms_ease-out]"
+        >
+          <div className="px-3 pt-2 pb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+            <HeaderIcon size={12} />
+            {flyout.item.label}
+          </div>
+          <div className="space-y-0.5">
+            {flyout.item.children.map(child => {
+              const ChildIcon = child.icon
+              return (
+                <NavLink
+                  key={child.to}
+                  to={child.to}
+                  onClick={() => { setFlyout(null); onClose() }}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-white/15 text-white shadow-inner'
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`
+                  }
+                >
+                  <ChildIcon size={15} />
+                  {child.label}
+                </NavLink>
+              )
+            })}
+          </div>
+        </div>,
+        document.body
+      )})()}
+
+      {/* Flyout animation keyframes */}
+      <style>{`
+        @keyframes flyoutIn {
+          from { opacity: 0; transform: translateX(-6px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
     </>
   )
 }
