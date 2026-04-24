@@ -274,7 +274,7 @@ export default function Finance() {
   // ─── Sales staff for current view ────────────────────────────────────────
   const salesStaff = useMemo(() => {
     let staff = employees.filter(e =>
-      (e.role === 'sales' || e.role === 'rop') &&
+      (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director') &&
       e.status !== 'pending' &&
       e.status !== 'rejected' &&
       !e.deleted
@@ -599,7 +599,7 @@ export default function Finance() {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                      mgr.role === 'rop' ? 'bg-teal-600' : 'bg-emerald-600'
+                      mgr.role === 'rop' ? 'bg-teal-600' : mgr.role === 'branch_director' ? 'bg-indigo-600' : 'bg-emerald-600'
                     }`}>
                       {mgr.avatar || mgr.name?.charAt(0)}
                     </div>
@@ -608,7 +608,7 @@ export default function Finance() {
                         {mgr.name} {isCurrentUser && <span className="text-xs text-blue-500">{t('finance.you')}</span>}
                       </h4>
                       <p className="text-xs text-slate-500">
-                        {mgr.role === 'rop' ? t('finance.rop') : t('finance.manager')} · {mgr.branch === 'all' ? t('finance.all_branches') : (branches.find(b => b.id === mgr.branch)?.name || mgr.branch)}
+                        {mgr.role === 'rop' ? t('finance.rop') : mgr.role === 'branch_director' ? 'Руководитель филиала' : t('finance.manager')} · {mgr.branch === 'all' ? t('finance.all_branches') : (branches.find(b => b.id === mgr.branch)?.name || mgr.branch)}
                       </p>
                     </div>
                   </div>
@@ -900,12 +900,12 @@ export default function Finance() {
               >
                 <option value="">— не указан —</option>
                 {employees
-                  .filter(e => e.role === 'sales' || e.role === 'rop')
+                  .filter(e => e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
                   .filter(e => editForm.branch === 'all' || !editForm.branch || e.branch === editForm.branch || e.branch === 'all')
                   .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
                   .map(e => (
                     <option key={e.id} value={e.id}>
-                      {e.name} · {e.role === 'rop' ? 'РОП' : 'Менеджер'} · {branches.find(b => b.id === e.branch)?.name || e.branch}
+                      {e.name} · {e.role === 'rop' ? 'РОП' : e.role === 'branch_director' ? 'Руководитель филиала' : 'Менеджер'} · {branches.find(b => b.id === e.branch)?.name || e.branch}
                     </option>
                   ))}
               </select>

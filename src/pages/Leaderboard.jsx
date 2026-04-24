@@ -88,7 +88,7 @@ export default function Leaderboard() {
   // Get managers list
   const managers = useMemo(() => {
     return employees.filter(e =>
-      (e.role === 'sales' || e.role === 'rop') &&
+      (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director') &&
       !e.deleted &&
       e.status !== 'pending' &&
       e.status !== 'rejected' &&

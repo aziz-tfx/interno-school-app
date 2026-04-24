@@ -135,7 +135,7 @@ export default function Reports() {
   const isSales = user?.role === 'sales'
 
   const salesStaff = useMemo(() => {
-    return employees.filter(e => e.role === 'sales' || e.role === 'rop')
+    return employees.filter(e => e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
   }, [employees])
 
   const managers = useMemo(() => {

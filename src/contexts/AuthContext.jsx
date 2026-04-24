@@ -404,7 +404,7 @@ export function AuthProvider({ children }) {
       id: newId,
       tenantId: emp.tenantId || user?.tenantId || DEFAULT_TENANT_ID,
       avatar: emp.name?.charAt(0)?.toUpperCase() || '?',
-      managerId: (emp.role === 'sales' || emp.role === 'rop') ? `mgr_${newId}` : undefined,
+      managerId: (emp.role === 'sales' || emp.role === 'rop' || emp.role === 'branch_director') ? `mgr_${newId}` : undefined,
     }
     // Remove undefined fields (Firestore does not accept undefined)
     const cleanEmp = Object.fromEntries(
@@ -456,7 +456,7 @@ export function AuthProvider({ children }) {
 
   // Helper: get sales-related staff (for plan tracking)
   const getSalesStaff = (branchId) => {
-    const list = tenantEmployees.filter(e => e.role === 'sales' || e.role === 'rop')
+    const list = tenantEmployees.filter(e => e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
     if (!branchId || branchId === 'all') return list
     return list.filter(e => e.branch === branchId)
   }
