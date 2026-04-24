@@ -316,9 +316,16 @@ export default function Finance() {
       // Real payments — source of truth for revenue and sales count
       // (reportDaily drifts: not updated on payment edit/delete, and is written
       // under the logged-in user's name, not the payment's assigned manager)
-      const managerPayments = payments.filter(p =>
-        p.type === 'income' && p.managerId === emp.managerId && (p.date || '').startsWith(monthKey)
-      )
+      // Match by managerId when set, otherwise fall back to createdBy / name —
+      // legacy branch_director accounts may not yet have a managerId assigned.
+      const managerPayments = payments.filter(p => {
+        if (p.type !== 'income') return false
+        if (!(p.date || '').startsWith(monthKey)) return false
+        if (emp.managerId && p.managerId === emp.managerId) return true
+        if (p.createdBy && p.createdBy === emp.id) return true
+        if (p.createdByName && p.createdByName === emp.name) return true
+        return false
+      })
       const paymentsRevenue = managerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
       const actualSales = managerPayments.length
       const actualRevenue = paymentsRevenue

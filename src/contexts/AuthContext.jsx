@@ -310,6 +310,22 @@ export function AuthProvider({ children }) {
       setEmployees(list)
       setLoading(false)
 
+      // One-time backfill: sales-capable roles created before branch_director
+      // support was added may be missing a managerId, which breaks payment
+      // attribution (Finance KPI cards show zero). Assign one lazily.
+      try {
+        const needsBackfill = list.filter(e =>
+          !e.managerId &&
+          (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
+        )
+        for (const emp of needsBackfill) {
+          const newMgrId = `mgr_${emp.id || emp._docId || Date.now()}`
+          await updateDoc(doc(employeesRef, emp._docId || String(emp.id)), { managerId: newMgrId }).catch(() => {})
+        }
+      } catch (err) {
+        console.warn('managerId backfill failed:', err)
+      }
+
       // One-time seed: only if the bootstrap flag has never been written.
       // Prevents re-seeding when the collection becomes empty later
       // (e.g. after admin cleanup, rules flap, or hard-delete via console).
