@@ -1,3 +1,4 @@
+import { useState, useMemo, useEffect } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -10,11 +11,9 @@ import {
   UserCog,
   LogOut,
   Settings,
-  FileBarChart,
   X,
   Monitor,
   Plug,
-  Home,
   BarChart3,
   Trophy,
   Wallet,
@@ -24,6 +23,9 @@ import {
   Calendar,
   ScrollText,
   Zap,
+  ChevronDown,
+  ChevronRight,
+  Sliders,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -49,32 +51,108 @@ export default function Sidebar({ open, onClose }) {
     { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
   ]
 
+  // Grouped navigation for staff. A `group` item renders as an expandable
+  // section; its children are listed as leaf links when expanded.
+  // Flat leaves (no `group`) still render as a single link.
   const allNavItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard'), permission: 'dashboard' },
     { to: '/branches', icon: Building2, label: t('sidebar.branches'), permission: 'branches' },
     { to: '/students', icon: GraduationCap, label: t('sidebar.students'), permission: 'students' },
     { to: '/teachers', icon: Users, label: t('sidebar.teachers'), permission: 'teachers' },
-    { to: '/courses', icon: BookOpen, label: t('sidebar.courses'), permission: 'courses' },
-    { to: '/finance', icon: DollarSign, label: t('sidebar.finance'), permission: 'finance' },
+    {
+      group: 'learning',
+      icon: BookOpen,
+      label: 'Обучение',
+      children: [
+        { to: '/courses', icon: BookOpen, label: t('sidebar.courses'), permission: 'courses' },
+        { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
+      ],
+    },
+    {
+      group: 'sales',
+      icon: DollarSign,
+      label: t('sidebar.finance'),
+      children: [
+        { to: '/finance', icon: DollarSign, label: t('sidebar.finance'), permission: 'finance' },
+        { to: '/amo', icon: Zap, label: 'amoCRM эффективность', permission: 'finance' },
+        { to: '/leaderboard', icon: Trophy, label: t('sidebar.leaderboard'), permission: 'finance' },
+      ],
+    },
     { to: '/employees', icon: UserCog, label: t('sidebar.employees'), permission: 'employees' },
-    { to: '/reports', icon: FileBarChart, label: t('sidebar.reports'), permission: 'finance' },
-    { to: '/amo', icon: Zap, label: 'amoCRM эффективность', permission: 'finance' },
-    { to: '/leaderboard', icon: Trophy, label: t('sidebar.leaderboard'), permission: 'finance' },
-    { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
-    { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: 'attendance' },
-    { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
-    { to: '/audit', icon: ScrollText, label: t('sidebar.audit'), permission: 'audit' },
-    { to: '/integrations', icon: Plug, label: t('sidebar.integrations'), permission: 'settings' },
-    { to: '/contract-templates', icon: FileText, label: 'Шаблоны договоров', permission: 'settings' },
+    {
+      group: 'schedule',
+      icon: Calendar,
+      label: 'Расписание',
+      children: [
+        { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
+        { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: 'attendance' },
+      ],
+    },
+    {
+      group: 'settings',
+      icon: Sliders,
+      label: 'Настройки школы',
+      children: [
+        { to: '/integrations', icon: Plug, label: t('sidebar.integrations'), permission: 'settings' },
+        { to: '/contract-templates', icon: FileText, label: 'Шаблоны договоров', permission: 'settings' },
+        { to: '/audit', icon: ScrollText, label: t('sidebar.audit'), permission: 'audit' },
+      ],
+    },
     ...(user?.isSuperAdmin ? [{ to: '/superadmin', icon: Settings, label: 'SaaS панель', permission: null }] : []),
   ]
 
-  const navItems = user?.role === 'student'
-    ? studentNavItems.filter(item => !item.permission || hasPermission(item.permission))
-    : allNavItems.filter(item => {
-        if (item.permission === null) return true
-        return hasPermission(item.permission)
+  // Filter by permissions — hide groups that end up empty.
+  const filterByPerm = (item) => {
+    if (item.permission === null) return true
+    return hasPermission(item.permission)
+  }
+
+  const navItems = useMemo(() => {
+    if (user?.role === 'student') {
+      return studentNavItems.filter(it => !it.permission || hasPermission(it.permission))
+    }
+    return allNavItems
+      .map(item => {
+        if (item.group) {
+          const children = item.children.filter(filterByPerm)
+          return children.length ? { ...item, children } : null
+        }
+        return filterByPerm(item) ? item : null
       })
+      .filter(Boolean)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role, user?.customPermissions, t])
+
+  // Track which groups are open. Auto-open the group containing the
+  // currently active route so the user sees where they are.
+  const initialOpen = useMemo(() => {
+    const state = {}
+    allNavItems.forEach(it => {
+      if (it.group) {
+        state[it.group] = it.children.some(c => location.pathname.startsWith(c.to))
+      }
+    })
+    return state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [openGroups, setOpenGroups] = useState(initialOpen)
+
+  // Make sure the group containing the current route is open when route changes.
+  useEffect(() => {
+    setOpenGroups(prev => {
+      const next = { ...prev }
+      allNavItems.forEach(it => {
+        if (it.group && it.children.some(c => location.pathname.startsWith(c.to))) {
+          next[it.group] = true
+        }
+      })
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
+
+  const toggleGroup = (id) => setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }))
 
   const roleColors = {
     owner: 'bg-rose-600',
@@ -89,6 +167,13 @@ export default function Sidebar({ open, onClose }) {
     teacher: 'bg-purple-600',
     student: 'bg-slate-600',
   }
+
+  const linkClass = (isActive, indent = false) =>
+    `flex items-center gap-3 ${indent ? 'pl-10 pr-4' : 'px-4'} py-2.5 rounded-xl text-sm font-medium transition-all ${
+      isActive
+        ? 'bg-white/15 text-white shadow-lg shadow-blue-500/10 backdrop-blur-sm'
+        : 'text-slate-400 hover:bg-white/8 hover:text-white'
+    }`
 
   return (
     <>
@@ -116,8 +201,52 @@ export default function Sidebar({ open, onClose }) {
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item, idx) => {
             if (item.divider) return <div key={`div-${idx}`} className="my-2 border-t border-white/10" />
+
+            // ─── Group (expandable) ────────────────────────────────
+            if (item.group) {
+              const Icon = item.icon
+              const isExpanded = !!openGroups[item.group]
+              const hasActiveChild = item.children.some(c => location.pathname.startsWith(c.to))
+              const Chev = isExpanded ? ChevronDown : ChevronRight
+              return (
+                <div key={`grp-${item.group}`}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(item.group)}
+                    className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      hasActiveChild && !isExpanded
+                        ? 'bg-white/10 text-white'
+                        : 'text-slate-300 hover:bg-white/8 hover:text-white'
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span className="flex-1 text-left">{item.label}</span>
+                    <Chev size={16} className="text-slate-500" />
+                  </button>
+                  {isExpanded && (
+                    <div className="mt-1 space-y-1">
+                      {item.children.map(child => {
+                        const ChildIcon = child.icon
+                        return (
+                          <NavLink
+                            key={child.to}
+                            to={child.to}
+                            onClick={onClose}
+                            className={({ isActive }) => linkClass(isActive, true)}
+                          >
+                            <ChildIcon size={16} />
+                            {child.label}
+                          </NavLink>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            // ─── Flat leaf link ────────────────────────────────────
             const { to, icon: Icon, label } = item
-            // For student tab items with query params, check active state manually
             const isStudentTab = user?.role === 'student' && to.startsWith('/?tab=')
             const isHomeTab = user?.role === 'student' && to === '/'
             let isActive = false
@@ -137,13 +266,7 @@ export default function Sidebar({ open, onClose }) {
                   to={to}
                   onClick={onClose}
                   end
-                  className={
-                    `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      isActive
-                        ? 'bg-white/15 text-white shadow-lg shadow-blue-500/10 backdrop-blur-sm'
-                        : 'text-slate-400 hover:bg-white/8 hover:text-white'
-                    }`
-                  }
+                  className={linkClass(isActive)}
                 >
                   <Icon size={18} />
                   {label}
@@ -156,13 +279,7 @@ export default function Sidebar({ open, onClose }) {
                 key={to}
                 to={to}
                 onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-white/15 text-white shadow-lg shadow-blue-500/10 backdrop-blur-sm'
-                      : 'text-slate-400 hover:bg-white/8 hover:text-white'
-                  }`
-                }
+                className={({ isActive }) => linkClass(isActive)}
               >
                 <Icon size={18} />
                 {label}
