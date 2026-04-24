@@ -412,6 +412,8 @@ export default function Finance() {
   const openDoplata = () => { setPaymentType('doplata'); setPaymentModal(true) }
 
   // ─── Filtered recent transactions ───────────────────────────────────────
+  // Management roles (admin/owner/rop/branch_director) see EVERY sale for
+  // their scope; sales-only users still get a short preview.
   const recentTransactions = useMemo(() => {
     let filtered = payments.filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey))
     if (branchFilter !== 'all') filtered = filtered.filter(p => p.branch === branchFilter)
@@ -419,7 +421,8 @@ export default function Finance() {
     if ((isRop || isBranchDirector) && user.branch !== 'all') {
       filtered = filtered.filter(p => p.branch === user.branch)
     }
-    return filtered.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10)
+    const sorted = filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    return isSales ? sorted.slice(0, 10) : sorted
   }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user])
 
   // Status helpers
@@ -711,11 +714,16 @@ export default function Finance() {
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <ArrowUpRight size={20} className="text-emerald-600" />
           {t('finance.recent_sales')}
+          {!isSales && (
+            <span className="ml-auto text-xs font-normal text-slate-400">
+              {recentTransactions.length}
+            </span>
+          )}
         </h3>
         {recentTransactions.length === 0 ? (
           <p className="text-sm text-slate-400 text-center py-6">{t('finance.no_sales_period')}</p>
         ) : (
-          <div className="space-y-2">
+          <div className={`space-y-2 ${!isSales && recentTransactions.length > 10 ? 'max-h-[600px] overflow-y-auto pr-1' : ''}`}>
             {recentTransactions.map((p) => (
               <div key={p.id} className="flex items-center justify-between py-2.5 px-4 bg-emerald-50/60 rounded-xl hover:bg-emerald-50 transition-colors group">
                 <div className="min-w-0">
