@@ -20,7 +20,7 @@ const BRANCH_LABELS = {
 
 export default function Integrations() {
   const { t } = useLanguage()
-  const { user } = useAuth()
+  const { user, employees } = useAuth()
   const { payments, updatePayment, branches, groups, courses } = useData()
 
   const tenantId = user?.tenantId || DEFAULT_TENANT_ID
@@ -42,6 +42,15 @@ export default function Integrations() {
 
   const buildTelegramPayloadFromPayment = (p) => {
     const group = groups.find(g => String(g.id) === String(p.groupId))
+    // Route to the manager's branch group, not the sale's branch
+    const manager = employees.find(e =>
+      (p.managerId && e.managerId === p.managerId) ||
+      (p.createdBy && e.id === p.createdBy) ||
+      (p.createdByName && e.name === p.createdByName)
+    )
+    const routeBranch = (manager?.branch && manager.branch !== 'all')
+      ? manager.branch
+      : (p.branch || 'tashkent')
     return {
       clientName: p.student || p.clientName || '—',
       phone: p.phone || '',
@@ -51,7 +60,7 @@ export default function Integrations() {
       method: p.method || '',
       date: p.date || '',
       courseStartDate: p.courseStartDate || '',
-      branch: p.branch || 'tashkent',
+      branch: routeBranch,
       tariff: p.tariff || '',
       discount: p.discount || '',
       contractNumber: p.contractNumber || '',

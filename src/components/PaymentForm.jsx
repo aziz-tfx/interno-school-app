@@ -608,7 +608,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         method: form.method,
         date: form.paymentDate,
         courseStartDate: form.courseStartDate,
-        branch: form.branch,
+        // Route to the manager's branch group, not the sale's branch — a
+        // Tashkent manager closing a Samarkand client should still notify
+        // their own Tashkent group.
+        branch: (user?.branch && user.branch !== 'all') ? user.branch : form.branch,
         tariff: tariffLbl,
         discount: discountLbl,
         contractNumber: form.contractNumber,
