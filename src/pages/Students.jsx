@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X, Calendar, DoorOpen, ChevronDown, ChevronUp, Phone, LayoutGrid, CalendarRange, CheckSquare, Square, UserMinus, ArrowRightLeft, Snowflake } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
@@ -214,6 +214,20 @@ export default function Students() {
     setSyncResult(`Создано ${created} учеников из ${clientMap.size} уникальных клиентов`)
     setSyncing(false)
   }
+
+  // Auto-recover orphan payments → create missing student records on mount,
+  // silently. Covers cases where a sale was created but addStudent failed
+  // (e.g. transient Firestore error) so the manager doesn't have to click
+  // "Sync" manually to see the new client in the list.
+  const autoSyncedRef = useRef(false)
+  useEffect(() => {
+    if (autoSyncedRef.current) return
+    if (!students.length && !payments.length) return // wait for data
+    if (orphanPayments.length === 0) return
+    autoSyncedRef.current = true
+    handleSync().catch(err => console.warn('Auto orphan sync failed:', err))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [students.length, payments.length, orphanPayments.length])
 
   // ─── Bulk Actions ───
   const toggleSelect = (id) => {
