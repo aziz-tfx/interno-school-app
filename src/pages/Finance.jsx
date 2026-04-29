@@ -293,13 +293,20 @@ export default function Finance() {
     return staff
   }, [employees, branchFilter, isSales, isRop, isBranchDirector, user])
 
-  // Match a payment to a sales-staff employee. Legacy branch_director
-  // accounts may not have a managerId, so fall back to createdBy / name.
+  // Match a payment to a sales-staff employee. Each payment must belong to
+  // exactly one manager — otherwise the same sale appears in multiple
+  // cards (e.g. when the assigned managerId differs from createdByName
+  // because someone else closed/edited it) and the per-manager totals add
+  // up to more than the branch revenue. Prefer the explicit managerId on
+  // the payment; only fall back to creator fields when the payment has no
+  // managerId at all (legacy records).
   const matchesManager = (p, emp) => {
     if (!emp) return false
-    if (emp.managerId && p.managerId === emp.managerId) return true
-    if (p.createdBy && p.createdBy === emp.id) return true
-    if (p.createdByName && p.createdByName === emp.name) return true
+    if (p.managerId) {
+      return !!emp.managerId && p.managerId === emp.managerId
+    }
+    if (p.createdBy) return p.createdBy === emp.id
+    if (p.createdByName) return p.createdByName === emp.name
     return false
   }
 
