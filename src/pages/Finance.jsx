@@ -294,16 +294,19 @@ export default function Finance() {
   }, [employees, branchFilter, isSales, isRop, isBranchDirector, user])
 
   // Match a payment to a sales-staff employee. Each payment must belong to
-  // exactly one manager — otherwise the same sale appears in multiple
-  // cards (e.g. when the assigned managerId differs from createdByName
-  // because someone else closed/edited it) and the per-manager totals add
-  // up to more than the branch revenue. Prefer the explicit managerId on
-  // the payment; only fall back to creator fields when the payment has no
-  // managerId at all (legacy records).
+  // exactly one manager — otherwise the same sale either appears in multiple
+  // cards or vanishes from all of them, and the per-manager totals diverge
+  // from the branch revenue. Resolution rules:
+  //   1. If the payment has a managerId AND that id resolves to a known
+  //      employee, the payment belongs to that employee only.
+  //   2. Otherwise (no managerId, or it points at a deleted/unknown
+  //      account), fall back to createdBy → createdByName.
   const matchesManager = (p, emp) => {
     if (!emp) return false
     if (p.managerId) {
-      return !!emp.managerId && p.managerId === emp.managerId
+      const owner = employees.find(e => e.managerId === p.managerId)
+      if (owner) return owner.id === emp.id
+      // Orphan managerId — fall through to creator-based attribution.
     }
     if (p.createdBy) return p.createdBy === emp.id
     if (p.createdByName) return p.createdByName === emp.name
