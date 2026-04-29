@@ -403,12 +403,28 @@ export default function Finance() {
   }, [managerKPIs])
 
   // ─── Real revenue from actual payments (source of truth) ─────────────────
+  // Attribution follows the same rule as the manager cards: a sale belongs to
+  // the manager who closed it, and that manager's branch determines which
+  // branch total the sale rolls up into. So a Tashkent manager closing a
+  // Samarkand client still counts toward Tashkent's revenue, matching what
+  // the per-manager cards show on screen.
   const realRevenueData = useMemo(() => {
+    const matchesManagerBranch = (p, branchId) => {
+      const mgr = employees.find(e =>
+        (p.managerId && e.managerId === p.managerId) ||
+        (p.createdBy && e.id === p.createdBy) ||
+        (p.createdByName && e.name === p.createdByName)
+      )
+      if (mgr?.branch && mgr.branch !== 'all') return mgr.branch === branchId
+      // Fallback when no manager can be resolved: use the sale's branch.
+      return p.branch === branchId
+    }
+
     let filtered = payments.filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey))
-    if (branchFilter !== 'all') filtered = filtered.filter(p => p.branch === branchFilter)
+    if (branchFilter !== 'all') filtered = filtered.filter(p => matchesManagerBranch(p, branchFilter))
     if (isSales && user?.managerId) filtered = filtered.filter(p => p.managerId === user.managerId)
     if ((isRop || isBranchDirector) && user.branch !== 'all') {
-      filtered = filtered.filter(p => p.branch === user.branch)
+      filtered = filtered.filter(p => matchesManagerBranch(p, user.branch))
     }
     const revenue = filtered.reduce((sum, p) => sum + (p.amount || 0), 0)
     const salesCount = filtered.length
@@ -416,7 +432,7 @@ export default function Finance() {
     const offlineCount = filtered.filter(p => p.learningFormat === 'Оффлайн').length
     const onlineCount = filtered.filter(p => p.learningFormat === 'Онлайн').length
     return { revenue, salesCount, doplata, offlineCount, onlineCount }
-  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user])
+  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, employees])
 
   // ─── Month navigation ──────────────────────────────────────────────────
   const prevMonth = () => {
