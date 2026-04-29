@@ -326,9 +326,12 @@ export default function Finance() {
       // Real payments — source of truth for revenue and sales count
       // (reportDaily drifts: not updated on payment edit/delete, and is written
       // under the logged-in user's name, not the payment's assigned manager)
+      // Honor the active branch filter so per-manager revenue stays
+      // consistent with the aggregate KPIs at the top of the page.
       const managerPayments = payments.filter(p =>
         p.type === 'income' &&
         (p.date || '').startsWith(monthKey) &&
+        (branchFilter === 'all' || p.branch === branchFilter) &&
         matchesManager(p, emp)
       )
       const paymentsRevenue = managerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
@@ -379,7 +382,7 @@ export default function Finance() {
         achievedPct: planRevenue > 0 ? Math.round((actualRevenue / planRevenue) * 100) : 0,
       }
     })
-  }, [salesStaff, reportPlans, reportDaily, payments, monthKey])
+  }, [salesStaff, reportPlans, reportDaily, payments, monthKey, branchFilter])
 
   // ─── Team totals ─────────────────────────────────────────────────────────
   const teamTotals = useMemo(() => {
@@ -1034,7 +1037,9 @@ export default function Finance() {
                 <ShoppingCart size={14} />
                 Продажи ({(() => {
                   const mgrPayments = payments.filter(p =>
-                    p.type === 'income' && (p.date || '').startsWith(monthKey) && matchesManager(p, editingKpi)
+                    p.type === 'income' && (p.date || '').startsWith(monthKey) &&
+                    (branchFilter === 'all' || p.branch === branchFilter) &&
+                    matchesManager(p, editingKpi)
                   )
                   return mgrPayments.length
                 })()})
@@ -1057,7 +1062,9 @@ export default function Finance() {
             {/* Tab: Sales */}
             {mgrTab === 'sales' && (() => {
               const mgrPayments = payments
-                .filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey) && matchesManager(p, editingKpi))
+                .filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey) &&
+                  (branchFilter === 'all' || p.branch === branchFilter) &&
+                  matchesManager(p, editingKpi))
                 .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
               const totalRevenue = mgrPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
 
