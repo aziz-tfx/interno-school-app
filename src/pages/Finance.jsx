@@ -344,15 +344,16 @@ export default function Finance() {
       const actualSignups = actual.signups || 0
       const actualVisited = actual.visited || 0
 
-      // Real payments — source of truth for revenue and sales count
-      // (reportDaily drifts: not updated on payment edit/delete, and is written
-      // under the logged-in user's name, not the payment's assigned manager)
-      // Honor the active branch filter so per-manager revenue stays
-      // consistent with the aggregate KPIs at the top of the page.
+      // Real payments — source of truth for revenue and sales count.
+      // No filtering by p.branch here: salesStaff is already restricted to
+      // managers in the active branch, and a manager's number is the sum of
+      // their sales regardless of which branch the client belongs to (the
+      // top KPIs use the same manager-branch attribution). Filtering by
+      // sale.branch as well would silently drop cross-branch sales and the
+      // card total would no longer match the "Все филиалы" view.
       const managerPayments = payments.filter(p =>
         p.type === 'income' &&
         (p.date || '').startsWith(monthKey) &&
-        (branchFilter === 'all' || p.branch === branchFilter) &&
         matchesManager(p, emp)
       )
       const paymentsRevenue = managerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
