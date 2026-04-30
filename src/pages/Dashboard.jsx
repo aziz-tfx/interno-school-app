@@ -197,7 +197,7 @@ function BranchScoreRow({ branch, students, teachers, payments, rank, t }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Dashboard() {
   const { user, hasPermission, employees } = useAuth()
-  const { branches, students, teachers, payments, getDebtors, getBranchName } = useData()
+  const { branches, students, teachers, payments, courses, getDebtors, getBranchName } = useData()
   const { t } = useLanguage()
 
   const TABS = [
@@ -295,9 +295,15 @@ export default function Dashboard() {
       { name: t('dashboard.status_frozen'), value: frozenStudents, color: STATUS_COLORS.frozen },
     ].filter(d => d.value > 0)
 
-    // Course distribution from actual data
+    // Course distribution from actual data — only include courses that
+    // currently exist in the courses collection. Legacy student records
+    // can carry the name of a course that has since been removed (e.g. a
+    // school that was renamed or never offered that subject), and they
+    // would otherwise pollute the chart with phantom courses.
+    const validCourseNames = new Set(courses.map(c => c.name).filter(Boolean))
     const courseMap = {}
     scopedStudents.forEach(s => {
+      if (!s.course || !validCourseNames.has(s.course)) return
       courseMap[s.course] = (courseMap[s.course] || 0) + 1
     })
     const courseData = Object.entries(courseMap)
@@ -353,8 +359,16 @@ export default function Dashboard() {
     const todayIncome = todayPayments.filter(p => p.type === 'income').reduce((s, p) => s + p.amount, 0)
     const todayCount  = todayPayments.filter(p => p.type === 'income').length
 
-    // Employee stats
-    const totalEmployees = employees?.length || 0
+    // Employee stats — only count active accounts (drop pending/rejected
+    // and accounts marked as deleted) and sales/operational roles, not
+    // student-side accounts. Without this the card showed every record
+    // ever created in the employees collection.
+    const totalEmployees = (employees || []).filter(e =>
+      !e.deleted &&
+      e.status !== 'pending' &&
+      e.status !== 'rejected' &&
+      e.role !== 'student'
+    ).length
 
     return {
       totalIncome, totalExpense, profit, margin,
@@ -366,7 +380,7 @@ export default function Dashboard() {
       monthlyTrend, branchRevenueData,
       todayIncome, todayCount, totalEmployees,
     }
-  }, [scopedStudents, scopedTeachers, scopedPayments, branches, payments, employees, user.branch, filterByDate, t])
+  }, [scopedStudents, scopedTeachers, scopedPayments, branches, payments, employees, courses, user.branch, filterByDate, t])
 
   // ── Visible tabs ─────────────────────────────────────────────────────
   const visibleTabs = TABS.filter(t => {
