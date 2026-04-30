@@ -293,24 +293,35 @@ export default function Finance() {
     return staff
   }, [employees, branchFilter, isSales, isRop, isBranchDirector, user])
 
-  // Match a payment to a sales-staff employee. Each payment must belong to
-  // exactly one manager — otherwise the same sale either appears in multiple
-  // cards or vanishes from all of them, and the per-manager totals diverge
-  // from the branch revenue. Resolution rules:
-  //   1. If the payment has a managerId AND that id resolves to a known
-  //      employee, the payment belongs to that employee only.
-  //   2. Otherwise (no managerId, or it points at a deleted/unknown
-  //      account), fall back to createdBy → createdByName.
-  const matchesManager = (p, emp) => {
-    if (!emp) return false
+  // Resolve which sales-capable employee owns a given payment. Each payment
+  // gets exactly one owner so per-card totals can never double-count, but a
+  // managerId / createdBy that points at a non-sales account (e.g. the
+  // owner created the sale on behalf of a manager and the dropdown stored
+  // the owner's id) is skipped so the sale doesn't vanish from every card.
+  // Resolution priority: managerId → createdBy → createdByName, and at each
+  // step the candidate must be a current sales-capable employee.
+  const isSalesCapable = (e) =>
+    !!e && (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
+
+  const resolveOwner = (p) => {
     if (p.managerId) {
-      const owner = employees.find(e => e.managerId === p.managerId)
-      if (owner) return owner.id === emp.id
-      // Orphan managerId — fall through to creator-based attribution.
+      const o = employees.find(e => e.managerId === p.managerId && isSalesCapable(e))
+      if (o) return o
     }
-    if (p.createdBy) return p.createdBy === emp.id
-    if (p.createdByName) return p.createdByName === emp.name
-    return false
+    if (p.createdBy) {
+      const o = employees.find(e => e.id === p.createdBy && isSalesCapable(e))
+      if (o) return o
+    }
+    if (p.createdByName) {
+      const o = employees.find(e => e.name === p.createdByName && isSalesCapable(e))
+      if (o) return o
+    }
+    return null
+  }
+
+  const matchesManager = (p, emp) => {
+    const owner = resolveOwner(p)
+    return owner ? owner.id === emp.id : false
   }
 
   // ─── Build manager KPI data from reports ─────────────────────────────────
@@ -420,13 +431,9 @@ export default function Finance() {
   // the per-manager cards show on screen.
   const realRevenueData = useMemo(() => {
     const matchesManagerBranch = (p, branchId) => {
-      const mgr = employees.find(e =>
-        (p.managerId && e.managerId === p.managerId) ||
-        (p.createdBy && e.id === p.createdBy) ||
-        (p.createdByName && e.name === p.createdByName)
-      )
-      if (mgr?.branch && mgr.branch !== 'all') return mgr.branch === branchId
-      // Fallback when no manager can be resolved: use the sale's branch.
+      const owner = resolveOwner(p)
+      if (owner?.branch && owner.branch !== 'all') return owner.branch === branchId
+      // No sales-capable owner resolved → fall back to the sale's branch.
       return p.branch === branchId
     }
 
