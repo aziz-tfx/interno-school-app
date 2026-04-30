@@ -131,13 +131,18 @@ function KpiCard({ title, value, subtitle, icon: Icon, color, trend, trendLabel 
 
 // ─── Branch Scorecard Row ─────────────────────────────────────────────────────
 function BranchScoreRow({ branch, students, teachers, payments, rank, t }) {
+  // All metrics are computed live from user-entered data only — no
+  // branch.monthlyRevenue / branch.students / branch.teachers fallbacks
+  // (those are seed values that drift away from reality).
   const branchStudents = students.filter(s => s.branch === branch.id)
-  const branchTeachers = teachers.filter(t => t.branch === branch.id)
-  const branchIncome = payments.filter(p => p.branch === branch.id && p.type === 'income').reduce((s, p) => s + p.amount, 0)
-  const actualStudents = branchStudents.length || branch.students
+  const branchTeachers = teachers.filter(tt => tt.branch === branch.id)
+  const branchPayments = payments.filter(p => p.branch === branch.id)
+  const branchIncome = branchPayments.filter(p => p.type === 'income').reduce((s, p) => s + p.amount, 0)
+  const branchExpense = branchPayments.filter(p => p.type === 'expense').reduce((s, p) => s + p.amount, 0)
+  const actualStudents = branchStudents.length
   const occupancy = branch.capacity > 0 ? pct(actualStudents, branch.capacity) : 0
-  const profit = (branch.monthlyRevenue || branchIncome) - (branch.monthlyExpenses || 0)
-  const margin = (branch.monthlyRevenue || branchIncome) > 0 ? pct(profit, branch.monthlyRevenue || branchIncome) : 0
+  const profit = branchIncome - branchExpense
+  const margin = branchIncome > 0 ? pct(profit, branchIncome) : 0
   const debtors = branchStudents.filter(s => s.status === 'debtor').length
   const avgPerStudent = actualStudents > 0 ? Math.round(branchIncome / actualStudents) : 0
 
@@ -167,13 +172,13 @@ function BranchScoreRow({ branch, students, teachers, payments, rank, t }) {
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${occColor}`}>{occupancy}%</span>
       </td>
       <td className="py-4 px-3 text-right">
-        <p className="text-sm font-bold text-emerald-600">{fmtShort(branch.monthlyRevenue || branchIncome, t)}</p>
+        <p className="text-sm font-bold text-emerald-600">{fmtShort(branchIncome, t)}</p>
       </td>
       <td className="py-4 px-3 text-right hidden md:table-cell">
         <p className={`text-sm font-bold ${marginColor}`}>{margin}%</p>
       </td>
       <td className="py-4 px-3 text-center hidden lg:table-cell">
-        <p className="text-sm font-semibold text-slate-700">{branchTeachers.length || branch.teachers}</p>
+        <p className="text-sm font-semibold text-slate-700">{branchTeachers.length}</p>
       </td>
       <td className="py-4 px-3 text-center hidden lg:table-cell">
         {debtors > 0
@@ -807,13 +812,16 @@ export default function Dashboard() {
       {/* ═══════ BRANCHES TAB ═══════ */}
       {activeTab === 'branches' && canFullPnL && (
         <>
-          {/* Summary row */}
+          {/* Summary row — computed live from real payments */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard title={t('dashboard.branches_tab_count')} value={branches.length} icon={Building2} color="blue" />
             <KpiCard title={t('dashboard.branches_total_capacity')} value={branches.reduce((s, b) => s + (b.capacity || 0), 0)} icon={Users} color="purple"
               subtitle={`${t('dashboard.load')}: ${metrics.utilization}%`} />
-            <KpiCard title={t('dashboard.branches_total_income')} value={fmtShort(branches.reduce((s, b) => s + (b.monthlyRevenue || 0), 0), t)} icon={DollarSign} color="green" />
-            <KpiCard title={t('dashboard.branches_total_profit')} value={fmtShort(branches.reduce((s, b) => s + ((b.monthlyRevenue || 0) - (b.monthlyExpenses || 0)), 0), t)} icon={TrendingUp} color="teal" />
+            <KpiCard title={t('dashboard.branches_total_income')} value={fmtShort(payments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0), t)} icon={DollarSign} color="green" />
+            <KpiCard title={t('dashboard.branches_total_profit')} value={fmtShort(
+              payments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
+              - payments.filter(p => p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
+            , t)} icon={TrendingUp} color="teal" />
           </div>
 
           {/* Branch Scoreboard */}
@@ -839,9 +847,13 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {[...branches]
-                    .sort((a, b) => (b.monthlyRevenue || 0) - (a.monthlyRevenue || 0))
-                    .map((branch, i) => (
-                      <BranchScoreRow key={branch.id} branch={branch} students={students} teachers={teachers} payments={payments} rank={i} t={t} />
+                    .map(b => ({
+                      branch: b,
+                      income: payments.filter(p => p.branch === b.id && p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0),
+                    }))
+                    .sort((a, b) => b.income - a.income)
+                    .map((row, i) => (
+                      <BranchScoreRow key={row.branch.id} branch={row.branch} students={students} teachers={teachers} payments={payments} rank={i} t={t} />
                     ))}
                 </tbody>
               </table>
@@ -855,7 +867,7 @@ export default function Dashboard() {
               <p className="text-xs text-slate-400 mb-4">{t('dashboard.branch_capacity_subtitle')}</p>
               <div className="space-y-4">
                 {branches.map((b) => {
-                  const actual = students.filter(s => s.branch === b.id).length || b.students
+                  const actual = students.filter(s => s.branch === b.id).length
                   const occ = b.capacity > 0 ? pct(actual, b.capacity) : 0
                   return (
                     <div key={b.id}>
@@ -880,12 +892,16 @@ export default function Dashboard() {
               <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.profitability')}</h3>
               <p className="text-xs text-slate-400 mb-4">{t('dashboard.profitability_subtitle')}</p>
               <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={branches.map(b => ({
-                  name: b.name,
-                  income: Math.round((b.monthlyRevenue || 0) / 1e6),
-                  expense: Math.round((b.monthlyExpenses || 0) / 1e6),
-                  profit: Math.round(((b.monthlyRevenue || 0) - (b.monthlyExpenses || 0)) / 1e6),
-                }))}>
+                <BarChart data={branches.map(b => {
+                  const inc = payments.filter(p => p.branch === b.id && p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
+                  const exp = payments.filter(p => p.branch === b.id && p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
+                  return {
+                    name: b.name,
+                    income: Math.round(inc / 1e6),
+                    expense: Math.round(exp / 1e6),
+                    profit: Math.round((inc - exp) / 1e6),
+                  }
+                })}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
