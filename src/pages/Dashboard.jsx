@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   GraduationCap, Users, Building2, DollarSign, TrendingUp, TrendingDown,
   BookOpen, UserMinus, Wallet, ArrowUpRight, ArrowDownRight, Activity,
@@ -232,6 +233,35 @@ export default function Dashboard() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [showTimePicker, setShowTimePicker] = useState(false)
+  const timePickerBtnRef = useRef(null)
+  const [pickerPos, setPickerPos] = useState({ top: 0, left: 0, width: 0 })
+
+  useEffect(() => {
+    if (!showTimePicker) return
+    const updatePos = () => {
+      const r = timePickerBtnRef.current?.getBoundingClientRect()
+      if (!r) return
+      setPickerPos({ top: r.bottom + 8, right: window.innerWidth - r.right })
+    }
+    updatePos()
+    window.addEventListener('scroll', updatePos, true)
+    window.addEventListener('resize', updatePos)
+    return () => {
+      window.removeEventListener('scroll', updatePos, true)
+      window.removeEventListener('resize', updatePos)
+    }
+  }, [showTimePicker])
+
+  useEffect(() => {
+    if (!showTimePicker) return
+    const onClickAway = (e) => {
+      if (timePickerBtnRef.current?.contains(e.target)) return
+      if (e.target.closest('[data-timepicker-popover]')) return
+      setShowTimePicker(false)
+    }
+    document.addEventListener('mousedown', onClickAway)
+    return () => document.removeEventListener('mousedown', onClickAway)
+  }, [showTimePicker])
 
   const dateRange = useMemo(() => getDateRange(timePeriod, customFrom, customTo), [timePeriod, customFrom, customTo])
 
@@ -453,6 +483,7 @@ export default function Dashboard() {
           ))}
           <div className="relative">
             <button
+              ref={timePickerBtnRef}
               onClick={() => { setShowTimePicker(!showTimePicker); if (timePeriod !== 'custom') setTimePeriod('custom') }}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
                 timePeriod === 'custom'
@@ -466,37 +497,6 @@ export default function Dashboard() {
                 : t('dashboard.time_custom')}
               <ChevronDown size={12} className={`transition-transform ${showTimePicker ? 'rotate-180' : ''}`} />
             </button>
-            {showTimePicker && (
-              <div className="absolute right-0 top-full mt-2 glass-strong rounded-xl shadow-xl p-4 z-50 min-w-[280px]">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{t('dashboard.custom_period')}</p>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">{t('dashboard.custom_start')}</label>
-                    <input
-                      type="date"
-                      value={customFrom}
-                      onChange={e => { setCustomFrom(e.target.value); setTimePeriod('custom') }}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">{t('dashboard.custom_end')}</label>
-                    <input
-                      type="date"
-                      value={customTo}
-                      onChange={e => { setCustomTo(e.target.value); setTimePeriod('custom') }}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setShowTimePicker(false)}
-                    className="w-full bg-blue-600 text-white text-sm font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    {t('dashboard.apply')}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Active filter indicator */}
@@ -966,6 +966,45 @@ export default function Dashboard() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Portal-rendered date picker popover so it isn't clipped by glass-card
+          stacking contexts further down the page. */}
+      {showTimePicker && createPortal(
+        <div
+          data-timepicker-popover
+          className="fixed glass-strong rounded-xl shadow-xl p-4 min-w-[280px]"
+          style={{ top: pickerPos.top, right: pickerPos.right, zIndex: 9999 }}
+        >
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{t('dashboard.custom_period')}</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">{t('dashboard.custom_start')}</label>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={e => { setCustomFrom(e.target.value); setTimePeriod('custom') }}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">{t('dashboard.custom_end')}</label>
+              <input
+                type="date"
+                value={customTo}
+                onChange={e => { setCustomTo(e.target.value); setTimePeriod('custom') }}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+            </div>
+            <button
+              onClick={() => setShowTimePicker(false)}
+              className="w-full bg-blue-600 text-white text-sm font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              {t('dashboard.apply')}
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )
