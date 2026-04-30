@@ -24,9 +24,10 @@ const METRICS_KEYS = [
   { key: 'convSignups', labelKey: 'reports.metric_conv_signups',   editable: false },
   { key: 'visited',     labelKey: 'reports.metric_visited',       editable: true },
   { key: 'convVisited', labelKey: 'reports.metric_conv_visited',   editable: false },
-  { key: 'sales',       labelKey: 'reports.metric_sales',          editable: true },
+  // sales / revenue are auto-derived from real payments, never edited here
+  { key: 'sales',       labelKey: 'reports.metric_sales',          editable: false },
   { key: 'convSales',   labelKey: 'reports.metric_conv_sales',   editable: false },
-  { key: 'revenue',     labelKey: 'reports.metric_revenue',                editable: true },
+  { key: 'revenue',     labelKey: 'reports.metric_revenue',                editable: false },
 ]
 
 const WEEK_RANGES = [
@@ -129,7 +130,7 @@ function distributeSeedData(totals, year, month) {
 export default function Reports() {
   const { t } = useLanguage()
   const { user, employees } = useAuth()
-  const { setSalesPlan } = useData()
+  const { setSalesPlan, payments } = useData()
   const METRICS = useMemo(() => METRICS_KEYS.map(m => ({ ...m, label: t(m.labelKey) })), [t])
   const isAdmin = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'rop'
   const isSales = user?.role === 'sales'
@@ -271,6 +272,48 @@ export default function Reports() {
     }
   }
 
+  // ─── Live sales / revenue from real payments ─────────────────────────────
+  // Reports used to read sales count and revenue out of reportDaily, which is
+  // a manually-entered table. Whenever a sale was created/edited via Finance
+  // those numbers stayed stale. Derive them straight from the payments
+  // collection so the report always matches the Finance KPI cards.
+  const isSalesCapable = (e) =>
+    !!e && (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
+
+  const resolveOwner = useCallback((p) => {
+    if (p.managerId) {
+      const o = employees.find(e => e.managerId === p.managerId && isSalesCapable(e))
+      if (o) return o
+    }
+    if (p.createdBy) {
+      const o = employees.find(e => e.id === p.createdBy && isSalesCapable(e))
+      if (o) return o
+    }
+    if (p.createdByName) {
+      const o = employees.find(e => e.name === p.createdByName && isSalesCapable(e))
+      if (o) return o
+    }
+    return null
+  }, [employees])
+
+  // { manager_name: { day_of_month: { sales: count, revenue: sum } } }
+  const liveSalesByMgr = useMemo(() => {
+    const map = {}
+    for (const p of payments) {
+      if (p.type !== 'income') continue
+      if (!(p.date || '').startsWith(monthKey)) continue
+      const owner = resolveOwner(p)
+      if (!owner) continue
+      const day = Number((p.date || '').slice(8, 10))
+      if (!day) continue
+      if (!map[owner.name]) map[owner.name] = {}
+      if (!map[owner.name][day]) map[owner.name][day] = { sales: 0, revenue: 0 }
+      map[owner.name][day].sales += 1
+      map[owner.name][day].revenue += Number(p.amount) || 0
+    }
+    return map
+  }, [payments, monthKey, resolveOwner])
+
   // ─── Computed data ────────────────────────────────────────────────────────
 
   const visibleManagers = useMemo(() => {
@@ -283,29 +326,42 @@ export default function Reports() {
     return managers
   }, [managerFilter, isAdmin, isSales, user, managers])
 
+  // For 'sales' and 'revenue' the live payments map is the source of truth.
+  // Other metrics (leads, conversations, signups, visited) still come from
+  // reportDaily because there's no automatic feed for them.
+  const isLiveMetric = (k) => k === 'sales' || k === 'revenue'
+
   // Compute monthly fact for a manager + metric
   const getMonthlyFact = useCallback((manager, metricKey) => {
+    if (isLiveMetric(metricKey)) {
+      const mgrDays = liveSalesByMgr[manager]
+      if (!mgrDays) return 0
+      return Object.values(mgrDays).reduce((sum, d) => sum + (d[metricKey] || 0), 0)
+    }
     const mgrDays = dailyData[manager]
     if (!mgrDays) return 0
     return Object.values(mgrDays).reduce((sum, d) => sum + (d[metricKey] || 0), 0)
-  }, [dailyData])
+  }, [dailyData, liveSalesByMgr])
 
   // Get value for a specific day
   const getDayValue = useCallback((manager, metricKey, day) => {
+    if (isLiveMetric(metricKey)) {
+      return liveSalesByMgr[manager]?.[day]?.[metricKey] || 0
+    }
     return dailyData[manager]?.[day]?.[metricKey] || 0
-  }, [dailyData])
+  }, [dailyData, liveSalesByMgr])
 
   // Week total
   const getWeekTotal = useCallback((manager, metricKey, weekStart, weekEnd) => {
-    const mgrDays = dailyData[manager]
-    if (!mgrDays) return 0
+    const source = isLiveMetric(metricKey) ? liveSalesByMgr[manager] : dailyData[manager]
+    if (!source) return 0
     let sum = 0
     const maxDay = Math.min(weekEnd, daysInMonth)
     for (let d = weekStart; d <= maxDay; d++) {
-      sum += mgrDays[d]?.[metricKey] || 0
+      sum += source[d]?.[metricKey] || 0
     }
     return sum
-  }, [dailyData, daysInMonth])
+  }, [dailyData, liveSalesByMgr, daysInMonth])
 
   // Conversion calculations
   const calcConversion = useCallback((numerator, denominator) => {
