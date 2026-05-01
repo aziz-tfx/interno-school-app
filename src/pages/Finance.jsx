@@ -33,7 +33,7 @@ export default function Finance() {
   const navigate = useNavigate()
   const { user, hasPermission, employees, getSalesStaff } = useAuth()
   const tenantId = user?.tenantId || 'default'
-  const { branches, payments, getSalesPlan, getManagerPerf, setSalesPlan, updatePayment, deletePayment, courses } = useData()
+  const { branches, payments, students, getSalesPlan, getManagerPerf, setSalesPlan, updatePayment, deletePayment, courses } = useData()
 
   function formatRevenue(val) {
     if (val == null || val === 0) return '0'
@@ -315,6 +315,22 @@ export default function Finance() {
     if (p.createdByName) {
       const o = employees.find(e => e.name === p.createdByName && isSalesCapable(e))
       if (o) return o
+    }
+    // Final fallback — owner-created sales can carry the owner's id in
+    // managerId/createdBy, so look at the linked student record (the
+    // student is typically created by the manager who closed the deal).
+    if (p.studentId) {
+      const stu = students.find(s => String(s.id) === String(p.studentId))
+      if (stu) {
+        if (stu.createdBy) {
+          const o = employees.find(e => e.id === stu.createdBy && isSalesCapable(e))
+          if (o) return o
+        }
+        if (stu.createdByName) {
+          const o = employees.find(e => e.name === stu.createdByName && isSalesCapable(e))
+          if (o) return o
+        }
+      }
     }
     return null
   }
