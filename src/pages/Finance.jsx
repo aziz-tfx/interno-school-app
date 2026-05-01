@@ -336,8 +336,21 @@ export default function Finance() {
   }
 
   const matchesManager = (p, emp) => {
+    if (Array.isArray(p.splits) && p.splits.length >= 2) {
+      return p.splits.some(s => s.managerId && s.managerId === emp.managerId)
+    }
     const owner = resolveOwner(p)
     return owner ? owner.id === emp.id : false
+  }
+
+  // For split payments, this returns just the share that belongs to `emp`.
+  // For regular payments, returns the full amount when emp owns it.
+  const amountForManager = (p, emp) => {
+    if (Array.isArray(p.splits) && p.splits.length >= 2) {
+      const share = p.splits.find(s => s.managerId && s.managerId === emp.managerId)
+      return share ? Number(share.amount) || 0 : 0
+    }
+    return matchesManager(p, emp) ? Number(p.amount) || 0 : 0
   }
 
   // ─── Build manager KPI data from reports ─────────────────────────────────
@@ -372,7 +385,8 @@ export default function Finance() {
         (p.date || '').startsWith(monthKey) &&
         matchesManager(p, emp)
       )
-      const paymentsRevenue = managerPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+      // Revenue is summed per share when the payment is split, else full amount.
+      const paymentsRevenue = managerPayments.reduce((s, p) => s + amountForManager(p, emp), 0)
       const actualSales = managerPayments.length
       const actualRevenue = paymentsRevenue
 
@@ -448,19 +462,43 @@ export default function Finance() {
   // the per-manager cards show on screen.
   const realRevenueData = useMemo(() => {
     const matchesManagerBranch = (p, branchId) => {
+      if (Array.isArray(p.splits) && p.splits.length >= 2) {
+        return p.splits.some(s => {
+          const e = employees.find(x => x.managerId === s.managerId)
+          return e?.branch === branchId
+        })
+      }
       const owner = resolveOwner(p)
       if (owner?.branch && owner.branch !== 'all') return owner.branch === branchId
-      // No sales-capable owner resolved → fall back to the sale's branch.
       return p.branch === branchId
+    }
+    // Per-branch share of a payment — splits are credited per their share.
+    const amountForBranch = (p, branchId) => {
+      if (Array.isArray(p.splits) && p.splits.length >= 2) {
+        return p.splits.reduce((s, sp) => {
+          const e = employees.find(x => x.managerId === sp.managerId)
+          return e?.branch === branchId ? s + (Number(sp.amount) || 0) : s
+        }, 0)
+      }
+      return Number(p.amount) || 0
     }
 
     let filtered = payments.filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey))
     if (branchFilter !== 'all') filtered = filtered.filter(p => matchesManagerBranch(p, branchFilter))
-    if (isSales && user?.managerId) filtered = filtered.filter(p => p.managerId === user.managerId)
+    if (isSales && user?.managerId) {
+      filtered = filtered.filter(p =>
+        p.managerId === user.managerId ||
+        (Array.isArray(p.splits) && p.splits.some(s => s.managerId === user.managerId))
+      )
+    }
     if ((isRop || isBranchDirector) && user.branch !== 'all') {
       filtered = filtered.filter(p => matchesManagerBranch(p, user.branch))
     }
-    const revenue = filtered.reduce((sum, p) => sum + (p.amount || 0), 0)
+    const revenue = filtered.reduce((sum, p) => {
+      if (branchFilter !== 'all') return sum + amountForBranch(p, branchFilter)
+      if ((isRop || isBranchDirector) && user.branch !== 'all') return sum + amountForBranch(p, user.branch)
+      return sum + (p.amount || 0)
+    }, 0)
     const salesCount = filtered.length
     const doplata = filtered.filter(p => (p.trancheNumber || 1) > 1).reduce((s, p) => s + p.amount, 0)
     const offlineCount = filtered.filter(p => p.learningFormat === 'Оффлайн').length
@@ -811,6 +849,11 @@ export default function Finance() {
                   {p.createdByName && (
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       {t('students.created_by')}: <span className="text-slate-600 font-medium">{p.createdByName}</span>
+                    </p>
+                  )}
+                  {Array.isArray(p.splits) && p.splits.length >= 2 && (
+                    <p className="text-[11px] text-purple-600 mt-0.5">
+                      Разделено: {p.splits.map(s => `${s.name} (${formatCurrency(s.amount)})`).join(' · ')}
                     </p>
                   )}
                 </div>

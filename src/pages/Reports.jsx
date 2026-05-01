@@ -313,22 +313,35 @@ export default function Reports() {
   }, [employees, students])
 
   // { manager_name: { day_of_month: { sales: count, revenue: sum } } }
+  // Split payments credit each manager their share. A split sale counts as
+  // one sale for each manager in the split, with its share added to revenue.
   const liveSalesByMgr = useMemo(() => {
     const map = {}
+    const credit = (name, day, amount) => {
+      if (!map[name]) map[name] = {}
+      if (!map[name][day]) map[name][day] = { sales: 0, revenue: 0 }
+      map[name][day].sales += 1
+      map[name][day].revenue += amount
+    }
     for (const p of payments) {
       if (p.type !== 'income') continue
       if (!(p.date || '').startsWith(monthKey)) continue
-      const owner = resolveOwner(p)
-      if (!owner) continue
       const day = Number((p.date || '').slice(8, 10))
       if (!day) continue
-      if (!map[owner.name]) map[owner.name] = {}
-      if (!map[owner.name][day]) map[owner.name][day] = { sales: 0, revenue: 0 }
-      map[owner.name][day].sales += 1
-      map[owner.name][day].revenue += Number(p.amount) || 0
+      if (Array.isArray(p.splits) && p.splits.length >= 2) {
+        for (const sp of p.splits) {
+          const e = employees.find(x => x.managerId === sp.managerId)
+          if (!e) continue
+          credit(e.name, day, Number(sp.amount) || 0)
+        }
+      } else {
+        const owner = resolveOwner(p)
+        if (!owner) continue
+        credit(owner.name, day, Number(p.amount) || 0)
+      }
     }
     return map
-  }, [payments, monthKey, resolveOwner])
+  }, [payments, monthKey, resolveOwner, employees])
 
   // ─── Computed data ────────────────────────────────────────────────────────
 

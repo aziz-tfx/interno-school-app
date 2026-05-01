@@ -51,8 +51,16 @@ const FORMAT_OPTIONS = [
 export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new' }) {
   const isDoplata = mode === 'doplata'
   const { branches, students, payments, addPayment, updatePayment, addStudent, updateStudent, groups, courses } = useData()
-  const { user, hasPermission } = useAuth()
+  const { user, hasPermission, employees } = useAuth()
   const { t } = useLanguage()
+
+  // Sales-capable accounts available for splitting a payment between managers.
+  const splitCandidates = (employees || []).filter(e =>
+    !e.deleted &&
+    e.status !== 'pending' &&
+    e.status !== 'rejected' &&
+    (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
+  )
 
   const canExpenses = hasPermission('finance', 'expenses')
   const fileInputRef = useRef(null)
@@ -88,6 +96,36 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     payerCompanyBank: '',
     payerCompanyPhone: '',
   })
+
+  // Optional split between multiple sales-capable managers.
+  // [] means no split (legacy single-manager attribution applies).
+  const [splits, setSplits] = useState([])
+  const splitsTotal = splits.reduce((s, sp) => s + (Number(sp.amount) || 0), 0)
+  const splitsValid = splits.length === 0 || (splits.length >= 2
+    && splits.every(s => s.managerId && Number(s.amount) > 0)
+    && splitsTotal === Number(form.amount || 0))
+
+  const addSplitRow = () => {
+    if (splits.length === 0) {
+      // Initialize with the current user as the first split (full amount).
+      const me = splitCandidates.find(e => e.id === user?.id)
+      setSplits([
+        { managerId: me?.managerId || user?.managerId || '', name: me?.name || user?.name || '', amount: Number(form.amount) || 0 },
+        { managerId: '', name: '', amount: 0 },
+      ])
+    } else {
+      setSplits([...splits, { managerId: '', name: '', amount: 0 }])
+    }
+  }
+  const updateSplit = (i, patch) => {
+    setSplits(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s))
+  }
+  const removeSplit = (i) => {
+    setSplits(prev => {
+      const next = prev.filter((_, idx) => idx !== i)
+      return next.length < 2 ? [] : next
+    })
+  }
 
   const [files, setFiles] = useState([])
   const [duplicateWarning, setDuplicateWarning] = useState(null) // { matches: [] }
@@ -329,6 +367,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
     bypassDuplicateRef.current = false
 
+    // Block save when splits are enabled but invalid (no manager picked,
+    // duplicate manager, or shares don't sum to the payment total).
+    if (splits.length > 0 && !splitsValid) {
+      alert('Проверьте разделение продажи: каждому менеджеру нужна сумма, и сумма долей должна совпадать с общей.')
+      return
+    }
+
     // Lock out further submits immediately
     submittingRef.current = true
     setSubmitting(true)
@@ -443,6 +488,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       createdBy: user?.id || null,
       createdByName: user?.name || '',
       createdAt: new Date().toISOString(),
+      // splits = [{ managerId, name, amount }] when this sale is shared
+      // between several managers; revenue is then credited per share.
+      splits: splits.length >= 2 ? splits.map(s => ({
+        managerId: s.managerId,
+        name: s.name,
+        amount: Number(s.amount) || 0,
+      })) : null,
     }
 
     const saved = await addPayment(paymentData)
@@ -1442,6 +1494,65 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                   {studentPayments.length + 1}
                 </div>
               </div>
+            </div>
+
+            {/* ─── Optional split between managers ─── */}
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Разделить продажу</p>
+                  <p className="text-[11px] text-slate-400">Если этой продажей занимались несколько менеджеров — укажи долю каждого.</p>
+                </div>
+                {splits.length === 0 && (
+                  <button type="button" onClick={addSplitRow}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 bg-white">
+                    + Разделить
+                  </button>
+                )}
+              </div>
+              {splits.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {splits.map((sp, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <select value={sp.managerId}
+                        onChange={(e) => {
+                          const id = e.target.value
+                          const mgr = splitCandidates.find(m => m.managerId === id)
+                          updateSplit(i, { managerId: id, name: mgr?.name || '' })
+                        }}
+                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">— менеджер —</option>
+                        {splitCandidates
+                          .filter(m => m.managerId && (m.managerId === sp.managerId || !splits.some(s2 => s2.managerId === m.managerId)))
+                          .map(m => (
+                            <option key={m.id} value={m.managerId}>
+                              {m.name} · {m.role === 'rop' ? 'РОП' : m.role === 'branch_director' ? 'Рук. филиала' : 'Менеджер'}
+                            </option>
+                          ))}
+                      </select>
+                      <input type="number" min="0" value={sp.amount || ''}
+                        onChange={(e) => updateSplit(i, { amount: Number(e.target.value) || 0 })}
+                        placeholder="Сумма"
+                        className="w-36 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <button type="button" onClick={() => removeSplit(i)}
+                        className="p-1.5 text-slate-400 hover:text-red-500" title="Убрать">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                    <button type="button" onClick={addSplitRow}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-700">
+                      + Добавить менеджера
+                    </button>
+                    <div className={`text-xs font-semibold ${splitsTotal === Number(form.amount || 0) ? 'text-emerald-600' : 'text-red-500'}`}>
+                      Сумма долей: {formatCurrency(splitsTotal)} {splitsTotal !== Number(form.amount || 0) && form.amount && (
+                        <span className="text-slate-400 font-normal"> · должно быть {formatCurrency(Number(form.amount))}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
