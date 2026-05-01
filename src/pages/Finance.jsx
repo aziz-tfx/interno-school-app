@@ -14,6 +14,7 @@ import { db } from '../firebase'
 import { collection, doc, setDoc, query, where, onSnapshot } from 'firebase/firestore'
 import Modal from '../components/Modal'
 import PaymentForm from '../components/PaymentForm'
+import { fetchAmoPerformance } from '../utils/amocrm'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 // formatRevenue is defined inside the component to access t()
@@ -217,6 +218,40 @@ export default function Finance() {
   const [reportPlans, setReportPlans] = useState({})
   const [reportDaily, setReportDaily] = useState({})
 
+  // amoCRM aggregated stats — { byUser: { uid: { total, won, lost, conversion, ... } } }
+  const [amoStats, setAmoStats] = useState(null)
+
+  // Load amoCRM performance for the active month so manager cards can show
+  // live "Заявки" and "Конверсия" without manual entry. Failure is silent —
+  // the card falls back to reportDaily values.
+  useEffect(() => {
+    let cancelled = false
+    const daysIn = new Date(selectedYear, selectedMonth, 0).getDate()
+    const from = `${monthKey}-01`
+    const to = `${monthKey}-${String(daysIn).padStart(2, '0')}`
+    fetchAmoPerformance({ from, to }).then(res => {
+      if (cancelled) return
+      if (res?.success) setAmoStats(res)
+      else setAmoStats(null)
+    }).catch(() => { if (!cancelled) setAmoStats(null) })
+    return () => { cancelled = true }
+  }, [monthKey, selectedYear, selectedMonth])
+
+  // Match a local employee to an amoCRM user by explicit amoUserId or by
+  // case-insensitive name. Returns the byUser entry or null.
+  const amoForEmployee = (emp) => {
+    if (!amoStats?.byUser) return null
+    if (emp?.amoUserId) {
+      const direct = amoStats.byUser[String(emp.amoUserId)]
+      if (direct) return direct
+    }
+    if (!emp?.name) return null
+    const target = emp.name.trim().toLowerCase()
+    return Object.values(amoStats.byUser).find(u =>
+      (u.userName || '').trim().toLowerCase() === target
+    ) || null
+  }
+
   // ─── Firestore: Load reportPlans for this month ─────────────────────────
   useEffect(() => {
     const q = query(collection(db, 'reportPlans'), where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
@@ -367,11 +402,17 @@ export default function Finance() {
       const planSales = plan.sales || 0
       const planRevenue = plan.revenue || 0
 
-      // External KPI values (manually entered — leads, calls, walk-ins, etc.)
-      const actualLeads = actual.leads || 0
+      // External KPI values. Leads come from amoCRM when the integration is
+      // configured (live, no manual entry). Other metrics still come from
+      // the manually-entered reportDaily — until we expand the amoCRM
+      // endpoint to count specific pipeline stages.
+      const amo = amoForEmployee(emp)
+      const actualLeads = amo ? Number(amo.total) || 0 : (actual.leads || 0)
       const actualConversations = actual.conversations || 0
       const actualSignups = actual.signups || 0
       const actualVisited = actual.visited || 0
+      // amoCRM-supplied conversion (won / (won+lost)) for the period.
+      const amoConversion = amo && Number.isFinite(amo.conversion) ? Math.round(amo.conversion) : null
 
       // Real payments — source of truth for revenue and sales count.
       // No filtering by p.branch here: salesStaff is already restricted to
@@ -390,8 +431,11 @@ export default function Finance() {
       const actualSales = managerPayments.length
       const actualRevenue = paymentsRevenue
 
-      // Conversions
-      const convOpenToSale = actualVisited > 0 ? Math.round((actualSales / actualVisited) * 100) : 0
+      // Conversions — prefer amoCRM-supplied number when available so the
+      // "Конв. ОУ→Продажа" pill on the card reflects real CRM funnel data.
+      const convOpenToSale = amoConversion != null
+        ? amoConversion
+        : (actualVisited > 0 ? Math.round((actualSales / actualVisited) * 100) : 0)
       const convSignupToVisit = actualSignups > 0 ? Math.round((actualVisited / actualSignups) * 100) : 0
 
       // Separate first-time sales vs repeat payments (tranches > 1)
@@ -432,9 +476,10 @@ export default function Finance() {
         onlineSales: onlineCount,
         deviation,
         achievedPct: planRevenue > 0 ? Math.round((actualRevenue / planRevenue) * 100) : 0,
+        amoConnected: !!amo,
       }
     })
-  }, [salesStaff, reportPlans, reportDaily, payments, monthKey, branchFilter])
+  }, [salesStaff, reportPlans, reportDaily, payments, monthKey, branchFilter, amoStats])
 
   // ─── Team totals ─────────────────────────────────────────────────────────
   const teamTotals = useMemo(() => {
@@ -707,8 +752,14 @@ export default function Finance() {
                       {mgr.avatar || mgr.name?.charAt(0)}
                     </div>
                     <div>
-                      <h4 className="font-semibold text-slate-900 text-sm">
+                      <h4 className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
                         {mgr.name} {isCurrentUser && <span className="text-xs text-blue-500">{t('finance.you')}</span>}
+                        {mgr.amoConnected && (
+                          <span title="Заявки и конверсия из amoCRM"
+                            className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 border border-violet-200">
+                            amo
+                          </span>
+                        )}
                       </h4>
                       <p className="text-xs text-slate-500">
                         {mgr.role === 'rop' ? t('finance.rop') : mgr.role === 'branch_director' ? 'Руководитель филиала' : t('finance.manager')} · {mgr.branch === 'all' ? t('finance.all_branches') : (branches.find(b => b.id === mgr.branch)?.name || mgr.branch)}
