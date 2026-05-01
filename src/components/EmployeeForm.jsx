@@ -33,6 +33,7 @@ export default function EmployeeForm({ employee, onClose }) {
     phone: '',
     subject: '',
     salary: '',
+    amoUserId: '',
   })
   const [customPermissions, setCustomPermissions] = useState(null) // null = use role defaults
   const [showPermissions, setShowPermissions] = useState(false)
@@ -58,6 +59,7 @@ export default function EmployeeForm({ employee, onClose }) {
         phone: employee.phone || '',
         subject,
         salary,
+        amoUserId: employee.amoUserId != null ? String(employee.amoUserId) : '',
       })
       // Load individual custom permissions if they exist
       if (employee.customPermissions) {
@@ -73,7 +75,13 @@ export default function EmployeeForm({ employee, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const { subject, salary, ...employeeData } = form
+    const { subject, salary, amoUserId, ...rest } = form
+    const employeeData = {
+      ...rest,
+      // Store amoUserId as a number when set, so the Finance lookup can
+      // compare it against the integer id amoCRM returns. Empty input → null.
+      amoUserId: amoUserId !== '' && !Number.isNaN(Number(amoUserId)) ? Number(amoUserId) : null,
+    }
 
     // Attach individual permissions if customized
     if (customPermissions) {
@@ -193,6 +201,20 @@ export default function EmployeeForm({ employee, onClose }) {
             placeholder={t('employeeForm.placeholder_phone')}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
+
+        {/* Sales-side accounts can be linked to an amoCRM user so the
+            Finance manager card pulls live "Заявки" and conversion. */}
+        {(form.role === 'sales' || form.role === 'rop' || form.role === 'branch_director') && (
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1">amoCRM ID пользователя</label>
+            <input type="number" value={form.amoUserId} onChange={e => set('amoUserId', e.target.value)}
+              placeholder="Например: 12345678 (необязательно)" min="0"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Числовой ID пользователя в amoCRM. Если оставить пустым, маппинг идёт по совпадению имени.
+            </p>
+          </div>
+        )}
 
         {/* Teacher-specific fields */}
         {form.role === 'teacher' && (
