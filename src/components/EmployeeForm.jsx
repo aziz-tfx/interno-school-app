@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useAuth, ROLE_LABELS, DEFAULT_PERMISSIONS } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
-import { Shield, ChevronDown, ChevronUp } from 'lucide-react'
+import { Shield, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { fetchAmoUsers } from '../utils/amocrm'
 
 const ALL_ROLES = Object.entries(ROLE_LABELS)
 
@@ -34,7 +35,22 @@ export default function EmployeeForm({ employee, onClose }) {
     subject: '',
     salary: '',
     amoUserId: '',
+    amoUserName: '',
   })
+
+  // amoCRM users for the dropdown picker
+  const [amoUsers, setAmoUsers] = useState([])
+  const [amoUsersLoading, setAmoUsersLoading] = useState(false)
+  const [amoUsersError, setAmoUsersError] = useState('')
+
+  const loadAmoUsers = async () => {
+    setAmoUsersLoading(true)
+    setAmoUsersError('')
+    const res = await fetchAmoUsers()
+    if (res.success) setAmoUsers(res.users || [])
+    else setAmoUsersError(res.error || 'Не удалось загрузить список пользователей')
+    setAmoUsersLoading(false)
+  }
   const [customPermissions, setCustomPermissions] = useState(null) // null = use role defaults
   const [showPermissions, setShowPermissions] = useState(false)
 
@@ -60,6 +76,7 @@ export default function EmployeeForm({ employee, onClose }) {
         subject,
         salary,
         amoUserId: employee.amoUserId != null ? String(employee.amoUserId) : '',
+        amoUserName: employee.amoUserName || '',
       })
       // Load individual custom permissions if they exist
       if (employee.customPermissions) {
@@ -75,12 +92,13 @@ export default function EmployeeForm({ employee, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const { subject, salary, amoUserId, ...rest } = form
+    const { subject, salary, amoUserId, amoUserName, ...rest } = form
     const employeeData = {
       ...rest,
       // Store amoUserId as a number when set, so the Finance lookup can
       // compare it against the integer id amoCRM returns. Empty input → null.
       amoUserId: amoUserId !== '' && !Number.isNaN(Number(amoUserId)) ? Number(amoUserId) : null,
+      amoUserName: (amoUserName || '').trim() || null,
     }
 
     // Attach individual permissions if customized
@@ -205,13 +223,53 @@ export default function EmployeeForm({ employee, onClose }) {
         {/* Sales-side accounts can be linked to an amoCRM user so the
             Finance manager card pulls live "Заявки" and conversion. */}
         {(form.role === 'sales' || form.role === 'rop' || form.role === 'branch_director') && (
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1">amoCRM ID пользователя</label>
-            <input type="number" value={form.amoUserId} onChange={e => set('amoUserId', e.target.value)}
-              placeholder="Например: 12345678 (необязательно)" min="0"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <p className="text-[11px] text-slate-400 mt-1">
-              Числовой ID пользователя в amoCRM. Если оставить пустым, маппинг идёт по совпадению имени.
+          <div className="md:col-span-2 rounded-lg border border-violet-100 bg-violet-50/40 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-700">Привязка к amoCRM</label>
+              <button type="button" onClick={loadAmoUsers} disabled={amoUsersLoading}
+                className="text-xs font-medium text-violet-700 hover:text-violet-900 flex items-center gap-1 disabled:opacity-50">
+                <RefreshCw size={12} className={amoUsersLoading ? 'animate-spin' : ''} />
+                {amoUsers.length > 0 ? 'Обновить' : 'Загрузить пользователей'}
+              </button>
+            </div>
+
+            {amoUsers.length > 0 && (
+              <select
+                value={form.amoUserId}
+                onChange={e => {
+                  const id = e.target.value
+                  const u = amoUsers.find(x => String(x.id) === id)
+                  setForm(prev => ({
+                    ...prev,
+                    amoUserId: id,
+                    amoUserName: u?.name || prev.amoUserName,
+                  }))
+                }}
+                className="w-full mb-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="">— выбери пользователя amoCRM —</option>
+                {amoUsers.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}{u.email ? ` · ${u.email}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <input type="text" value={form.amoUserName} onChange={e => set('amoUserName', e.target.value)}
+                placeholder="Имя в amoCRM (например, «Шахло»)"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <input type="number" value={form.amoUserId} onChange={e => set('amoUserId', e.target.value)}
+                placeholder="ID в amoCRM (опционально)" min="0"
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            </div>
+
+            {amoUsersError && (
+              <p className="text-[11px] text-red-500 mt-1">{amoUsersError}</p>
+            )}
+            <p className="text-[11px] text-slate-500 mt-1">
+              Можно загрузить список пользователей из amoCRM и выбрать, либо ввести имя или ID вручную.
+              Имя сравнивается без учёта регистра.
             </p>
           </div>
         )}

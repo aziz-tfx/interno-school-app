@@ -62,6 +62,21 @@ export async function checkAmoStatus() {
 }
 
 /**
+ * Fetch amoCRM users (id, name, email). Used by the employee form so admins
+ * can pick a user from a dropdown instead of typing the numeric id.
+ */
+export async function fetchAmoUsers() {
+  try {
+    const res = await fetch(withTenant(`${API_BASE}/users`), { headers: tenantHeaders() })
+    const data = await res.json()
+    if (!res.ok) return { success: false, error: data.error || 'Unknown error', users: [] }
+    return { success: true, users: data.users || [] }
+  } catch (err) {
+    return { success: false, error: err.message, users: [] }
+  }
+}
+
+/**
  * Fetch aggregated manager/ROP effectiveness for a period.
  */
 export async function fetchAmoPerformance({ from, to }) {

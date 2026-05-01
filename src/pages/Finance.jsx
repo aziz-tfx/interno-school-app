@@ -237,19 +237,26 @@ export default function Finance() {
     return () => { cancelled = true }
   }, [monthKey, selectedYear, selectedMonth])
 
-  // Match a local employee to an amoCRM user by explicit amoUserId or by
-  // case-insensitive name. Returns the byUser entry or null.
+  // Match a local employee to an amoCRM user. Resolution priority:
+  //   1. explicit amoUserId
+  //   2. explicit amoUserName (case-insensitive)
+  //   3. employee.name (case-insensitive)
+  // Returns the byUser entry or null.
   const amoForEmployee = (emp) => {
     if (!amoStats?.byUser) return null
     if (emp?.amoUserId) {
       const direct = amoStats.byUser[String(emp.amoUserId)]
       if (direct) return direct
     }
+    const candidates = Object.values(amoStats.byUser)
+    if (emp?.amoUserName) {
+      const target = emp.amoUserName.trim().toLowerCase()
+      const byName = candidates.find(u => (u.userName || '').trim().toLowerCase() === target)
+      if (byName) return byName
+    }
     if (!emp?.name) return null
     const target = emp.name.trim().toLowerCase()
-    return Object.values(amoStats.byUser).find(u =>
-      (u.userName || '').trim().toLowerCase() === target
-    ) || null
+    return candidates.find(u => (u.userName || '').trim().toLowerCase() === target) || null
   }
 
   // ─── Firestore: Load reportPlans for this month ─────────────────────────
