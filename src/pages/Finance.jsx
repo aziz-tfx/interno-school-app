@@ -14,7 +14,7 @@ import { db } from '../firebase'
 import { collection, doc, setDoc, query, where, onSnapshot } from 'firebase/firestore'
 import Modal from '../components/Modal'
 import PaymentForm from '../components/PaymentForm'
-import { fetchAmoPerformance } from '../utils/amocrm'
+import { fetchAmoPerformance, fetchAmoPerformanceV2, fetchAmoCalls } from '../utils/amocrm'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 // formatRevenue is defined inside the component to access t()
@@ -218,45 +218,63 @@ export default function Finance() {
   const [reportPlans, setReportPlans] = useState({})
   const [reportDaily, setReportDaily] = useState({})
 
-  // amoCRM aggregated stats — { byUser: { uid: { total, won, lost, conversion, ... } } }
+  // amoCRM aggregated stats — v1 (leads / wonloss conversion) + v2 (funnel
+  // stages including "Назначено" / "Пришли") + calls (incoming + outgoing).
   const [amoStats, setAmoStats] = useState(null)
+  const [amoStatsV2, setAmoStatsV2] = useState(null)
+  const [amoCalls, setAmoCalls] = useState(null)
 
-  // Load amoCRM performance for the active month so manager cards can show
-  // live "Заявки" and "Конверсия" without manual entry. Failure is silent —
-  // the card falls back to reportDaily values.
+  // Load all three sources in parallel for the active month. Each falls
+  // back silently — manager cards stay functional without amoCRM.
   useEffect(() => {
     let cancelled = false
     const daysIn = new Date(selectedYear, selectedMonth, 0).getDate()
     const from = `${monthKey}-01`
     const to = `${monthKey}-${String(daysIn).padStart(2, '0')}`
-    fetchAmoPerformance({ from, to }).then(res => {
+    Promise.allSettled([
+      fetchAmoPerformance({ from, to }),
+      fetchAmoPerformanceV2({ month: monthKey }),
+      fetchAmoCalls({ from, to }),
+    ]).then(([v1, v2, calls]) => {
       if (cancelled) return
-      if (res?.success) setAmoStats(res)
-      else setAmoStats(null)
-    }).catch(() => { if (!cancelled) setAmoStats(null) })
+      setAmoStats(v1.status === 'fulfilled' && v1.value?.success ? v1.value : null)
+      setAmoStatsV2(v2.status === 'fulfilled' && v2.value?.success ? v2.value : null)
+      setAmoCalls(calls.status === 'fulfilled' && calls.value?.success ? calls.value : null)
+    })
     return () => { cancelled = true }
   }, [monthKey, selectedYear, selectedMonth])
 
-  // Match a local employee to an amoCRM user. Resolution priority:
+  // Resolve the amoCRM user id for a local employee, with priority:
   //   1. explicit amoUserId
-  //   2. explicit amoUserName (case-insensitive)
-  //   3. employee.name (case-insensitive)
-  // Returns the byUser entry or null.
+  //   2. explicit amoUserName (case-insensitive) → look up id from any
+  //      available byUser map
+  //   3. employee.name (case-insensitive) → same fallback
+  const amoIdForEmployee = (emp) => {
+    if (!emp) return null
+    if (emp.amoUserId) return String(emp.amoUserId)
+    const sourceMaps = [amoStats?.byUser, amoStatsV2?.byUser].filter(Boolean)
+    const findByName = (name) => {
+      const target = (name || '').trim().toLowerCase()
+      if (!target) return null
+      for (const m of sourceMaps) {
+        const hit = Object.values(m).find(u => (u.userName || '').trim().toLowerCase() === target)
+        if (hit) return String(hit.userId)
+      }
+      return null
+    }
+    return findByName(emp.amoUserName) || findByName(emp.name)
+  }
+
+  // Returns { v1, v2, calls } — any of them may be null when the source
+  // didn't load or the employee couldn't be matched.
   const amoForEmployee = (emp) => {
-    if (!amoStats?.byUser) return null
-    if (emp?.amoUserId) {
-      const direct = amoStats.byUser[String(emp.amoUserId)]
-      if (direct) return direct
+    const uid = amoIdForEmployee(emp)
+    if (!uid) return { v1: null, v2: null, calls: null }
+    return {
+      v1: amoStats?.byUser?.[uid] || null,
+      v2: amoStatsV2?.byUser?.[uid] || null,
+      calls: amoCalls?.byUser?.[uid] || null,
     }
-    const candidates = Object.values(amoStats.byUser)
-    if (emp?.amoUserName) {
-      const target = emp.amoUserName.trim().toLowerCase()
-      const byName = candidates.find(u => (u.userName || '').trim().toLowerCase() === target)
-      if (byName) return byName
-    }
-    if (!emp?.name) return null
-    const target = emp.name.trim().toLowerCase()
-    return candidates.find(u => (u.userName || '').trim().toLowerCase() === target) || null
   }
 
   // ─── Firestore: Load reportPlans for this month ─────────────────────────
@@ -409,17 +427,19 @@ export default function Finance() {
       const planSales = plan.sales || 0
       const planRevenue = plan.revenue || 0
 
-      // External KPI values. Leads come from amoCRM when the integration is
-      // configured (live, no manual entry). Other metrics still come from
-      // the manually-entered reportDaily — until we expand the amoCRM
-      // endpoint to count specific pipeline stages.
+      // External KPI values. amoCRM is preferred when available:
+      //   - leads ← v1.total (новые заявки в воронке за период)
+      //   - calls ← amoCalls.total (входящие + исходящие)
+      //   - signups ← v2.trialAssigned (этап «Назначено»)
+      //   - visited ← v2.trialAttended (этап «Пришли»)
+      // Each metric falls back to the manual reportDaily entry when amo
+      // didn't return a value for this employee.
       const amo = amoForEmployee(emp)
-      const actualLeads = amo ? Number(amo.total) || 0 : (actual.leads || 0)
-      const actualConversations = actual.conversations || 0
-      const actualSignups = actual.signups || 0
-      const actualVisited = actual.visited || 0
-      // amoCRM-supplied conversion (won / (won+lost)) for the period.
-      const amoConversion = amo && Number.isFinite(amo.conversion) ? Math.round(amo.conversion) : null
+      const amoConnected = !!(amo.v1 || amo.v2 || amo.calls)
+      const actualLeads = amo.v1 ? Number(amo.v1.total) || 0 : (actual.leads || 0)
+      const actualConversations = amo.calls ? Number(amo.calls.total) || 0 : (actual.conversations || 0)
+      const actualSignups = amo.v2?.metrics ? Number(amo.v2.metrics.trialAssigned) || 0 : (actual.signups || 0)
+      const actualVisited = amo.v2?.metrics ? Number(amo.v2.metrics.trialAttended) || 0 : (actual.visited || 0)
 
       // Real payments — source of truth for revenue and sales count.
       // No filtering by p.branch here: salesStaff is already restricted to
@@ -438,10 +458,11 @@ export default function Finance() {
       const actualSales = managerPayments.length
       const actualRevenue = paymentsRevenue
 
-      // Conversions — prefer amoCRM-supplied number when available so the
-      // "Конв. ОУ→Продажа" pill on the card reflects real CRM funnel data.
-      const convOpenToSale = amoConversion != null
-        ? amoConversion
+      // Conversion «Назначено → Оплата»: how many trial-assigned leads ended
+      // up paying. amoCRM v2 gives the per-user trial-assigned count and we
+      // already know the manager's actual sales count from payments.
+      const convOpenToSale = actualSignups > 0
+        ? Math.round((actualSales / actualSignups) * 100)
         : (actualVisited > 0 ? Math.round((actualSales / actualVisited) * 100) : 0)
       const convSignupToVisit = actualSignups > 0 ? Math.round((actualVisited / actualSignups) * 100) : 0
 
@@ -483,10 +504,10 @@ export default function Finance() {
         onlineSales: onlineCount,
         deviation,
         achievedPct: planRevenue > 0 ? Math.round((actualRevenue / planRevenue) * 100) : 0,
-        amoConnected: !!amo,
+        amoConnected,
       }
     })
-  }, [salesStaff, reportPlans, reportDaily, payments, monthKey, branchFilter, amoStats])
+  }, [salesStaff, reportPlans, reportDaily, payments, monthKey, branchFilter, amoStats, amoStatsV2, amoCalls])
 
   // ─── Team totals ─────────────────────────────────────────────────────────
   const teamTotals = useMemo(() => {

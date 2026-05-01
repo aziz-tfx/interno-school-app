@@ -62,6 +62,23 @@ export async function checkAmoStatus() {
 }
 
 /**
+ * Fetch amoCRM call counts per user for a period (incoming + outgoing).
+ * Returns { byUser: { [uid]: { in, out, total } }, totals }.
+ */
+export async function fetchAmoCalls({ from, to }) {
+  try {
+    const res = await fetch(withTenant(`${API_BASE}/calls?from=${from}&to=${to}`), {
+      headers: tenantHeaders(),
+    })
+    const data = await res.json()
+    if (!res.ok) return { success: false, error: data.error || 'Unknown error', byUser: {} }
+    return { success: true, ...data }
+  } catch (err) {
+    return { success: false, error: err.message, byUser: {} }
+  }
+}
+
+/**
  * Fetch amoCRM users (id, name, email). Used by the employee form so admins
  * can pick a user from a dropdown instead of typing the numeric id.
  */
