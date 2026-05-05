@@ -23,6 +23,7 @@ export default async function handler(req, res) {
     date,
     courseStartDate,
     branch,
+    branchKey,
     tariff,
     discount,
     contractNumber,
@@ -49,9 +50,15 @@ export default async function handler(req, res) {
   if (!botToken) {
     return res.status(500).json({ error: 'Telegram bot token not configured for this tenant' })
   }
-  const chatId = tg.chats[branch] || tg.chats.tashkent
+  // Resolve the chat id with priority:
+  //   1. branchKey — canonical slug derived client-side from the branch
+  //      object (works for new tenants whose branch ids are random)
+  //   2. branch — legacy path: when branch already equals one of the
+  //      canonical slugs (INTERNO seed data) it matches directly
+  //   3. tashkent fallback so we never hard-fail
+  const chatId = (branchKey && tg.chats[branchKey]) || tg.chats[branch] || tg.chats.tashkent
   if (!chatId) {
-    return res.status(400).json({ error: `No Telegram chat configured for branch: ${branch}` })
+    return res.status(400).json({ error: `No Telegram chat configured for branch: ${branchKey || branch}` })
   }
 
   // ─── Format amount with spaces (3 000 000) ───

@@ -8,6 +8,7 @@ import { listTemplates, renderTemplateBlob, renderTemplateAndDownload } from '..
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { pushSaleToAmo } from '../utils/amocrm'
 import { pushSaleToTelegram } from '../utils/telegram'
+import { branchToSlug } from '../utils/branchSlug'
 import { db, storage } from '../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -650,6 +651,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       const fmtRev = (n) => Number(n).toLocaleString('ru-RU').replace(/,/g, ' ')
       const salesFact = `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
 
+      // Resolve a canonical slug for the manager's branch — branch docs in
+      // new tenants have random Firestore ids, but the Telegram chat config
+      // is keyed by canonical slugs (tashkent / samarkand / fergana / …).
+      // The server falls back to chats[branch] if branchKey isn't set.
+      const managerBranchId = (user?.branch && user.branch !== 'all') ? user.branch : form.branch
+      const managerBranchObj = branches.find(b => b.id === managerBranchId)
+      const managerBranchSlug = branchToSlug(managerBranchObj) || branchToSlug(managerBranchId)
+
       // Push to Telegram group (non-blocking)
       pushSaleToTelegram({
         clientName: form.clientName,
@@ -663,7 +672,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         // Route to the manager's branch group, not the sale's branch — a
         // Tashkent manager closing a Samarkand client should still notify
         // their own Tashkent group.
-        branch: (user?.branch && user.branch !== 'all') ? user.branch : form.branch,
+        branch: managerBranchId,
+        branchKey: managerBranchSlug,
         tariff: tariffLbl,
         discount: discountLbl,
         contractNumber: form.contractNumber,

@@ -11,6 +11,7 @@ import { pushSaleToTelegram } from '../utils/telegram'
 import { checkAmoStatus, checkOnpbxStatus, refreshAmoToken } from '../utils/amocrm'
 import { loadIntegrations, saveIntegrationSection } from '../utils/tenantIntegrations'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
+import { branchToSlug } from '../utils/branchSlug'
 
 const BRANCH_LABELS = {
   tashkent: 'Ташкент',
@@ -51,7 +52,10 @@ export default function Integrations() {
     const routeBranch = (manager?.branch && manager.branch !== 'all')
       ? manager.branch
       : (p.branch || 'tashkent')
+    const routeBranchObj = branches.find(b => b.id === routeBranch)
+    const routeBranchSlug = branchToSlug(routeBranchObj) || branchToSlug(routeBranch)
     return {
+      branchKey: routeBranchSlug,
       clientName: p.student || p.clientName || '—',
       phone: p.phone || '',
       course: p.course || '',
