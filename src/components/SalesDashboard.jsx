@@ -91,15 +91,20 @@ export default function SalesDashboard() {
   const { getManagerPerf, getBranchPerf, branches, getBranchName } = useData()
   const { user, getSalesStaff } = useAuth()
   const { t } = useLanguage()
-  const isAdmin = user.role === 'owner' || user.role === 'admin' || user.role === 'branch_director'
+  // Branch directors only operate within their own branch — not lumped
+  // together with owner/admin who see every branch.
+  const isAdmin = user.role === 'owner' || user.role === 'admin'
+  const isBranchDirector = user.role === 'branch_director'
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
   const [planModalOpen, setPlanModalOpen] = useState(false)
-  const [branchFilter, setBranchFilter] = useState(isAdmin ? 'all' : user.branch)
+  const [branchFilter, setBranchFilter] = useState(
+    isAdmin ? 'all' : (user.branch && user.branch !== 'all' ? user.branch : 'all')
+  )
 
-  const allSalesStaff = getSalesStaff('all')
+  const allSalesStaff = isAdmin ? getSalesStaff('all') : getSalesStaff(user.branch)
   const visibleManagers = getSalesStaff(branchFilter)
 
-  const teamPerf = getBranchPerf('all', month, allSalesStaff)
+  const teamPerf = getBranchPerf(isAdmin ? 'all' : user.branch, month, allSalesStaff)
   const branchPerfs = {}
   branches.forEach(b => {
     branchPerfs[b.id] = getBranchPerf(b.id, month, allSalesStaff)

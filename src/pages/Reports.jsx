@@ -134,10 +134,16 @@ export default function Reports() {
   const METRICS = useMemo(() => METRICS_KEYS.map(m => ({ ...m, label: t(m.labelKey) })), [t])
   const isAdmin = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'rop'
   const isSales = user?.role === 'sales'
+  const isBranchDirector = user?.role === 'branch_director'
 
   const salesStaff = useMemo(() => {
-    return employees.filter(e => e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
-  }, [employees])
+    let list = employees.filter(e => e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
+    // Branch directors only see their own branch's sales staff in reports.
+    if (isBranchDirector && user?.branch && user.branch !== 'all') {
+      list = list.filter(e => e.branch === user.branch || e.branch === 'all')
+    }
+    return list
+  }, [employees, isBranchDirector, user])
 
   const managers = useMemo(() => {
     return salesStaff.map(e => e.name)

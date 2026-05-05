@@ -228,6 +228,12 @@ export default function Dashboard() {
   const canSeeSales = hasPermission('finance', 'payments')
   const canFullPnL = hasPermission('finance', 'fullPnL')
 
+  // Branch directors only see their own branch in any branch-by-branch
+  // breakdown — owner/admin keep the full multi-branch view.
+  const visibleBranches = user.branch !== 'all'
+    ? branches.filter(b => b.id === user.branch)
+    : branches
+
   // ── Time filter state ──────────────────────────────────────────────
   const [timePeriod, setTimePeriod] = useState('all')
   const [customFrom, setCustomFrom] = useState('')
@@ -799,8 +805,8 @@ export default function Dashboard() {
                   <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend />
-                  {branches.map((b, i) => (
-                    <Bar key={b.id} dataKey={b.id} stackId="rev" fill={b.color || CHART_COLORS[i % CHART_COLORS.length]} name={b.name} radius={i === branches.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
+                  {visibleBranches.map((b, i) => (
+                    <Bar key={b.id} dataKey={b.id} stackId="rev" fill={b.color || CHART_COLORS[i % CHART_COLORS.length]} name={b.name} radius={i === visibleBranches.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -812,15 +818,15 @@ export default function Dashboard() {
       {/* ═══════ BRANCHES TAB ═══════ */}
       {activeTab === 'branches' && canFullPnL && (
         <>
-          {/* Summary row — computed live from real payments */}
+          {/* Summary row — scoped to user's branch when not an owner/admin */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard title={t('dashboard.branches_tab_count')} value={branches.length} icon={Building2} color="blue" />
-            <KpiCard title={t('dashboard.branches_total_capacity')} value={branches.reduce((s, b) => s + (b.capacity || 0), 0)} icon={Users} color="purple"
+            <KpiCard title={t('dashboard.branches_tab_count')} value={visibleBranches.length} icon={Building2} color="blue" />
+            <KpiCard title={t('dashboard.branches_total_capacity')} value={visibleBranches.reduce((s, b) => s + (b.capacity || 0), 0)} icon={Users} color="purple"
               subtitle={`${t('dashboard.load')}: ${metrics.utilization}%`} />
-            <KpiCard title={t('dashboard.branches_total_income')} value={fmtShort(payments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0), t)} icon={DollarSign} color="green" />
+            <KpiCard title={t('dashboard.branches_total_income')} value={fmtShort(allScopedPayments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0), t)} icon={DollarSign} color="green" />
             <KpiCard title={t('dashboard.branches_total_profit')} value={fmtShort(
-              payments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
-              - payments.filter(p => p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
+              allScopedPayments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
+              - allScopedPayments.filter(p => p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
             , t)} icon={TrendingUp} color="teal" />
           </div>
 
@@ -846,7 +852,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...branches]
+                  {[...visibleBranches]
                     .map(b => ({
                       branch: b,
                       income: payments.filter(p => p.branch === b.id && p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0),
@@ -866,7 +872,7 @@ export default function Dashboard() {
               <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.branch_capacity_title')}</h3>
               <p className="text-xs text-slate-400 mb-4">{t('dashboard.branch_capacity_subtitle')}</p>
               <div className="space-y-4">
-                {branches.map((b) => {
+                {visibleBranches.map((b) => {
                   const actual = students.filter(s => s.branch === b.id).length
                   const occ = b.capacity > 0 ? pct(actual, b.capacity) : 0
                   return (
@@ -892,7 +898,7 @@ export default function Dashboard() {
               <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.profitability')}</h3>
               <p className="text-xs text-slate-400 mb-4">{t('dashboard.profitability_subtitle')}</p>
               <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={branches.map(b => {
+                <BarChart data={visibleBranches.map(b => {
                   const inc = payments.filter(p => p.branch === b.id && p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
                   const exp = payments.filter(p => p.branch === b.id && p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
                   return {
@@ -920,7 +926,7 @@ export default function Dashboard() {
             <h3 className="text-base font-semibold text-slate-900 mb-1">{t('dashboard.debt_analysis')}</h3>
             <p className="text-xs text-slate-400 mb-4">{t('dashboard.debt_analysis_subtitle')}</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {branches.map(b => {
+              {visibleBranches.map(b => {
                 const brDebtors = students.filter(s => s.branch === b.id && s.status === 'debtor')
                 const brDebt = brDebtors.reduce((s, st) => s + Math.abs(st.balance), 0)
                 const brAll = students.filter(s => s.branch === b.id).length
