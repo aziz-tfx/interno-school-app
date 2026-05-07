@@ -229,10 +229,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       if (group) {
         const groupCourse = courses.find(c => c.name === group.course)
         const groupRegion = BRANCH_TO_REGION[group.branch] || 'tashkent'
+        // Per-tariff duration override beats per-region beats global course duration.
+        const tariffDur = groupCourse?.pricing?.[groupRegion]?.[form.tariff]?.durationMonths
         const regionDur = groupCourse?.durationByRegion?.[groupRegion]
-        const courseDuration = regionDur
-          ? parseInt(regionDur)
-          : (groupCourse?.duration ? parseInt(groupCourse.duration) : null)
+        const courseDuration = tariffDur
+          ? Number(tariffDur)
+          : (regionDur
+            ? parseInt(regionDur)
+            : (groupCourse?.duration ? parseInt(groupCourse.duration) : null))
         setForm(prev => ({
           ...prev,
           course: group.course,
@@ -244,7 +248,19 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         }))
       }
     }
-  }, [form.groupId, groups, courses])
+  }, [form.groupId, form.tariff, groups, courses])
+
+  // When the user picks a tariff (without changing group), still update
+  // durationMonths if the chosen tariff has its own per-tariff override.
+  useEffect(() => {
+    if (!form.course || !form.tariff) return
+    const c = courses.find(cc => cc.name === form.course)
+    const tariffDur = c?.pricing?.[region]?.[form.tariff]?.durationMonths
+    if (tariffDur && Number(tariffDur) > 0) {
+      setForm(prev => ({ ...prev, durationMonths: String(Number(tariffDur)) }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.tariff, form.course, region])
 
   // Auto-generate unique contract number
   useEffect(() => {

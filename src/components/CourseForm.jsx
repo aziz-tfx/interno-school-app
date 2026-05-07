@@ -18,7 +18,7 @@ const TARIFF_OPTIONS = [
 
 const ICON_OPTIONS = ['📚', '🎨', '🇬🇧', '📝', '📐', '💻', '🇷🇺', '🇰🇷', '🎓', '🤖', '📊', '🎵', '🏃', '🔬', '📷', '✏️', '🌐', '🧮', '🎭', '🧪']
 
-const emptyTariff = () => ({ full: '', d10: '', d15: '', d20: '', monthly: false })
+const emptyTariff = () => ({ full: '', d10: '', d15: '', d20: '', monthly: false, durationMonths: '' })
 
 function buildDefaultPricing() {
   return {
@@ -185,6 +185,9 @@ export default function CourseForm({ course, onClose, onSave }) {
         if (values.d20) cleaned.d20 = Number(values.d20)
         if (values.monthly) cleaned.monthly = true
         if (values.label) cleaned.label = values.label
+        if (values.durationMonths && Number(values.durationMonths) > 0) {
+          cleaned.durationMonths = Number(values.durationMonths)
+        }
         if (cleaned.full > 0) {
           cleanedPricing[region][tariff] = cleaned
         }
@@ -525,6 +528,18 @@ export default function CourseForm({ course, onClose, onSave }) {
                                 className="rounded border-slate-300"
                               />
                               {t('courseForm.monthly')}
+                            </label>
+                            <label className="flex items-center gap-1 text-xs text-slate-500" title="Длительность для этого тарифа в месяцах. Пусто = используется длительность курса.">
+                              <span>Срок:</span>
+                              <input
+                                type="number"
+                                min="1"
+                                max="36"
+                                value={tp.durationMonths || ''}
+                                onChange={e => updateTariffField(regionKey, tariffKey, 'durationMonths', e.target.value)}
+                                placeholder="мес"
+                                className="w-14 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
                             </label>
                             {regionTariffs.length > 1 && (
                               <button type="button" onClick={() => removeTariff(regionKey, tariffKey)} className="text-red-400 hover:text-red-600">
