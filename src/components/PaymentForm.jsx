@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
-import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor } from 'lucide-react'
+import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor, Search, ChevronDown, Check } from 'lucide-react'
 import { generateContract, buildContractBlob } from '../utils/generateContract'
 import { listTemplates, renderTemplateBlob, renderTemplateAndDownload } from '../utils/contractTemplates'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
@@ -129,6 +129,22 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   }
 
   const [files, setFiles] = useState([])
+
+  // Searchable group picker
+  const [groupSearch, setGroupSearch] = useState('')
+  const [groupOpen, setGroupOpen] = useState(false)
+  const groupDropdownRef = useRef(null)
+  useEffect(() => {
+    if (!groupOpen) return
+    const onClickAway = (e) => {
+      if (groupDropdownRef.current && !groupDropdownRef.current.contains(e.target)) {
+        setGroupOpen(false)
+        setGroupSearch('')
+      }
+    }
+    document.addEventListener('mousedown', onClickAway)
+    return () => document.removeEventListener('mousedown', onClickAway)
+  }, [groupOpen])
   const [duplicateWarning, setDuplicateWarning] = useState(null) // { matches: [] }
   const bypassDuplicateRef = useRef(false)
   const [submitting, setSubmitting] = useState(false)
@@ -1307,18 +1323,91 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                     </div>
                   </div>
 
-                  {/* Group selection */}
+                  {/* Group selection — searchable combobox */}
                   <div className="col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_group')} *</label>
-                    <select value={form.groupId} onChange={(e) => set('groupId', e.target.value)} required
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">{t('paymentForm.select_group')}</option>
-                      {branchGroups
-                        .filter(g => !form.course || g.course === form.course)
-                        .map(g => (
-                          <option key={g.id} value={g.id}>{g.name} — {g.course} ({g.schedule || 'без расписания'})</option>
-                        ))}
-                    </select>
+                    {(() => {
+                      const courseFiltered = branchGroups.filter(g => !form.course || g.course === form.course)
+                      const q = groupSearch.trim().toLowerCase()
+                      const visible = !q ? courseFiltered : courseFiltered.filter(g => {
+                        const hay = [g.name, g.course, g.schedule, g.branch].filter(Boolean).join(' ').toLowerCase()
+                        return hay.includes(q)
+                      })
+                      const selected = form.groupId ? branchGroups.find(g => g.id === form.groupId) : null
+                      return (
+                        <div className="relative" ref={groupDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => { setGroupOpen(o => !o); if (!groupOpen) setGroupSearch('') }}
+                            className={`w-full px-3 py-2 bg-white border rounded-lg text-sm flex items-center justify-between gap-2 transition-colors
+                              ${groupOpen ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200 hover:border-slate-300'}`}>
+                            <span className={`truncate text-left ${selected ? 'text-slate-900' : 'text-slate-400'}`}>
+                              {selected
+                                ? `${selected.name} — ${selected.course}${selected.schedule ? ` (${selected.schedule})` : ''}`
+                                : t('paymentForm.select_group')}
+                            </span>
+                            <ChevronDown size={14} className={`text-slate-400 transition-transform flex-shrink-0 ${groupOpen ? 'rotate-180' : ''}`} />
+                          </button>
+                          {groupOpen && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-20 overflow-hidden">
+                              <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                                <Search size={14} className="text-slate-400 flex-shrink-0" />
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={groupSearch}
+                                  onChange={e => setGroupSearch(e.target.value)}
+                                  placeholder="Поиск по названию, курсу, расписанию…"
+                                  className="flex-1 bg-transparent outline-none text-sm placeholder:text-slate-400"
+                                />
+                                {groupSearch && (
+                                  <button type="button" onClick={() => setGroupSearch('')}
+                                    className="text-slate-400 hover:text-slate-600">
+                                    <X size={14} />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="max-h-72 overflow-y-auto">
+                                {visible.length === 0 ? (
+                                  <div className="px-3 py-6 text-center text-sm text-slate-400">
+                                    Ничего не найдено
+                                  </div>
+                                ) : visible.map(g => {
+                                  const branchName = branches.find(b => b.id === g.branch)?.name || g.branch
+                                  const isSelected = form.groupId === g.id
+                                  return (
+                                    <button
+                                      key={g.id}
+                                      type="button"
+                                      onClick={() => {
+                                        set('groupId', g.id)
+                                        setGroupOpen(false)
+                                        setGroupSearch('')
+                                      }}
+                                      className={`w-full text-left px-3 py-2 hover:bg-blue-50 flex items-start gap-2 border-b border-slate-50 last:border-b-0 transition-colors
+                                        ${isSelected ? 'bg-blue-50' : ''}`}>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-medium text-slate-900 truncate">{g.name}</div>
+                                        <div className="text-xs text-slate-500 truncate">
+                                          {g.course}
+                                          {g.schedule ? ` · ${g.schedule}` : ''}
+                                          {branchName ? ` · ${branchName}` : ''}
+                                        </div>
+                                      </div>
+                                      {isSelected && <Check size={14} className="text-blue-600 flex-shrink-0 mt-1" />}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                              <div className="px-3 py-1.5 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 text-center">
+                                {visible.length} {visible.length === 1 ? 'группа' : visible.length >= 2 && visible.length <= 4 ? 'группы' : 'групп'}
+                                {q && ` · фильтр: "${groupSearch}"`}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {form.groupId && (() => {
