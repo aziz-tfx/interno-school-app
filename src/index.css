@@ -189,6 +189,20 @@ html.dark :where(
   background-color: rgba(30, 41, 59, 0.6);
 }
 
+/* Same surfaces with alpha modifier (e.g. bg-emerald-50/60). Tailwind
+   generates these as separate classes containing a `/`, so the plain
+   selectors above don't match them. */
+html.dark :where(
+  [class*="bg-blue-50/"], [class*="bg-emerald-50/"], [class*="bg-red-50/"],
+  [class*="bg-amber-50/"], [class*="bg-yellow-50/"], [class*="bg-purple-50/"],
+  [class*="bg-violet-50/"], [class*="bg-cyan-50/"], [class*="bg-pink-50/"],
+  [class*="bg-orange-50/"], [class*="bg-teal-50/"], [class*="bg-indigo-50/"],
+  [class*="bg-rose-50/"], [class*="bg-lime-50/"], [class*="bg-sky-50/"],
+  [class*="bg-slate-50/"], [class*="bg-white/"]
+) {
+  background-color: rgba(30, 41, 59, 0.55);
+}
+
 /* Hover surfaces */
 html.dark :where(.hover\:bg-white:hover) { background-color: #334155; }
 html.dark :where(.hover\:bg-slate-50:hover) { background-color: #1f2937; }
