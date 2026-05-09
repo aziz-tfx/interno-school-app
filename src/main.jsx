@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { DataProvider } from './contexts/DataContext'
 import { LanguageProvider } from './contexts/LanguageContext'
+import { ThemeProvider } from './contexts/ThemeContext'
 import App from './App'
 import './index.css'
 
@@ -15,13 +16,15 @@ function DataProviderWithUser({ children }) {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <LanguageProvider>
-        <AuthProvider>
-          <DataProviderWithUser>
-            <App />
-          </DataProviderWithUser>
-        </AuthProvider>
-      </LanguageProvider>
+      <ThemeProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <DataProviderWithUser>
+              <App />
+            </DataProviderWithUser>
+          </AuthProvider>
+        </LanguageProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>,
 )

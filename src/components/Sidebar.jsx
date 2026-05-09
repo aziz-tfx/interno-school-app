@@ -27,14 +27,18 @@ import {
   ChevronDown,
   ChevronRight,
   Sliders,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { useTheme } from '../contexts/ThemeContext'
 import Logo from './Logo'
 
 export default function Sidebar({ open, onClose }) {
   const { user, hasPermission, getRoleLabel, logout } = useAuth()
   const { t } = useLanguage()
+  const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -344,6 +348,14 @@ export default function Sidebar({ open, onClose }) {
               <p className="text-xs text-slate-400">{getRoleLabel()}</p>
             </div>
             <Settings size={14} className="text-slate-500" />
+          </button>
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+            className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:bg-white/8 rounded-xl transition-all"
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
           </button>
           <button
             onClick={logout}
