@@ -55,12 +55,13 @@ export default function Students() {
   const canDelete = hasPermission('students', 'delete')
 
   // ── Scoped data ──
+  // Show students from user's branch + students created by this user (cross-branch sales)
   const allStudents = user.branch !== 'all'
-    ? students.filter(s => s.branch === user.branch)
+    ? students.filter(s => s.branch === user.branch || String(s.createdBy) === String(user.id))
     : students
 
   const allGroups = user.branch !== 'all'
-    ? groups.filter(g => g.branch === user.branch)
+    ? groups.filter(g => g.branch === user.branch || allStudents.some(s => s.groupId === g.id || s.group === g.name))
     : groups
 
   // ── Student filters ──
