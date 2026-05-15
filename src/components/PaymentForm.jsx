@@ -179,7 +179,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const isDrawingRef = useRef(false)
 
   const branchStudents = students.filter(s =>
-    user?.branch !== 'all' ? s.branch === user.branch : s.branch === form.branch
+    user?.branch !== 'all'
+      ? (s.branch === user.branch || String(s.createdBy) === String(user?.id))
+      : s.branch === form.branch
   )
 
   // Calculate student's previous payments and remaining debt
