@@ -29,6 +29,7 @@ import {
   Sliders,
   Sun,
   Moon,
+  MessageCircle,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -63,6 +64,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/?tab=payments', icon: Wallet, label: 'Оплата' },
         { to: '/?tab=attendance', icon: ClipboardCheck, label: 'Посещаемость' },
         { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
+        { to: '/?tab=chat', icon: MessageCircle, label: 'Чат с преподавателем' },
         { to: '/?tab=announcements', icon: Bell, label: 'Объявления' },
         { to: '/?tab=contract', icon: FileText, label: 'Договор' },
       ],

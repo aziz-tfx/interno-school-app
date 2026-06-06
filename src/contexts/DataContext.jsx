@@ -52,12 +52,15 @@ export function DataProvider({ children, currentUser }) {
   // Audit log collection
   const [auditLogs, setAuditLogs] = useState([])
 
+  // Messages collection (student ↔ teacher chat)
+  const [messages, setMessages] = useState([])
+
   // Track whether initial load has resolved for each collection
-  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false, studentGameData: false, schedule: false, auditLogs: false })
+  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false, studentGameData: false, schedule: false, auditLogs: false, messages: false })
 
   const checkAllLoaded = () => {
     const r = loadedRef.current
-    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress && r.studentGameData && r.schedule && r.auditLogs) {
+    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress && r.studentGameData && r.schedule && r.auditLogs && r.messages) {
       setLoading(false)
     }
   }
@@ -134,6 +137,7 @@ export function DataProvider({ children, currentUser }) {
     subscribeCollection('studentGameData', setStudentGameData, 'studentGameData')
     subscribeCollection('schedule', setSchedule, 'schedule')
     subscribeCollection('auditLog', setAuditLogs, 'auditLogs')
+    subscribeCollection('messages', setMessages, 'messages')
 
     return () => {
       unsubscribers.forEach(unsub => unsub())
@@ -509,6 +513,23 @@ export function DataProvider({ children, currentUser }) {
     await deleteDoc(doc(db, 'lmsAnnouncements', id))
   }
 
+  // --- Messages CRUD (student ↔ teacher chat) ---
+  // Thread keyed by `${studentId}__${groupId}`; participants: student + teacher
+  const sendMessage = async (msg) => {
+    const docRef = await addDoc(collection(db, 'messages'), withTenant({
+      ...msg,
+      createdAt: new Date().toISOString(),
+      readBy: [msg.senderId],
+    }))
+    return { ...msg, id: docRef.id }
+  }
+  const markMessagesRead = async (threadId, readerId) => {
+    const unread = messages.filter(m => m.threadId === threadId && !(m.readBy || []).includes(readerId))
+    for (const m of unread) {
+      await updateDoc(doc(db, 'messages', m.id), { readBy: [...(m.readBy || []), readerId] })
+    }
+  }
+
   // --- LMS Modules CRUD ---
   const addLmsModule = async (mod) => {
     const docRef = await addDoc(collection(db, 'lmsModules'), withTenant(mod))
@@ -654,6 +675,7 @@ export function DataProvider({ children, currentUser }) {
       lmsAssignments, addLmsAssignment, updateLmsAssignment, deleteLmsAssignment,
       lmsSubmissions, addLmsSubmission, updateLmsSubmission,
       lmsAnnouncements, addLmsAnnouncement, deleteLmsAnnouncement,
+      messages, sendMessage, markMessagesRead,
       lmsModules, addLmsModule, updateLmsModule, deleteLmsModule,
       lmsProgress, addLmsProgress, deleteLmsProgress,
       studentGameData, updateStudentGameData,

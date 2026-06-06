@@ -169,6 +169,14 @@ service cloud.firestore {
       allow read, write: if hasAppCheck() && docSmallEnough();
     }
 
+    // ─── Messages — student ↔ teacher chat ───────────────────────────
+    match /messages/{id} {
+      allow read: if hasAppCheck();
+      allow create: if hasAppCheck() && docSmallEnough();
+      allow update: if hasAppCheck() && docSmallEnough();
+      allow delete: if hasAppCheck();
+    }
+
     // ─── Tenants — platform-level management ─────────────────────────
     match /tenants/{id} {
       allow read: if hasAppCheck();
