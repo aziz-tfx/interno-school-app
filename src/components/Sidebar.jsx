@@ -44,16 +44,29 @@ export default function Sidebar({ open, onClose }) {
 
   const studentNavItems = [
     { to: '/', icon: BarChart3, label: 'Обзор' },
-    { to: '/?tab=course', icon: BookOpen, label: 'Мой курс' },
-    { to: '/?tab=achievements', icon: Trophy, label: 'Достижения' },
-    { to: '/?tab=payments', icon: Wallet, label: 'Оплата' },
-    { to: '/?tab=attendance', icon: ClipboardCheck, label: 'Посещаемость' },
-    { to: '/?tab=assignments', icon: PenTool, label: 'Задания' },
-    { to: '/?tab=announcements', icon: Bell, label: 'Объявления' },
-    { to: '/?tab=contract', icon: FileText, label: 'Договор' },
-    { divider: true },
-    { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
-    { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
+    {
+      group: 'student-learning',
+      icon: BookOpen,
+      label: 'Обучение',
+      children: [
+        { to: '/?tab=course', icon: BookOpen, label: 'Мой курс' },
+        { to: '/?tab=assignments', icon: PenTool, label: 'Задания' },
+        { to: '/?tab=achievements', icon: Trophy, label: 'Достижения' },
+        { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
+      ],
+    },
+    {
+      group: 'student-info',
+      icon: Calendar,
+      label: 'Информация',
+      children: [
+        { to: '/?tab=payments', icon: Wallet, label: 'Оплата' },
+        { to: '/?tab=attendance', icon: ClipboardCheck, label: 'Посещаемость' },
+        { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
+        { to: '/?tab=announcements', icon: Bell, label: 'Объявления' },
+        { to: '/?tab=contract', icon: FileText, label: 'Договор' },
+      ],
+    },
   ]
 
   // Grouped navigation for staff. A `group` item renders as an expandable
@@ -113,29 +126,36 @@ export default function Sidebar({ open, onClose }) {
   }
 
   const navItems = useMemo(() => {
-    if (user?.role === 'student') {
-      return studentNavItems.filter(it => !it.permission || hasPermission(it.permission))
-    }
-    return allNavItems
+    const source = user?.role === 'student' ? studentNavItems : allNavItems
+    return source
       .map(item => {
         if (item.group) {
-          const children = item.children.filter(filterByPerm)
+          const children = item.children.filter(c => !c.permission || hasPermission(c.permission))
           return children.length ? { ...item, children } : null
         }
+        if (item.divider) return item
         return filterByPerm(item) ? item : null
       })
       .filter(Boolean)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.role, user?.customPermissions, t])
 
-  // Track which groups are open. Auto-open the group containing the
-  // currently active route so the user sees where they are.
+  // Check if a child route is active (supports both pathname and ?tab= URLs)
+  const isChildActive = (child) => {
+    if (child.to.startsWith('/?tab=')) {
+      const tabParam = new URLSearchParams(child.to.split('?')[1]).get('tab')
+      const currentTab = new URLSearchParams(location.search).get('tab')
+      return currentTab === tabParam
+    }
+    return location.pathname.startsWith(child.to)
+  }
+
+  // Track which groups are open. Auto-open the group containing the active route.
+  const allGroups = [...allNavItems, ...studentNavItems].filter(it => it.group)
   const initialOpen = useMemo(() => {
     const state = {}
-    allNavItems.forEach(it => {
-      if (it.group) {
-        state[it.group] = it.children.some(c => location.pathname.startsWith(c.to))
-      }
+    allGroups.forEach(it => {
+      state[it.group] = it.children.some(c => isChildActive(c))
     })
     return state
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,19 +163,18 @@ export default function Sidebar({ open, onClose }) {
 
   const [openGroups, setOpenGroups] = useState(initialOpen)
 
-  // Make sure the group containing the current route is open when route changes.
   useEffect(() => {
     setOpenGroups(prev => {
       const next = { ...prev }
-      allNavItems.forEach(it => {
-        if (it.group && it.children.some(c => location.pathname.startsWith(c.to))) {
+      allGroups.forEach(it => {
+        if (it.children.some(c => isChildActive(c))) {
           next[it.group] = true
         }
       })
       return next
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname])
+  }, [location.pathname, location.search])
 
   const toggleGroup = (id) => setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }))
 
@@ -244,7 +263,7 @@ export default function Sidebar({ open, onClose }) {
             if (item.group) {
               const Icon = item.icon
               const isExpanded = !!openGroups[item.group]
-              const hasActiveChild = item.children.some(c => location.pathname.startsWith(c.to))
+              const hasActiveChild = item.children.some(c => isChildActive(c))
               const isHovered = flyout?.groupId === item.group
               const Chev = isExpanded ? ChevronDown : ChevronRight
               return (
@@ -271,12 +290,14 @@ export default function Sidebar({ open, onClose }) {
                     <div className="mt-1 space-y-1">
                       {item.children.map(child => {
                         const ChildIcon = child.icon
+                        const active = isChildActive(child)
                         return (
                           <NavLink
                             key={child.to}
                             to={child.to}
                             onClick={onClose}
-                            className={({ isActive }) => linkClass(isActive, true)}
+                            end
+                            className={linkClass(active, true)}
                           >
                             <ChildIcon size={16} />
                             {child.label}
@@ -384,14 +405,16 @@ export default function Sidebar({ open, onClose }) {
           <div className="space-y-0.5">
             {flyout.item.children.map(child => {
               const ChildIcon = child.icon
+              const active = isChildActive(child)
               return (
                 <NavLink
                   key={child.to}
                   to={child.to}
+                  end
                   onClick={() => { setFlyout(null); onClose() }}
-                  className={({ isActive }) =>
+                  className={
                     `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                      isActive
+                      active
                         ? 'bg-white/15 text-white shadow-inner'
                         : 'text-slate-300 hover:bg-white/10 hover:text-white'
                     }`
