@@ -402,6 +402,12 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
     bypassDuplicateRef.current = false
 
+    // Group is required for new sales (not doplata)
+    if (form.type === 'income' && !isDoplata && !form.groupId) {
+      alert('Выберите группу для ученика')
+      return
+    }
+
     // Block save when splits are enabled but invalid (no manager picked,
     // duplicate manager, or shares don't sum to the payment total).
     if (splits.length > 0 && !splitsValid) {
@@ -1771,7 +1777,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
             {t('paymentForm.btn_cancel')}
           </button>
-          <button type="submit" disabled={submitting || (form.type === 'income' && (files.length === 0 || (isDoplata && !form.studentId)))}
+          <button type="submit" disabled={submitting || (form.type === 'income' && (files.length === 0 || (isDoplata && !form.studentId) || (!isDoplata && !form.groupId)))}
             className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
             {submitting ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
