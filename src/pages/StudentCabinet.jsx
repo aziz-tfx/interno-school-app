@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
@@ -9,9 +9,12 @@ import {
   Play, ChevronRight, CreditCard, Award, User, Layers,
   Eye, XCircle, X, ExternalLink, Wallet, BarChart3,
   BookMarked, PenTool, Star, Target, Zap, Flame, Trophy, Bot,
+  MessageCircle, Send,
 } from 'lucide-react'
 import useGamification from '../hooks/useGamification'
+import useStudentNotifications from '../hooks/useStudentNotifications'
 import AIChat from '../components/AIChat'
+import Certificate from '../components/Certificate'
 
 // ─── Format currency ───────────────────────────────────────────────
 function fmt(n) {
@@ -27,11 +30,15 @@ export default function StudentCabinet() {
     students, groups, courses, payments, teachers, branches,
     getAttendanceByGroup, getAttendanceStats,
     lmsProgress, lmsLessons, lmsModules, lmsAssignments, lmsSubmissions, lmsAnnouncements,
+    messages, sendMessage, markMessagesRead,
   } = useData()
 
   const [searchParams] = useSearchParams()
   const activeTab = searchParams.get('tab') || 'overview'
   const [aiChatOpen, setAiChatOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [showCertificate, setShowCertificate] = useState(null)
+  const [chatText, setChatText] = useState('')
 
   // ─── Student identity ──────────────────────────────────────────
   const myStudent = useMemo(() => {
@@ -147,6 +154,62 @@ export default function StudentCabinet() {
   // ─── Gamification ─────────────────────────────────────────────
   const gam = useGamification(myStudent?.id)
 
+  // ─── Notifications ────────────────────────────────────────────
+  const myLessons = useMemo(() => {
+    const courseIds = myGroups.map(g => courses.find(c => c.name === g.course)?.id).filter(Boolean)
+    return lmsLessons.filter(l => courseIds.includes(l.courseId))
+  }, [lmsLessons, myGroups, courses])
+
+  const { notifications, unreadCount, markAllRead, markRead } = useStudentNotifications({
+    studentId: myStudent?.id,
+    lessons: myLessons,
+    assignments: myAssignments,
+    submissions: mySubmissions,
+    announcements: myAnnouncements,
+    payments: myPayments,
+    coursePrice,
+    messages: messages.filter(m => m.studentId === myStudent?.id),
+  })
+
+  // ─── Chat thread (student ↔ teacher) ──────────────────────────
+  const chatThreadId = myStudent && myGroup ? `${myStudent.id}__${myGroup.id}` : null
+  const chatMessages = useMemo(() => {
+    if (!chatThreadId) return []
+    return messages
+      .filter(m => m.threadId === chatThreadId)
+      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+  }, [messages, chatThreadId])
+
+  const handleSendChat = async () => {
+    if (!chatText.trim() || !chatThreadId || !myStudent) return
+    await sendMessage({
+      threadId: chatThreadId,
+      studentId: myStudent.id,
+      groupId: myGroup?.id || '',
+      teacherId: myGroup?.teacherId || '',
+      senderId: myStudent.id,
+      senderName: myStudent.name,
+      senderRole: 'student',
+      text: chatText.trim(),
+    })
+    setChatText('')
+  }
+
+  // Mark chat read when opening the chat tab
+  useEffect(() => {
+    if (activeTab === 'chat' && chatThreadId && myStudent) {
+      markMessagesRead(chatThreadId, myStudent.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, chatThreadId, chatMessages.length])
+
+  // ─── Certificate eligibility (per completed course) ───────────
+  const completedCourses = useMemo(() => {
+    return Object.entries(courseProgressData)
+      .filter(([, p]) => p.total > 0 && p.completed === p.total)
+      .map(([groupId, p]) => ({ groupId, course: p.course, group: myGroups.find(g => g.id === groupId) }))
+  }, [courseProgressData, myGroups])
+
   const setActiveTab = (tab) => navigate(tab === 'overview' ? '/' : `/?tab=${tab}`)
 
   // ─── Blocked screen ───────────────────────────────────────────
@@ -198,6 +261,53 @@ export default function StudentCabinet() {
           <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
           <div className="absolute bottom-0 left-0 w-72 h-72 bg-blue-300 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" />
         </div>
+        {/* Notification bell */}
+        <div className="absolute top-6 right-4 md:right-8 z-20">
+          <button onClick={() => { setNotifOpen(o => !o); if (!notifOpen) setTimeout(markAllRead, 1500) }}
+            className="relative w-11 h-11 bg-white/15 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20 hover:bg-white/25 transition-colors">
+            <Bell size={20} className="text-white" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-500 rounded-full text-white text-[11px] font-bold flex items-center justify-center px-1 shadow-lg">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+          {notifOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setNotifOpen(false)} />
+              <div className="absolute right-0 mt-2 w-80 max-h-[420px] overflow-auto bg-white rounded-2xl shadow-2xl border border-slate-100 z-20">
+                <div className="flex items-center justify-between p-3 border-b border-slate-100 sticky top-0 bg-white">
+                  <p className="font-semibold text-slate-800 text-sm">Уведомления</p>
+                  {notifications.length > 0 && (
+                    <button onClick={markAllRead} className="text-xs text-blue-500 hover:text-blue-700">Прочитать все</button>
+                  )}
+                </div>
+                {notifications.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <Bell size={28} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-sm text-slate-400">Нет уведомлений</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-50">
+                    {notifications.slice(0, 30).map(n => (
+                      <button key={n.id}
+                        onClick={() => { markRead(n.id); setNotifOpen(false); navigate(n.link) }}
+                        className={`w-full flex items-start gap-3 p-3 text-left hover:bg-slate-50 transition-colors ${!n.read ? 'bg-blue-50/40' : ''}`}>
+                        <span className="text-lg flex-shrink-0">{n.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm ${!n.read ? 'font-semibold text-slate-800' : 'text-slate-600'} ${n.urgent ? 'text-red-600' : ''}`}>{n.title}</p>
+                          <p className="text-xs text-slate-400 truncate">{n.body}</p>
+                        </div>
+                        {!n.read && <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1.5" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="relative z-10 max-w-5xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -560,12 +670,32 @@ export default function StudentCabinet() {
 
                   {/* Lessons list */}
                   <div className="p-5">
-                    {modules.length > 0 ? modules.map(mod => {
+                    {modules.length > 0 ? modules.map((mod, modIdx) => {
                       const modLessons = lessons.filter(l => l.moduleId === mod.id)
+                      const modDone = modLessons.filter(l => myProgressIds.has(l.id)).length
+                      const modPct = modLessons.length > 0 ? Math.round((modDone / modLessons.length) * 100) : 0
                       return (
-                        <div key={mod.id} className="mb-4 last:mb-0">
-                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">{mod.title}</p>
-                          <div className="space-y-1">
+                        <div key={mod.id} className="mb-5 last:mb-0">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                              modPct === 100 ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
+                            }`}>
+                              {modPct === 100 ? <CheckCircle2 size={15} /> : modIdx + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-sm font-semibold text-slate-700 truncate">{mod.title}</p>
+                                <span className={`text-xs font-bold ml-2 ${modPct === 100 ? 'text-emerald-600' : 'text-blue-600'}`}>
+                                  {modDone}/{modLessons.length}
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all ${modPct === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                  style={{ width: `${modPct}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-1 pl-10">
                             {modLessons.map(lesson => {
                               const done = myProgressIds.has(lesson.id)
                               return (
@@ -601,9 +731,14 @@ export default function StudentCabinet() {
                   </div>
 
                   {pct === 100 && (
-                    <div className="bg-emerald-50 border-t border-emerald-100 p-4 text-center">
-                      <Award size={24} className="mx-auto text-emerald-500 mb-1" />
-                      <p className="text-sm font-semibold text-emerald-700">Курс завершён! Поздравляем! 🎉</p>
+                    <div className="bg-gradient-to-r from-emerald-50 to-purple-50 border-t border-emerald-100 p-5 text-center">
+                      <Award size={28} className="mx-auto text-emerald-500 mb-1" />
+                      <p className="text-sm font-semibold text-emerald-700 mb-3">Курс завершён! Поздравляем! 🎉</p>
+                      <button
+                        onClick={() => setShowCertificate({ courseName: group.course, schoolName: myBranch?.name })}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-medium rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg shadow-purple-500/25">
+                        <Award size={16} /> Получить сертификат
+                      </button>
                     </div>
                   )}
                 </div>
@@ -999,7 +1134,71 @@ export default function StudentCabinet() {
           </div>
         )}
 
+        {/* ══════════ CHAT TAB ══════════ */}
+        {activeTab === 'chat' && (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col" style={{ height: '70vh' }}>
+            <div className="flex items-center gap-3 p-4 border-b border-slate-100">
+              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                <MessageCircle size={18} className="text-purple-500" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800">{myTeacher?.name || 'Преподаватель'}</p>
+                <p className="text-xs text-slate-400">{myGroup?.course || 'Чат с преподавателем'}</p>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-4 space-y-3">
+              {!myGroup ? (
+                <p className="text-sm text-slate-400 text-center py-8">Группа не назначена</p>
+              ) : chatMessages.length === 0 ? (
+                <div className="text-center py-12">
+                  <MessageCircle size={32} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-sm text-slate-400">Напишите первое сообщение преподавателю</p>
+                </div>
+              ) : chatMessages.map(m => {
+                const mine = m.senderId === myStudent?.id
+                return (
+                  <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${mine ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'}`}>
+                      {!mine && <p className="text-[10px] font-semibold text-purple-500 mb-0.5">{m.senderName}</p>}
+                      <p className="text-sm whitespace-pre-wrap break-words">{m.text}</p>
+                      <p className={`text-[10px] mt-1 ${mine ? 'text-white/60' : 'text-slate-400'}`}>
+                        {m.createdAt ? new Date(m.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {myGroup && (
+              <div className="p-3 border-t border-slate-100 flex items-center gap-2">
+                <input
+                  type="text" value={chatText} onChange={e => setChatText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendChat() } }}
+                  placeholder="Написать сообщение..."
+                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+                <button onClick={handleSendChat} disabled={!chatText.trim()}
+                  className="w-11 h-11 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 disabled:opacity-40 transition-colors flex-shrink-0">
+                  <Send size={18} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
+
+      {/* Certificate modal */}
+      {showCertificate && (
+        <Certificate
+          studentName={myStudent?.name || user?.name}
+          courseName={showCertificate.courseName}
+          schoolName={showCertificate.schoolName}
+          onClose={() => setShowCertificate(null)}
+        />
+      )}
 
       {/* Floating AI Chat Button */}
       <button

@@ -6,7 +6,8 @@ import { useLanguage } from '../../contexts/LanguageContext'
 import {
   ArrowLeft, BookOpen, FileText, CheckCircle2, Bell, Plus, Pencil, Trash2, X,
   Clock, Calendar, Upload, Download, Users, ChevronDown, ChevronUp, Send, Award,
-  Video, Link2, File, Image as ImageIcon, ExternalLink, Settings2, Save, Info, CheckCircle, Lock
+  Video, Link2, File, Image as ImageIcon, ExternalLink, Settings2, Save, Info, CheckCircle, Lock,
+  MessageCircle
 } from 'lucide-react'
 import { isLessonAccessible, isModuleUnlocked, getUnlockedModuleCount } from '../../utils/lessonAccess'
 
@@ -773,6 +774,7 @@ export default function LMSGroupView() {
     addLmsLesson, updateLmsLesson, deleteLmsLesson,
     addLmsAssignment, updateLmsAssignment, deleteLmsAssignment,
     addLmsAnnouncement, deleteLmsAnnouncement,
+    messages, sendMessage, markMessagesRead,
   } = useData()
 
   const { hasPermission } = useAuth()
@@ -892,11 +894,55 @@ export default function LMSGroupView() {
     setShowModal(null)
   }
 
+  // ─── Teacher chat: one thread per student in this group ───────────
+  const groupMessages = useMemo(
+    () => (messages || []).filter(m => m.groupId === groupId),
+    [messages, groupId]
+  )
+  const groupChatUnread = useMemo(
+    () => groupMessages.filter(m => m.senderRole === 'student' && !(m.readBy || []).includes(String(user?.id))).length,
+    [groupMessages, user]
+  )
+  const [activeChatStudent, setActiveChatStudent] = useState(null)
+  const [teacherChatText, setTeacherChatText] = useState('')
+
+  const activeThreadId = activeChatStudent ? `${activeChatStudent}__${groupId}` : null
+  const activeThreadMessages = useMemo(() => {
+    if (!activeThreadId) return []
+    return groupMessages
+      .filter(m => m.threadId === activeThreadId)
+      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+  }, [groupMessages, activeThreadId])
+
+  useEffect(() => {
+    if (activeTab === 'chat' && activeThreadId && user?.id) {
+      markMessagesRead(activeThreadId, String(user.id))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, activeThreadId, activeThreadMessages.length])
+
+  const handleTeacherSend = async () => {
+    if (!teacherChatText.trim() || !activeChatStudent) return
+    const stu = students.find(s => String(s.id) === String(activeChatStudent))
+    await sendMessage({
+      threadId: activeThreadId,
+      studentId: activeChatStudent,
+      groupId,
+      teacherId: group?.teacherId || '',
+      senderId: String(user?.id),
+      senderName: user?.name,
+      senderRole: 'teacher',
+      text: teacherChatText.trim(),
+    })
+    setTeacherChatText('')
+  }
+
   const tabs = [
     { id: 'lessons', label: t('lms.tab_lessons'), icon: BookOpen, count: lessons.length },
     { id: 'assignments', label: t('lms.tab_assignments'), icon: CheckCircle2, count: assignments.length },
     { id: 'announcements', label: t('lms.tab_announcements'), icon: Bell, count: announcements.length },
     ...(canEdit ? [{ id: 'students', label: t('lms.tab_students'), icon: Users, count: groupStudents.length }] : []),
+    ...((canEdit || isTeacher) ? [{ id: 'chat', label: 'Чат', icon: MessageCircle, count: groupChatUnread }] : []),
     ...(canEdit ? [{ id: 'settings', label: t('lms.tab_settings'), icon: Settings2 }] : []),
   ]
 
@@ -1172,6 +1218,78 @@ export default function LMSGroupView() {
       {/* Settings Tab */}
       {activeTab === 'settings' && canEdit && (
         <CourseSettingsTab group={group} course={course} canEdit={canEdit} canManage={canManage} />
+      )}
+
+      {/* ══════════ CHAT TAB (teacher) ══════════ */}
+      {activeTab === 'chat' && (canEdit || isTeacher) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4" style={{ height: '65vh' }}>
+          {/* Student list */}
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-auto">
+            <p className="text-xs font-semibold text-slate-400 uppercase p-3 border-b border-slate-100">Ученики</p>
+            {groupStudents.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-6">Нет учеников</p>
+            ) : groupStudents.map(s => {
+              const threadId = `${s.id}__${groupId}`
+              const unread = groupMessages.filter(m => m.threadId === threadId && m.senderRole === 'student' && !(m.readBy || []).includes(String(user?.id))).length
+              const lastMsg = groupMessages.filter(m => m.threadId === threadId).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0]
+              return (
+                <button key={s.id} onClick={() => setActiveChatStudent(String(s.id))}
+                  className={`w-full flex items-center gap-3 p-3 text-left border-b border-slate-50 hover:bg-slate-50 transition-colors ${String(activeChatStudent) === String(s.id) ? 'bg-blue-50' : ''}`}>
+                  <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-500 flex-shrink-0">
+                    {s.name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{s.name}</p>
+                    {lastMsg && <p className="text-xs text-slate-400 truncate">{lastMsg.text}</p>}
+                  </div>
+                  {unread > 0 && <span className="min-w-[18px] h-[18px] bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1">{unread}</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Conversation */}
+          <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden">
+            {!activeChatStudent ? (
+              <div className="flex-1 flex items-center justify-center text-center p-6">
+                <div>
+                  <MessageCircle size={32} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-sm text-slate-400">Выберите ученика для переписки</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-auto p-4 space-y-3">
+                  {activeThreadMessages.length === 0 ? (
+                    <p className="text-sm text-slate-400 text-center py-8">Нет сообщений</p>
+                  ) : activeThreadMessages.map(m => {
+                    const mine = m.senderRole === 'teacher'
+                    return (
+                      <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${mine ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'}`}>
+                          <p className="text-sm whitespace-pre-wrap break-words">{m.text}</p>
+                          <p className={`text-[10px] mt-1 ${mine ? 'text-white/60' : 'text-slate-400'}`}>
+                            {m.createdAt ? new Date(m.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="p-3 border-t border-slate-100 flex items-center gap-2">
+                  <input type="text" value={teacherChatText} onChange={e => setTeacherChatText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTeacherSend() } }}
+                    placeholder="Ответить ученику..."
+                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  <button onClick={handleTeacherSend} disabled={!teacherChatText.trim()}
+                    className="w-11 h-11 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 disabled:opacity-40 flex-shrink-0">
+                    <Send size={18} />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Modals */}
