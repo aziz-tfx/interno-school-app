@@ -18,7 +18,7 @@ body {
 
 html.dark body {
   color: #e2e8f0;
-  background: linear-gradient(135deg, #0b1120 0%, #0f172a 25%, #111827 50%, #1a1530 75%, #082030 100%);
+  background: linear-gradient(145deg, #05000a 0%, #0a0614 20%, #0d0b1a 40%, #0c0a18 60%, #080510 80%, #030008 100%);
   background-attachment: fixed;
 }
 
@@ -114,79 +114,78 @@ html.dark {
   color-scheme: dark;
 }
 
-/* Glass surfaces */
+/* Glass surfaces — neo-bank purple-tinted */
 html.dark :where(.glass) {
-  background: rgba(15, 23, 42, 0.65);
-  border-color: rgba(148, 163, 184, 0.12);
+  background: rgba(15, 10, 30, 0.7);
+  border-color: rgba(139, 92, 246, 0.1);
 }
 html.dark :where(.glass-strong) {
-  background: rgba(15, 23, 42, 0.85);
-  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(15, 10, 30, 0.88);
+  border-color: rgba(139, 92, 246, 0.15);
 }
 html.dark :where(.glass-card) {
-  background: rgba(30, 41, 59, 0.55);
-  border-color: rgba(148, 163, 184, 0.12);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.2);
+  background: rgba(20, 15, 40, 0.6);
+  border-color: rgba(139, 92, 246, 0.1);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4), 0 0 80px rgba(139, 92, 246, 0.03);
 }
 html.dark :where(.glass-input) {
-  background: rgba(30, 41, 59, 0.45);
-  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(20, 15, 40, 0.5);
+  border-color: rgba(139, 92, 246, 0.15);
 }
 html.dark :where(.glass-hover):hover {
-  background: rgba(30, 41, 59, 0.78);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  background: rgba(30, 20, 55, 0.8);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(139, 92, 246, 0.06);
 }
 html.dark :where(.glass-btn) {
-  background: rgba(30, 41, 59, 0.6);
-  border-color: rgba(148, 163, 184, 0.18);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  background: rgba(25, 18, 50, 0.65);
+  border-color: rgba(139, 92, 246, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 html.dark :where(.glass-btn):hover {
-  background: rgba(51, 65, 85, 0.8);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  background: rgba(40, 28, 70, 0.8);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.12);
 }
 
-/* Surfaces — neutral whites and slates */
-html.dark :where(.bg-white) { background-color: #1e293b; }
-html.dark :where(.bg-slate-50) { background-color: #1a2334; }
-html.dark :where(.bg-slate-100) { background-color: #1e293b; }
-html.dark :where(.bg-slate-200) { background-color: #334155; }
+/* Surfaces — deep purple-black tones */
+html.dark :where(.bg-white) { background-color: #110d20; }
+html.dark :where(.bg-slate-50) { background-color: #0e0a1c; }
+html.dark :where(.bg-slate-100) { background-color: #140f28; }
+html.dark :where(.bg-slate-200) { background-color: #1e1538; }
 html.dark :where(.bg-slate-800),
-html.dark :where(.bg-slate-900) { background-color: #0b1120; }
+html.dark :where(.bg-slate-900) { background-color: #06040e; }
 
-/* Translucent backgrounds — flip alpha-on-white to alpha-on-dark */
+/* Translucent backgrounds — purple-tinted alpha */
 html.dark :where(.bg-white\/50, .bg-white\/60, .bg-white\/70, .bg-white\/80, .bg-white\/90) {
-  background-color: rgba(30, 41, 59, 0.7);
+  background-color: rgba(20, 15, 40, 0.7);
 }
 html.dark :where(.bg-slate-50\/50, .bg-slate-50\/60, .bg-slate-50\/70) {
-  background-color: rgba(30, 41, 59, 0.5);
+  background-color: rgba(20, 15, 40, 0.5);
 }
 
-/* Text — neutral slate scale */
-html.dark :where(.text-slate-900) { color: #e2e8f0; }
-html.dark :where(.text-slate-800) { color: #cbd5e1; }
-html.dark :where(.text-slate-700) { color: #cbd5e1; }
-html.dark :where(.text-slate-600) { color: #94a3b8; }
-html.dark :where(.text-slate-500) { color: #94a3b8; }
-html.dark :where(.text-slate-400) { color: #64748b; }
-html.dark :where(.text-white) { color: #f8fafc; }
+/* Text — purple-tinted neutrals */
+html.dark :where(.text-slate-900) { color: #ede9f6; }
+html.dark :where(.text-slate-800) { color: #d4cde6; }
+html.dark :where(.text-slate-700) { color: #c4bbd8; }
+html.dark :where(.text-slate-600) { color: #9b8fba; }
+html.dark :where(.text-slate-500) { color: #8578a0; }
+html.dark :where(.text-slate-400) { color: #6b5d8a; }
+html.dark :where(.text-white) { color: #f8f6fc; }
 
-/* Borders */
-html.dark :where(.border-slate-100) { border-color: rgba(148, 163, 184, 0.12); }
-html.dark :where(.border-slate-200) { border-color: rgba(148, 163, 184, 0.18); }
-html.dark :where(.border-slate-300) { border-color: rgba(148, 163, 184, 0.25); }
-html.dark :where(.border-white) { border-color: rgba(148, 163, 184, 0.2); }
-html.dark :where(.divide-slate-100 > * + *) { border-color: rgba(148, 163, 184, 0.12); }
-html.dark :where(.divide-slate-200 > * + *) { border-color: rgba(148, 163, 184, 0.18); }
+/* Borders — purple-tinted */
+html.dark :where(.border-slate-100) { border-color: rgba(139, 92, 246, 0.08); }
+html.dark :where(.border-slate-200) { border-color: rgba(139, 92, 246, 0.12); }
+html.dark :where(.border-slate-300) { border-color: rgba(139, 92, 246, 0.18); }
+html.dark :where(.border-white) { border-color: rgba(139, 92, 246, 0.12); }
+html.dark :where(.divide-slate-100 > * + *) { border-color: rgba(139, 92, 246, 0.08); }
+html.dark :where(.divide-slate-200 > * + *) { border-color: rgba(139, 92, 246, 0.12); }
 
-/* Soft brand-tinted backgrounds (status pills, info cards) — darken
-   so coloured text remains readable but the chip doesn't glow. */
+/* Soft brand-tinted backgrounds — semi-transparent on dark purple */
 html.dark :where(
   .bg-blue-50, .bg-emerald-50, .bg-red-50, .bg-amber-50, .bg-yellow-50,
   .bg-purple-50, .bg-violet-50, .bg-cyan-50, .bg-pink-50, .bg-orange-50,
   .bg-teal-50, .bg-indigo-50, .bg-rose-50, .bg-lime-50, .bg-sky-50
 ) {
-  background-color: rgba(30, 41, 59, 0.6);
+  background-color: rgba(20, 15, 40, 0.65);
 }
 
 /* Same surfaces with alpha modifier (e.g. bg-emerald-50/60). Tailwind
@@ -200,15 +199,15 @@ html.dark :where(
   [class*="bg-rose-50/"], [class*="bg-lime-50/"], [class*="bg-sky-50/"],
   [class*="bg-slate-50/"], [class*="bg-white/"]
 ) {
-  background-color: rgba(30, 41, 59, 0.55);
+  background-color: rgba(20, 15, 40, 0.5);
 }
 
 /* Hover surfaces */
-html.dark :where(.hover\:bg-white:hover) { background-color: #334155; }
-html.dark :where(.hover\:bg-slate-50:hover) { background-color: #1f2937; }
-html.dark :where(.hover\:bg-slate-100:hover) { background-color: #334155; }
-html.dark :where(.hover\:bg-slate-200:hover) { background-color: #475569; }
-html.dark :where(.hover\:border-slate-300:hover) { border-color: rgba(148, 163, 184, 0.32); }
+html.dark :where(.hover\:bg-white:hover) { background-color: #1e1538; }
+html.dark :where(.hover\:bg-slate-50:hover) { background-color: #180f30; }
+html.dark :where(.hover\:bg-slate-100:hover) { background-color: #1e1538; }
+html.dark :where(.hover\:bg-slate-200:hover) { background-color: #2a1e4a; }
+html.dark :where(.hover\:border-slate-300:hover) { border-color: rgba(139, 92, 246, 0.25); }
 
 /* Form controls */
 html.dark :where(input, select, textarea) {
@@ -217,17 +216,46 @@ html.dark :where(input, select, textarea) {
 html.dark :where(input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"])),
 html.dark :where(select),
 html.dark :where(textarea) {
-  background-color: rgba(15, 23, 42, 0.5);
+  background-color: rgba(15, 10, 30, 0.6);
   color: #e2e8f0;
+  border-color: rgba(139, 92, 246, 0.12);
 }
 html.dark :where(input::placeholder, textarea::placeholder) {
-  color: #64748b;
+  color: #4c3a6e;
+}
+html.dark :where(input:focus, select:focus, textarea:focus) {
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 /* Scrollbar */
 html.dark ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
+  background: rgba(139, 92, 246, 0.2);
 }
 html.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(139, 92, 246, 0.35);
 }
+
+/* Purple glow on primary buttons */
+html.dark :where(.bg-blue-600, .bg-emerald-600, .bg-purple-600, .bg-violet-600) {
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.25);
+}
+
+/* Sidebar in dark mode — deeper black with purple tint */
+html.dark :where(.glass-dark) {
+  background: rgba(8, 5, 18, 0.92);
+  border-color: rgba(139, 92, 246, 0.08);
+}
+
+/* Table row hover */
+html.dark :where(.hover\:bg-blue-50\/30:hover) {
+  background-color: rgba(139, 92, 246, 0.06) !important;
+}
+
+/* White/10 and white/15 used in sidebar nav */
+html.dark :where(.bg-white\/15) { background-color: rgba(139, 92, 246, 0.15); }
+html.dark :where(.bg-white\/8, [class*="bg-white/8"]) { background-color: rgba(139, 92, 246, 0.08); }
+html.dark :where(.hover\:bg-white\/8:hover, [class*="hover:bg-white/8"]:hover) { background-color: rgba(139, 92, 246, 0.12); }
+
+/* Modal overlay */
+html.dark :where(.bg-black\/40) { background-color: rgba(5, 0, 15, 0.7); }
