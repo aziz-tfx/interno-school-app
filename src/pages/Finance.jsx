@@ -415,7 +415,7 @@ export default function Finance() {
 
   // ─── Build manager KPI data from reports ─────────────────────────────────
   const managerKPIs = useMemo(() => {
-    return salesStaff.map(emp => {
+    const list = salesStaff.map(emp => {
       const plan = reportPlans[emp.name] || {}
       const actual = reportDaily[emp.name] || {}
 
@@ -504,8 +504,18 @@ export default function Finance() {
         onlineSales: onlineCount,
         deviation,
         achievedPct: planRevenue > 0 ? Math.round((actualRevenue / planRevenue) * 100) : 0,
+        hasPlan: planRevenue > 0,
+        hasActivity: actualRevenue > 0 || actualSales > 0 || (actualLeads || 0) > 0,
         amoConnected,
       }
+    })
+    // Sort: active managers first (by % achievement desc), then inactive/no-plan at the bottom
+    return list.sort((a, b) => {
+      const aActive = a.hasPlan || a.hasActivity
+      const bActive = b.hasPlan || b.hasActivity
+      if (aActive !== bActive) return aActive ? -1 : 1
+      // Both active: higher revenue first
+      return b.actual.revenue - a.actual.revenue
     })
   }, [salesStaff, reportPlans, reportDaily, payments, monthKey, branchFilter, amoStats, amoStatsV2, amoCalls])
 
@@ -699,17 +709,23 @@ export default function Finance() {
             <p className="text-lg font-bold text-slate-900">{formatRevenue(teamTotals.planRevenue)}</p>
             <p className="text-xs text-slate-400">{t('finance.sum')}</p>
           </div>
-          <div className="glass-card rounded-2xl p-4">
+          <div className="glass-card rounded-2xl p-4 ring-2 ring-emerald-200 bg-gradient-to-br from-emerald-50/60 to-transparent relative overflow-hidden">
             <div className="flex items-center gap-2 mb-2">
-              <div className="p-1.5 bg-emerald-50 rounded-lg"><TrendingUp size={16} className="text-emerald-600" /></div>
-              <span className="text-xs text-slate-500">{t('finance.fact_revenue')}</span>
+              <div className="p-1.5 bg-emerald-100 rounded-lg"><TrendingUp size={16} className="text-emerald-600" /></div>
+              <span className="text-xs font-medium text-emerald-700">{t('finance.fact_revenue')}</span>
             </div>
-            <p className="text-lg font-bold text-emerald-600">{formatRevenue(realRevenueData.revenue)}</p>
-            <p className={`text-xs font-semibold ${teamTotals.planRevenue > 0
-              ? statusColor(Math.round(realRevenueData.revenue / teamTotals.planRevenue * 100))
-              : 'text-slate-400'}`}>
-              {teamTotals.planRevenue > 0 ? `${Math.round(realRevenueData.revenue / teamTotals.planRevenue * 100)}%` : '—'}
-            </p>
+            <p className="text-2xl font-extrabold text-emerald-600 leading-none">{formatRevenue(realRevenueData.revenue)}</p>
+            <div className="flex items-center gap-2 mt-1.5">
+              <div className="flex-1 h-1.5 bg-emerald-100 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full transition-all"
+                  style={{ width: `${teamTotals.planRevenue > 0 ? Math.min(Math.round(realRevenueData.revenue / teamTotals.planRevenue * 100), 100) : 0}%` }} />
+              </div>
+              <span className={`text-xs font-bold ${teamTotals.planRevenue > 0
+                ? statusColor(Math.round(realRevenueData.revenue / teamTotals.planRevenue * 100))
+                : 'text-slate-400'}`}>
+                {teamTotals.planRevenue > 0 ? `${Math.round(realRevenueData.revenue / teamTotals.planRevenue * 100)}%` : '—'}
+              </span>
+            </div>
           </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -756,147 +772,195 @@ export default function Finance() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {managerKPIs.map(mgr => {
+          {managerKPIs.filter(m => m.hasPlan || m.hasActivity).map(mgr => {
             const pct = mgr.achievedPct
             const isCurrentUser = mgr.id === user?.id
+            // Status accent color for the left bar
+            const accent = !mgr.hasPlan ? 'bg-slate-300' : pct >= 100 ? 'bg-emerald-500' : pct >= 70 ? 'bg-amber-500' : 'bg-red-500'
             return (
               <div key={mgr.id}
                 onClick={() => openKpiEditor(mgr)}
-                className={`glass-card rounded-2xl p-5 border transition-all group relative cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${
+                className={`glass-card rounded-2xl border transition-all group relative cursor-pointer hover:shadow-md hover:-translate-y-0.5 overflow-hidden ${
                   isCurrentUser ? 'border-blue-300 ring-2 ring-blue-100' : 'border-transparent hover:border-slate-200'
                 }`}>
-                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <div className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-slate-200">
-                    <Eye size={10} />
-                    Продажи
-                  </div>
-                </div>
-                {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                      mgr.role === 'rop' ? 'bg-teal-600' : mgr.role === 'branch_director' ? 'bg-indigo-600' : 'bg-emerald-600'
-                    }`}>
-                      {mgr.avatar || mgr.name?.charAt(0)}
+                {/* Status accent bar */}
+                <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${accent}`} />
+
+                <div className="p-5 pl-6">
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-slate-200">
+                      <Eye size={10} />
+                      Продажи
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
-                        {mgr.name} {isCurrentUser && <span className="text-xs text-blue-500">{t('finance.you')}</span>}
-                        {mgr.amoConnected && (
-                          <span title="Заявки и конверсия из amoCRM"
-                            className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 border border-violet-200">
-                            amo
-                          </span>
-                        )}
-                      </h4>
-                      <p className="text-xs text-slate-500">
-                        {mgr.role === 'rop' ? t('finance.rop') : mgr.role === 'branch_director' ? 'Руководитель филиала' : t('finance.manager')} · {mgr.branch === 'all' ? t('finance.all_branches') : (branches.find(b => b.id === mgr.branch)?.name || mgr.branch)}
+                  </div>
+                  {/* Header — name + dominant % */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
+                        mgr.role === 'rop' ? 'bg-teal-600' : mgr.role === 'branch_director' ? 'bg-indigo-600' : 'bg-emerald-600'
+                      }`}>
+                        {mgr.avatar || mgr.name?.charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-slate-900 text-sm flex items-center gap-1.5 truncate">
+                          {mgr.name} {isCurrentUser && <span className="text-xs text-blue-500">{t('finance.you')}</span>}
+                          {mgr.amoConnected && (
+                            <span title="Заявки и конверсия из amoCRM"
+                              className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 border border-violet-200">
+                              amo
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-xs text-slate-500 truncate">
+                          {mgr.role === 'rop' ? t('finance.rop') : mgr.role === 'branch_director' ? 'Руководитель филиала' : t('finance.manager')} · {mgr.branch === 'all' ? t('finance.all_branches') : (branches.find(b => b.id === mgr.branch)?.name || mgr.branch)}
+                        </p>
+                      </div>
+                    </div>
+                    {/* Dominant achievement % */}
+                    <div className="text-right flex-shrink-0 ml-2">
+                      {mgr.hasPlan ? (
+                        <>
+                          <p className={`text-3xl font-extrabold leading-none ${statusColor(pct)}`}>{pct}<span className="text-lg">%</span></p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{t('finance.plan')}</p>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded-lg">план не задан</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="mb-4">
+                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                      <span className="font-medium text-slate-700">{formatRevenue(mgr.actual.revenue)}</span>
+                      <span>{t('finance.plan')} {formatRevenue(mgr.plan.revenue)}</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${progressBg(pct)}`}
+                        style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </div>
+                    {mgr.hasPlan && (
+                      <div className="flex justify-between text-xs mt-1">
+                        <span className={`font-semibold ${mgr.deviation >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {t('finance.deviation')} {mgr.deviation >= 0 ? '+' : ''}{formatRevenue(mgr.deviation)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* KPI Grid — secondary metrics, dimmed */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Percent size={11} className="text-purple-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.conv_ou_sale')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-purple-600">{mgr.convOpenToSale}%</p>
+                    </div>
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <CreditCard size={11} className="text-amber-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.expected_doplata_short')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-amber-600">{formatRevenue(mgr.expectedDoplata)}</p>
+                    </div>
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <ShoppingCart size={11} className="text-emerald-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.sales_short')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-emerald-600">
+                        {mgr.actual.sales} <span className="text-xs text-slate-400">/ {mgr.plan.sales}</span>
                       </p>
                     </div>
-                  </div>
-                  <div className={`text-right px-3 py-1 rounded-full text-sm font-bold ${statusBg(pct)} ${statusColor(pct)}`}>
-                    {pct}%
-                  </div>
-                </div>
-
-                {/* Progress bar */}
-                <div className="mb-4">
-                  <div className="flex justify-between text-xs text-slate-500 mb-1">
-                    <span>{t('finance.revenue')} {formatRevenue(mgr.actual.revenue)}</span>
-                    <span>{t('finance.plan')} {formatRevenue(mgr.plan.revenue)}</span>
-                  </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all duration-500 ${progressBg(pct)}`}
-                      style={{ width: `${Math.min(pct, 100)}%` }} />
-                  </div>
-                  <div className="flex justify-between text-xs mt-1">
-                    <span className={`font-semibold ${mgr.deviation >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {t('finance.deviation')} {mgr.deviation >= 0 ? '+' : ''}{formatRevenue(mgr.deviation)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* KPI Grid */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  {/* Row 1 */}
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <Percent size={12} className="text-purple-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.conv_ou_sale')}</span>
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <UserCheck size={11} className="text-cyan-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.visited_off')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-cyan-600">{mgr.actual.visited}</p>
                     </div>
-                    <p className="text-sm font-bold text-purple-600">{mgr.convOpenToSale}%</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <CreditCard size={12} className="text-amber-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.expected_doplata_short')}</span>
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Users size={11} className="text-blue-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.sales_off')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-blue-600">{mgr.offlineSales}</p>
                     </div>
-                    <p className="text-sm font-bold text-amber-600">{formatRevenue(mgr.expectedDoplata)}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <ShoppingCart size={12} className="text-emerald-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.sales_short')}</span>
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Eye size={11} className="text-indigo-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.visited_onl')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-indigo-600">{mgr.onlineCount}</p>
                     </div>
-                    <p className="text-sm font-bold text-emerald-600">
-                      {mgr.actual.sales} <span className="text-xs text-slate-400">/ {mgr.plan.sales}</span>
-                    </p>
-                  </div>
-
-                  {/* Row 2 */}
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <UserCheck size={12} className="text-cyan-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.visited_off')}</span>
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Phone size={11} className="text-slate-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.leads')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">
+                        {mgr.actual.leads} <span className="text-xs text-slate-400">/ {mgr.plan.leads}</span>
+                      </p>
                     </div>
-                    <p className="text-sm font-bold text-cyan-600">{mgr.actual.visited}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <Users size={12} className="text-blue-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.sales_off')}</span>
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Phone size={11} className="text-slate-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.conversations')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">
+                        {mgr.actual.conversations} <span className="text-xs text-slate-400">/ {mgr.plan.conversations}</span>
+                      </p>
                     </div>
-                    <p className="text-sm font-bold text-blue-600">{mgr.offlineSales}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <Eye size={12} className="text-indigo-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.visited_onl')}</span>
+                    <div className="bg-slate-50/70 rounded-lg p-2">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <TrendingUp size={11} className="text-emerald-400" />
+                        <span className="text-[10px] text-slate-400">{t('finance.revenue_short')}</span>
+                      </div>
+                      <p className="text-sm font-bold text-emerald-600">{formatRevenue(mgr.actual.revenue)}</p>
                     </div>
-                    <p className="text-sm font-bold text-indigo-600">{mgr.onlineCount}</p>
-                  </div>
-
-                  {/* Row 3 — funnel */}
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <Phone size={12} className="text-slate-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.leads')}</span>
-                    </div>
-                    <p className="text-sm font-bold text-slate-700">
-                      {mgr.actual.leads} <span className="text-xs text-slate-400">/ {mgr.plan.leads}</span>
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <Phone size={12} className="text-slate-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.conversations')}</span>
-                    </div>
-                    <p className="text-sm font-bold text-slate-700">
-                      {mgr.actual.conversations} <span className="text-xs text-slate-400">/ {mgr.plan.conversations}</span>
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <TrendingUp size={12} className="text-emerald-500" />
-                      <span className="text-[10px] text-slate-500">{t('finance.revenue_short')}</span>
-                    </div>
-                    <p className="text-sm font-bold text-emerald-600">{formatRevenue(mgr.actual.revenue)}</p>
                   </div>
                 </div>
               </div>
             )
           })}
         </div>
+
+        {/* Inactive managers — compact, collapsed */}
+        {(() => {
+          const inactive = managerKPIs.filter(m => !m.hasPlan && !m.hasActivity)
+          if (inactive.length === 0) return null
+          return (
+            <div className="mt-4">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
+                Без активности ({inactive.length})
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {inactive.map(mgr => {
+                  const isCurrentUser = mgr.id === user?.id
+                  return (
+                    <div key={mgr.id}
+                      onClick={() => openKpiEditor(mgr)}
+                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all hover:bg-slate-50 ${
+                        isCurrentUser ? 'border-blue-200 bg-blue-50/30' : 'border-slate-100 bg-white/40'
+                      }`}>
+                      <div className="w-8 h-8 rounded-full bg-slate-300 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                        {mgr.avatar || mgr.name?.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-600 truncate">{mgr.name}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {mgr.role === 'rop' ? t('finance.rop') : mgr.role === 'branch_director' ? 'Рук. филиала' : t('finance.manager')}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-slate-400 flex-shrink-0">нет данных</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
       </div>
       )}
 
