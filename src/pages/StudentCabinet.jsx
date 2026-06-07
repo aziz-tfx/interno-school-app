@@ -15,6 +15,7 @@ import useGamification from '../hooks/useGamification'
 import useStudentNotifications from '../hooks/useStudentNotifications'
 import AIChat from '../components/AIChat'
 import Certificate from '../components/Certificate'
+import StudentOnboarding from '../components/StudentOnboarding'
 
 // ─── Format currency ───────────────────────────────────────────────
 function fmt(n) {
@@ -1220,6 +1221,9 @@ export default function StudentCabinet() {
         }}
         mode="floating"
       />
+
+      {/* Onboarding tour for first-time students */}
+      <StudentOnboarding studentId={myStudent?.id} />
     </div>
   )
 }
