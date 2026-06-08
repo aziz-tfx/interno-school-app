@@ -169,6 +169,11 @@ service cloud.firestore {
       allow read, write: if hasAppCheck() && docSmallEnough();
     }
 
+    // ─── Automation settings — per-tenant config ─────────────────────
+    match /automationSettings/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
     // ─── Messages — student ↔ teacher chat ───────────────────────────
     match /messages/{id} {
       allow read: if hasAppCheck();
