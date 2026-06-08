@@ -8,7 +8,7 @@
 // Can also be called manually: GET /api/cron/automations?secret=<CRON_SECRET>
 
 import { initializeApp, getApps, cert } from 'firebase-admin/app'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore } from 'firebase-admin/firestore'
 
 let _db = null
 function getDb() {
