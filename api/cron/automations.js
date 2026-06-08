@@ -75,17 +75,33 @@ export default async function handler(req, res) {
           const tgSnap = await db.collection('tenantIntegrations').doc(tenant.id).get()
           if (tgSnap.exists) tgConfig = tgSnap.data()?.telegram || {}
         } catch {}
-        // Fallback for default tenant
-        if (tenant.id === 'default' && !tgConfig.botToken) {
-          tgConfig.botToken = process.env.TELEGRAM_BOT_TOKEN || ''
+        // Fallback for default tenant: use env vars
+        const isDefault = !tenant.id || tenant.id === 'default'
+        if (isDefault) {
+          if (!tgConfig.botToken) tgConfig.botToken = process.env.TELEGRAM_BOT_TOKEN || ''
+          if (!tgConfig.chats || Object.keys(tgConfig.chats).length === 0) {
+            tgConfig.chats = {
+              tashkent:  process.env.TG_CHAT_TASHKENT  || '',
+              samarkand: process.env.TG_CHAT_SAMARKAND || '',
+              fergana:   process.env.TG_CHAT_FERGANA   || '',
+              bukhara:   process.env.TG_CHAT_BUKHARA   || '',
+              online:    process.env.TG_CHAT_TASHKENT  || '',
+            }
+          }
         }
 
-        // Load students for this tenant
-        const studentsSnap = await db.collection('students').where('tenantId', '==', tenant.id).get()
+        // Load students for this tenant (fallback: all students for default tenant)
+        let studentsSnap = await db.collection('students').where('tenantId', '==', tenant.id).get()
+        if (studentsSnap.empty && isDefault) {
+          studentsSnap = await db.collection('students').get()
+        }
         const students = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
 
         // Load payments for this tenant
-        const paymentsSnap = await db.collection('payments').where('tenantId', '==', tenant.id).get()
+        let paymentsSnap = await db.collection('payments').where('tenantId', '==', tenant.id).get()
+        if (paymentsSnap.empty && isDefault) {
+          paymentsSnap = await db.collection('payments').get()
+        }
         const payments = paymentsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
 
         // ─── Rule 1: Payment reminders ─────────────────────────
