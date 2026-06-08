@@ -98,7 +98,8 @@ export async function fetchAmoUsers() {
  */
 export async function fetchAmoPerformance({ from, to }) {
   try {
-    const res = await fetch(withTenant(`${API_BASE}/performance?from=${from}&to=${to}`), {
+    const month = (from || '').slice(0, 7) || new Date().toISOString().slice(0, 7)
+    const res = await fetch(withTenant(`${API_BASE}/performance-v2?month=${month}`), {
       headers: tenantHeaders(),
     })
     const data = await res.json()
