@@ -22,6 +22,7 @@ import ContractTemplates from './pages/ContractTemplates'
 import AmoPerformance from './pages/AmoPerformance'
 import Schedule from './pages/Schedule'
 import AuditLog from './pages/AuditLog'
+import Automations from './pages/Automations'
 import SuperAdmin from './pages/SuperAdmin'
 import ContractSign from './pages/ContractSign'
 import StudentCabinet from './pages/StudentCabinet'
@@ -106,6 +107,9 @@ export default function App() {
         } />
         <Route path="audit" element={
           <ProtectedRoute permission="audit"><AuditLog /></ProtectedRoute>
+        } />
+        <Route path="automations" element={
+          <ProtectedRoute permission="settings"><Automations /></ProtectedRoute>
         } />
         <Route path="integrations" element={
           <ProtectedRoute permission="settings"><Integrations /></ProtectedRoute>
