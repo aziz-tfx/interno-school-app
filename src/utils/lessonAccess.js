@@ -77,42 +77,43 @@ export function isLessonAccessible({ lesson, student, group, modules, debt }) {
   }
 
   const isOnline = student.learningFormat === 'Онлайн'
+  const coursePrice = student.totalCoursePrice || 0
+  const paid = coursePrice - debt
+  const paidPercent = coursePrice > 0 ? (paid / coursePrice) * 100 : 0
+
+  // Paid 50%+ of course price → all modules/lessons unlocked
+  if (paidPercent >= 50) {
+    return { accessible: true, reason: null }
+  }
 
   if (!isOnline) {
     // ─── OFFLINE ───
-    // Fully paid → all lessons open
-    // Partially paid (debt > 0 but has payments) → only module 1
+    // Fully paid → all lessons open (covered above)
+    // Paid < 50% but has payments → only module 1
     // No payments → nothing
-    if (debt <= 0) {
-      return { accessible: true, reason: null }
-    }
-
-    // Has partial payment — allow first module only
-    const hasPaid = (student.totalCoursePrice || 0) - debt > 0
+    const hasPaid = paid > 0
 
     if (!hasPaid) {
       return { accessible: false, reason: 'debt', message: 'Для доступа к урокам необходимо произвести оплату' }
     }
 
-    // Partial payment: first module only
+    // Partial payment (<50%): first module only
     if (lesson.moduleId) {
       const lessonModule = modules.find(m => m.id === lesson.moduleId)
       if (lessonModule && (lessonModule.order || 1) === 1) {
         return { accessible: true, reason: null }
       }
-      return { accessible: false, reason: 'partial_debt', message: 'Для доступа ко всем модулям необходимо оплатить курс полностью' }
+      return { accessible: false, reason: 'partial_debt', message: 'Для доступа ко всем модулям необходимо оплатить 50% стоимости курса' }
     }
 
-    // No modules structure — allow first lesson only by order
     if (modules.length === 0) {
       if ((lesson.order || 1) === 1) {
         return { accessible: true, reason: null }
       }
-      return { accessible: false, reason: 'partial_debt', message: 'Для доступа ко всем урокам необходимо оплатить курс полностью' }
+      return { accessible: false, reason: 'partial_debt', message: 'Для доступа ко всем урокам необходимо оплатить 50% стоимости курса' }
     }
 
-    // Lesson without moduleId but modules exist — block (ungrouped)
-    return { accessible: false, reason: 'partial_debt', message: 'Для доступа необходимо оплатить курс полностью' }
+    return { accessible: false, reason: 'partial_debt', message: 'Для доступа необходимо оплатить 50% стоимости курса' }
   }
 
   // ─── ONLINE: modules unlock weekly ───
@@ -169,9 +170,12 @@ export function isLessonAccessible({ lesson, student, group, modules, debt }) {
  * @param {number} [debt=0] - Student remaining debt (for offline partial payment)
  * @param {boolean} [hasPaid=true] - Whether student has made any payment
  */
-export function isModuleUnlocked(moduleOrder, startDate, isOnline, debt = 0, hasPaid = true) {
+export function isModuleUnlocked(moduleOrder, startDate, isOnline, debt = 0, hasPaid = true, coursePrice = 0) {
+  const paid = coursePrice - debt
+  const paidPercent = coursePrice > 0 ? (paid / coursePrice) * 100 : 0
+  if (paidPercent >= 50) return true
+
   if (!isOnline) {
-    // Offline: fully paid = all modules; partially paid = module 1 only; no payment = none
     if (debt <= 0) return true
     if (hasPaid) return (moduleOrder || 1) === 1
     return false
