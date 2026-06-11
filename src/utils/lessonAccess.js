@@ -27,7 +27,7 @@ export function getUnlockedModuleCount(startDate) {
   // Module 2 opens on the first Monday after start (or the next Monday if start is Monday)
   // Module N opens on Monday of week N-1
 
-  if (now < start) return 0 // Course hasn't started yet
+  if (now < start) return 1 // Course hasn't started yet but module 1 is always available
 
   // Calculate weeks since start date
   const msPerDay = 24 * 60 * 60 * 1000
@@ -57,7 +57,8 @@ export function getUnlockedModuleCount(startDate) {
   }
 
   // Module 1 is always available from start, plus one more per Monday
-  return 1 + mondaysPassed
+  // Minimum 1 — first module is never locked
+  return Math.max(1, 1 + mondaysPassed)
 }
 
 /**
