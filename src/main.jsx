@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { DataProvider } from './contexts/DataContext'
 import { LanguageProvider } from './contexts/LanguageContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import Toaster from './components/Toaster'
 import App from './App'
 import './index.css'
 
@@ -21,6 +22,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <AuthProvider>
             <DataProviderWithUser>
               <App />
+              <Toaster />
             </DataProviderWithUser>
           </AuthProvider>
         </LanguageProvider>

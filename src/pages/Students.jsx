@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X, Calendar, DoorOpen, ChevronDown, ChevronUp, Phone, LayoutGrid, CalendarRange, CheckSquare, Square, UserMinus, ArrowRightLeft, Snowflake } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
@@ -8,6 +9,7 @@ import Modal from '../components/Modal'
 import StudentForm from '../components/StudentForm'
 import StudentProfile from '../components/StudentProfile'
 import GroupForm from '../components/GroupForm'
+import { toast } from '../components/Toaster'
 
 export default function Students() {
   const { t } = useLanguage()
@@ -19,8 +21,13 @@ export default function Students() {
     getBranchName,
   } = useData()
 
-  const [activeTab, setActiveTab] = useState('students')
-  const [search, setSearch] = useState('')
+  // Deep-link support from global search: /students?tab=groups&q=...
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab') === 'groups' ? 'groups' : 'students'
+  const initialQuery = searchParams.get('q') || ''
+
+  const [activeTab, setActiveTab] = useState(initialTab)
+  const [search, setSearch] = useState(initialTab === 'students' ? initialQuery : '')
   const [branchFilter, setBranchFilter] = useState(user.branch !== 'all' ? user.branch : 'all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [groupFilter, setGroupFilter] = useState('all')
@@ -33,7 +40,7 @@ export default function Students() {
   const [groupModalOpen, setGroupModalOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState(null)
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null)
-  const [groupSearch, setGroupSearch] = useState('')
+  const [groupSearch, setGroupSearch] = useState(initialTab === 'groups' ? initialQuery : '')
   const [groupStatusFilter, setGroupStatusFilter] = useState('all')
   const [expandedGroup, setExpandedGroup] = useState(null)
   const [groupView, setGroupView] = useState('cards') // 'cards' | 'timeline'
@@ -49,6 +56,16 @@ export default function Students() {
   const [groupBulkAction, setGroupBulkAction] = useState(null) // 'status' | 'delete'
   const [groupBulkTarget, setGroupBulkTarget] = useState('')
   const [groupBulkProcessing, setGroupBulkProcessing] = useState(false)
+
+  // Re-sync when navigating here again from global search
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (q === null) return
+    const tab = searchParams.get('tab') === 'groups' ? 'groups' : 'students'
+    setActiveTab(tab)
+    if (tab === 'groups') setGroupSearch(q)
+    else setSearch(q)
+  }, [searchParams])
 
   const canAdd = hasPermission('students', 'add')
   const canEdit = hasPermission('students', 'edit')
@@ -140,7 +157,7 @@ export default function Students() {
     if (grp) {
       const studentsInGroup = getGroupStudents(grp.name)
       if (studentsInGroup.length > 0) {
-        alert(`Невозможно удалить группу: в ней ${studentsInGroup.length} учеников. Сначала переведите их в другую группу.`)
+        toast.error(`Невозможно удалить группу: в ней ${studentsInGroup.length} учеников. Сначала переведите их в другую группу.`)
         setConfirmDeleteGroup(null)
         return
       }

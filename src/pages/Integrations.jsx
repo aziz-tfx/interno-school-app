@@ -12,6 +12,7 @@ import { checkAmoStatus, checkOnpbxStatus, refreshAmoToken } from '../utils/amoc
 import { loadIntegrations, saveIntegrationSection } from '../utils/tenantIntegrations'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { branchToSlug } from '../utils/branchSlug'
+import { toast } from '../components/Toaster'
 
 const BRANCH_LABELS = {
   tashkent: 'Ташкент',
@@ -160,7 +161,7 @@ export default function Integrations() {
       setSavedFlash(section)
       setTimeout(() => setSavedFlash(null), 2000)
     } catch (err) {
-      alert('Ошибка сохранения: ' + err.message)
+      toast.error('Ошибка сохранения: ' + err.message)
     }
     setSavingSection(null)
   }
@@ -222,9 +223,9 @@ export default function Integrations() {
       // Reload to pick up persisted tokens
       const fresh = await loadIntegrations(tenantId)
       setCfg(fresh)
-      alert('Токены обновлены' + (result.persisted ? ' и сохранены.' : ', но не сохранены автоматически.'))
+      toast.success('Токены обновлены' + (result.persisted ? ' и сохранены.' : ', но не сохранены автоматически.'))
     } else {
-      alert('Не удалось обновить токен: ' + (result.error || result.details || 'Unknown'))
+      toast.error('Не удалось обновить токен: ' + (result.error || result.details || 'Unknown'))
     }
   }
 

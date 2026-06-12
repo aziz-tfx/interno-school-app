@@ -14,6 +14,7 @@ import { db } from '../firebase'
 import { collection, doc, setDoc, query, where, onSnapshot } from 'firebase/firestore'
 import Modal from '../components/Modal'
 import PaymentForm from '../components/PaymentForm'
+import { toast } from '../components/Toaster'
 import { fetchAmoPerformance, fetchAmoPerformanceV2, fetchAmoCalls } from '../utils/amocrm'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -146,7 +147,7 @@ export default function Finance() {
       closeKpiEditor()
     } catch (err) {
       console.error('Failed to save KPI:', err)
-      alert(t('finance.kpi_save_failed') || 'Не удалось сохранить показатели')
+      toast.error(t('finance.kpi_save_failed') || 'Не удалось сохранить показатели')
     }
     setKpiSaving(false)
   }
