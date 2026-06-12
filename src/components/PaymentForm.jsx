@@ -14,6 +14,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Logo from './Logo'
 import Modal from './Modal'
+import { toast } from './Toaster'
 import { useLanguage } from '../contexts/LanguageContext'
 
 const METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
@@ -305,17 +306,17 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     const selectedFiles = Array.from(e.target.files)
     const remainingSlots = MAX_FILES - files.length
     if (remainingSlots <= 0) {
-      alert(t('paymentForm.file_limit_reached').replace('{max}', MAX_FILES))
+      toast.error(t('paymentForm.file_limit_reached').replace('{max}', MAX_FILES))
       e.target.value = ''
       return
     }
     const toAdd = selectedFiles.slice(0, remainingSlots)
     if (selectedFiles.length > remainingSlots) {
-      alert(t('paymentForm.file_limit_exceeded').replace('{max}', MAX_FILES).replace('{added}', remainingSlots))
+      toast.error(t('paymentForm.file_limit_exceeded').replace('{max}', MAX_FILES).replace('{added}', remainingSlots))
     }
     toAdd.forEach(file => {
       if (file.size > 10 * 1024 * 1024) {
-        alert(t('paymentForm.file_too_large').replace('{name}', file.name))
+        toast.error(t('paymentForm.file_too_large').replace('{name}', file.name))
         return
       }
       const reader = new FileReader()
@@ -404,14 +405,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
     // Group is required for new sales (not doplata)
     if (form.type === 'income' && !isDoplata && !form.groupId) {
-      alert('Выберите группу для ученика')
+      toast.error('Выберите группу для ученика')
       return
     }
 
     // Block save when splits are enabled but invalid (no manager picked,
     // duplicate manager, or shares don't sum to the payment total).
     if (splits.length > 0 && !splitsValid) {
-      alert('Проверьте разделение продажи: каждому менеджеру нужна сумма, и сумма долей должна совпадать с общей.')
+      toast.error('Проверьте разделение продажи: каждому менеджеру нужна сумма, и сумма долей должна совпадать с общей.')
       return
     }
 
@@ -741,7 +742,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
     } catch (err) {
       console.error('PaymentForm submit failed:', err)
-      alert('Не удалось сохранить продажу. Попробуйте ещё раз.')
+      toast.error('Не удалось сохранить продажу. Попробуйте ещё раз.')
     } finally {
       submittingRef.current = false
       setSubmitting(false)
@@ -786,11 +787,11 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       } else if (isDefaultTenant) {
         await generateContract(contractData)
       } else {
-        alert('Для вашей школы не загружен шаблон договора. Добавьте его в разделе «Шаблоны договоров».')
+        toast.error('Для вашей школы не загружен шаблон договора. Добавьте его в разделе «Шаблоны договоров».')
       }
     } catch (err) {
       console.error('Contract generation failed:', err)
-      alert(t('paymentForm.error_contract'))
+      toast.error(t('paymentForm.error_contract'))
     }
     setGeneratingContract(false)
   }

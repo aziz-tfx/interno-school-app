@@ -106,6 +106,42 @@ button, a, input, select {
   to   { opacity: 1; transform: scale(1)    translateY(0);    }
 }
 
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* Smooth page transition on route change (applied in Layout) */
+.page-transition {
+  animation: pageIn 240ms cubic-bezier(0.21, 1.02, 0.73, 1);
+}
+
+/* Skeleton shimmer for loading states */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0;  }
+}
+.skeleton {
+  background: linear-gradient(90deg, rgba(148,163,184,0.12) 25%, rgba(148,163,184,0.24) 50%, rgba(148,163,184,0.12) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 0.75rem;
+}
+
+/* Card hover lift — opt-in via .hover-lift */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
 /* ────────────────────────────────────────────────────────────────────────
    Dark mode overrides
    We can't realistically retrofit `dark:` variants on every Tailwind
@@ -264,3 +300,44 @@ html.dark :where(.hover\:bg-white\/8:hover, [class*="hover:bg-white/8"]:hover) {
 
 /* Modal overlay */
 html.dark :where(.bg-black\/40) { background-color: rgba(5, 0, 15, 0.7); }
+
+/* ─── Recharts in dark mode ─────────────────────────────────────────── */
+/* Tooltips ship inline white backgrounds — override them */
+html.dark .recharts-default-tooltip {
+  background-color: rgba(15, 10, 30, 0.95) !important;
+  border: 1px solid rgba(139, 92, 246, 0.25) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+}
+html.dark .recharts-tooltip-label,
+html.dark .recharts-tooltip-item-name,
+html.dark .recharts-tooltip-item-separator {
+  color: #c4bbd8 !important;
+}
+/* Grid and axes — soften for dark background */
+html.dark .recharts-cartesian-grid line {
+  stroke: rgba(139, 92, 246, 0.1) !important;
+}
+html.dark .recharts-cartesian-axis-tick-value {
+  fill: #8578a0 !important;
+}
+html.dark .recharts-legend-item-text {
+  color: #9b8fba !important;
+}
+
+/* Toast cards in dark mode */
+html.dark .pointer-events-auto.bg-white {
+  background-color: #181226;
+  border-color: rgba(139, 92, 246, 0.18);
+}
+
+/* Skeleton in dark mode */
+html.dark .skeleton {
+  background: linear-gradient(90deg, rgba(139,92,246,0.06) 25%, rgba(139,92,246,0.14) 50%, rgba(139,92,246,0.06) 75%);
+  background-size: 800px 100%;
+}
+
+/* Hover-lift shadow in dark mode */
+html.dark .hover-lift:hover {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(139, 92, 246, 0.08);
+}

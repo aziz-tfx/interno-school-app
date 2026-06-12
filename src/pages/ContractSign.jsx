@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { db } from '../firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
 import Logo from '../components/Logo'
+import { toast } from '../components/Toaster'
 import { formatCurrency } from '../data/mockData'
 
 const COURSE_MAP = {
@@ -100,7 +101,7 @@ export default function ContractSign() {
       setSigning(false)
     } catch (err) {
       console.error(err)
-      alert('Ошибка сохранения подписи')
+      toast.error('Ошибка сохранения подписи')
     }
     setSaving(false)
   }

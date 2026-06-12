@@ -7,6 +7,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { expenseCategories, formatCurrency } from '../data/mockData'
 import Modal from '../components/Modal'
 import BranchForm from '../components/BranchForm'
+import { toast } from '../components/Toaster'
 
 export default function Branches() {
   const { t } = useLanguage()
@@ -47,7 +48,7 @@ export default function Branches() {
     const branchStudents = students.filter(s => s.branch === id).length
     const branchTeachers = teachers.filter(t => t.branch === id).length
     if (branchStudents > 0 || branchTeachers > 0) {
-      alert(`${t('branches.heading')}: ${branchStudents} / ${branchTeachers}`)
+      toast.info(`${t('branches.heading')}: ${branchStudents} / ${branchTeachers}`)
       setConfirmDelete(null)
       return
     }
