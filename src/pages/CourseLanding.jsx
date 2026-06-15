@@ -4,7 +4,7 @@ import { db } from '../firebase'
 import { collection, query, where, getDocs, addDoc, doc, getDoc } from 'firebase/firestore'
 import {
   Play, Lock, CheckCircle2, Clock, Users, BookOpen, Star,
-  ChevronDown, ChevronRight, Phone, User, Mail, ArrowRight,
+  ChevronDown, ChevronRight, Phone, User, ArrowRight,
   GraduationCap, Award, Shield, Video, Zap, X,
 } from 'lucide-react'
 import Logo from '../components/Logo'
@@ -24,7 +24,7 @@ export default function CourseLanding() {
 
   // Registration
   const [showRegForm, setShowRegForm] = useState(false)
-  const [regForm, setRegForm] = useState({ name: '', phone: '', email: '' })
+  const [regForm, setRegForm] = useState({ name: '', phone: '' })
   const [submitting, setSubmitting] = useState(false)
   const [registered, setRegistered] = useState(false)
   const [leadId, setLeadId] = useState(null)
@@ -86,36 +86,36 @@ export default function CourseLanding() {
     }
     setSubmitting(true)
     try {
+      const tenantId = course?.tenantId || 'default'
       // Save lead to Firestore
       const lead = {
         name: regForm.name.trim(),
         phone: regForm.phone.trim(),
-        email: regForm.email.trim(),
         courseId,
         courseName: course?.name || '',
         source: 'landing',
         status: 'new',
         createdAt: new Date().toISOString(),
-        tenantId: course?.tenantId || 'default',
+        tenantId,
       }
       const ref = await addDoc(collection(db, 'leads'), lead)
 
-      // Try pushing to amoCRM (non-blocking)
+      // Push to amoCRM as a new lead (non-blocking)
       try {
         await fetch('/api/amo/push-sale', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
           body: JSON.stringify({
-            tenantId: course?.tenantId || 'default',
-            type: 'lead',
+            tenantId,
             clientName: lead.name,
             phone: lead.phone,
-            email: lead.email,
             course: lead.courseName,
-            source: 'landing_page',
+            amount: 0,
+            comment: `🎯 Лид с лендинга (бесплатные уроки) — курс «${lead.courseName}». Источник: реклама → публичная страница курса.`,
+            managerName: 'Лендинг (авто)',
           }),
         })
-      } catch {}
+      } catch (e) { console.warn('amo push failed:', e) }
 
       setLeadId(ref.id)
       setRegistered(true)
@@ -163,6 +163,10 @@ export default function CourseLanding() {
   const totalLessons = lessons.length
   const features = course.features || []
   const pricing = course.pricing || {}
+  const landing = course.landing || {}
+  const tagline = landing.tagline || course.description || ''
+  const forWhom = landing.forWhom || []
+  const results = landing.results || []
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-950">
@@ -187,11 +191,12 @@ export default function CourseLanding() {
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-violet-500/20 border border-violet-400/30 rounded-full text-violet-300 text-sm mb-6">
             <Zap size={14} /> НОВЫЙ КУРС
           </div>
+          <div className="text-6xl mb-4">{course.icon || '📚'}</div>
           <h1 className="text-4xl md:text-6xl font-extrabold text-white leading-tight mb-6">
             {course.name}
           </h1>
-          {course.description && (
-            <p className="text-lg text-white/60 max-w-2xl mx-auto mb-8">{course.description}</p>
+          {tagline && (
+            <p className="text-lg md:text-xl text-white/70 max-w-2xl mx-auto mb-8">{tagline}</p>
           )}
           <div className="flex items-center justify-center gap-6 text-white/50 text-sm mb-10">
             <span className="flex items-center gap-1.5"><BookOpen size={16} /> {totalLessons} уроков</span>
@@ -204,6 +209,48 @@ export default function CourseLanding() {
           </button>
         </div>
       </section>
+
+      {/* About */}
+      {landing.about && (
+        <section className="max-w-3xl mx-auto px-4 py-12">
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+            <h2 className="text-2xl font-bold text-white mb-4">О курсе</h2>
+            <p className="text-white/70 leading-relaxed whitespace-pre-wrap">{landing.about}</p>
+          </div>
+        </section>
+      )}
+
+      {/* For whom */}
+      {forWhom.length > 0 && (
+        <section className="max-w-4xl mx-auto px-4 py-12">
+          <h2 className="text-2xl font-bold text-white mb-8 text-center">Для кого этот курс</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {forWhom.map((item, i) => (
+              <div key={i} className="flex items-start gap-3 p-5 bg-gradient-to-br from-violet-500/10 to-blue-500/10 border border-violet-400/20 rounded-2xl">
+                <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                  <Users size={16} className="text-violet-300" />
+                </div>
+                <p className="text-sm text-white/80 leading-relaxed">{item}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Results */}
+      {results.length > 0 && (
+        <section className="max-w-4xl mx-auto px-4 py-12">
+          <h2 className="text-2xl font-bold text-white mb-8 text-center">Что вы получите</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {results.map((item, i) => (
+              <div key={i} className="flex items-start gap-3 p-5 bg-emerald-500/5 border border-emerald-400/20 rounded-2xl">
+                <Star size={18} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-white/80 leading-relaxed">{item}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Course Content */}
       <section className="max-w-4xl mx-auto px-4 py-16">
@@ -379,15 +426,6 @@ export default function CourseLanding() {
                   <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="tel" value={regForm.phone} onChange={e => setRegForm(p => ({ ...p, phone: e.target.value }))}
                     placeholder="+998 90 123 45 67" required
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email (необязательно)</label>
-                <div className="relative">
-                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input type="email" value={regForm.email} onChange={e => setRegForm(p => ({ ...p, email: e.target.value }))}
-                    placeholder="email@example.com"
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
                 </div>
               </div>
