@@ -169,6 +169,14 @@ service cloud.firestore {
       allow read, write: if hasAppCheck() && docSmallEnough();
     }
 
+    // ─── Leads — from landing page registrations ────────────────────
+    match /leads/{id} {
+      allow read: if hasAppCheck();
+      allow create: if true;  // Public — anyone can register
+      allow update: if hasAppCheck() && docSmallEnough();
+      allow delete: if hasAppCheck();
+    }
+
     // ─── Automation settings — per-tenant config ─────────────────────
     match /automationSettings/{id} {
       allow read, write: if hasAppCheck() && docSmallEnough();
