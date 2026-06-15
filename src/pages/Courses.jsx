@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
-import { BookOpen, MapPin, Users, ChevronDown, ChevronUp, Tag, Monitor, GraduationCap, Plus, Pencil, Trash2, X, CheckCircle2, Info } from 'lucide-react'
+import { BookOpen, MapPin, Users, ChevronDown, ChevronUp, Tag, Monitor, GraduationCap, Plus, Pencil, Trash2, X, CheckCircle2, Info, Megaphone } from 'lucide-react'
+import { toast } from '../components/Toaster'
 import CourseForm from '../components/CourseForm'
 
 function useRegionLabels() {
@@ -154,6 +155,19 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
           )}
           {isAdmin && (
             <>
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/course/${course.id}`
+                  navigator.clipboard?.writeText(url).then(
+                    () => toast.success('Ссылка на лендинг скопирована! Используйте её в рекламе.'),
+                    () => toast.info(url)
+                  )
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                title="Скопировать ссылку на публичный лендинг (лидмагнит)"
+              >
+                <Megaphone size={16} />
+              </button>
               <button
                 onClick={() => onEdit(course)}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"

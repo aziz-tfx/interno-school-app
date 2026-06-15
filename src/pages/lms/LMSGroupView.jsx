@@ -7,8 +7,9 @@ import {
   ArrowLeft, BookOpen, FileText, CheckCircle2, Bell, Plus, Pencil, Trash2, X,
   Clock, Calendar, Upload, Download, Users, ChevronDown, ChevronUp, Send, Award,
   Video, Link2, File, Image as ImageIcon, ExternalLink, Settings2, Save, Info, CheckCircle, Lock,
-  MessageCircle
+  MessageCircle, Megaphone
 } from 'lucide-react'
+import { toast } from '../../components/Toaster'
 import { isLessonAccessible, isModuleUnlocked, getUnlockedModuleCount } from '../../utils/lessonAccess'
 
 // ─── Lesson Form ─────────────────────────────────────────────────────
@@ -961,7 +962,20 @@ export default function LMSGroupView() {
           <p className="text-slate-500 mt-1">{group.name} · {group.schedule || t('lms.no_schedule')}</p>
         </div>
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 justify-end">
+            {course?.id && (
+              <button onClick={() => {
+                const url = `${window.location.origin}/course/${course.id}`
+                navigator.clipboard?.writeText(url).then(
+                  () => toast.success('Ссылка на лендинг скопирована! Используйте её в рекламе.'),
+                  () => toast.info(url)
+                )
+              }}
+                title="Скопировать публичную ссылку на лендинг курса для рекламы"
+                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-violet-600 to-blue-600 text-white text-sm rounded-xl hover:opacity-90">
+                <Megaphone size={14} /> <span className="hidden sm:inline">Лидмагнит</span>
+              </button>
+            )}
             <button onClick={() => { setEditingItem(null); setShowModal('newLesson') }}
               className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700">
               <Plus size={14} /> {t('lms.tab_lessons')}
