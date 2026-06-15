@@ -49,6 +49,11 @@ export default function CourseForm({ course, onClose, onSave }) {
     duration: '3 мес',
     description: '',
     featuresText: '',
+    // Landing-page marketing content
+    landingTagline: '',
+    landingAbout: '',
+    landingForWhomText: '',
+    landingResultsText: '',
   })
   const [pricing, setPricing] = useState(buildDefaultPricing())
   const [durationByRegion, setDurationByRegion] = useState({})
@@ -65,6 +70,10 @@ export default function CourseForm({ course, onClose, onSave }) {
         duration: course.duration || '3 мес',
         description: course.description || '',
         featuresText: (course.features || []).join('\n'),
+        landingTagline: course.landing?.tagline || '',
+        landingAbout: course.landing?.about || '',
+        landingForWhomText: (course.landing?.forWhom || []).join('\n'),
+        landingResultsText: (course.landing?.results || []).join('\n'),
       })
       // Deep clone pricing
       if (course.pricing) {
@@ -201,6 +210,14 @@ export default function CourseForm({ course, onClose, onSave }) {
       ? form.featuresText.split('\n').map(f => f.trim()).filter(Boolean)
       : []
 
+    const toLines = (text) => text ? text.split('\n').map(s => s.trim()).filter(Boolean) : []
+    const landing = {
+      tagline: form.landingTagline || '',
+      about: form.landingAbout || '',
+      forWhom: toLines(form.landingForWhomText),
+      results: toLines(form.landingResultsText),
+    }
+
     onSave({
       name: form.name,
       icon: form.icon,
@@ -208,6 +225,7 @@ export default function CourseForm({ course, onClose, onSave }) {
       durationByRegion: Object.keys(durationByRegion).length > 0 ? durationByRegion : null,
       description: form.description || '',
       features,
+      landing,
       pricing: cleanedPricing,
     })
   }
@@ -325,6 +343,48 @@ export default function CourseForm({ course, onClose, onSave }) {
             rows={4}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
           />
+        </div>
+      </div>
+
+      {/* ─── Landing page content ─────────────────────────────────── */}
+      <div className="border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-base">📢</span>
+          <h4 className="text-sm font-semibold text-slate-900">Контент лендинга (лидмагнит)</h4>
+        </div>
+        <p className="text-xs text-slate-400 mb-3">Эти поля показываются на публичной странице курса для рекламы. Можно писать на любом языке.</p>
+        <div className="grid grid-cols-1 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Подзаголовок</label>
+            <input type="text" value={form.landingTagline}
+              onChange={e => set('landingTagline', e.target.value)}
+              placeholder="Напр. Зарабатывайте от $500 до $2000 в месяц"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Подробное описание</label>
+            <textarea value={form.landingAbout}
+              onChange={e => set('landingAbout', e.target.value)}
+              placeholder="Расскажите подробно о курсе: что внутри, кто ведёт, какой результат..."
+              rows={4}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 resize-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Для кого этот курс <span className="text-slate-400 font-normal">(каждый пункт с новой строки)</span></label>
+            <textarea value={form.landingForWhomText}
+              onChange={e => set('landingForWhomText', e.target.value)}
+              placeholder={"Для новичков без опыта\nДля предпринимателей\nДля тех, кто хочет сменить профессию"}
+              rows={3}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 resize-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Результаты курса <span className="text-slate-400 font-normal">(каждый пункт с новой строки)</span></label>
+            <textarea value={form.landingResultsText}
+              onChange={e => set('landingResultsText', e.target.value)}
+              placeholder={"Создадите первый проект\nНаучитесь работать с клиентами\nПолучите сертификат"}
+              rows={3}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 resize-none" />
+          </div>
         </div>
       </div>
 
