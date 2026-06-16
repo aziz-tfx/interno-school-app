@@ -177,6 +177,43 @@ export default function CourseForm({ course, onClose, onSave }) {
     updateTariffField(regionKey, tariffKey, 'd10', Math.round(fullNum * 0.9))
     updateTariffField(regionKey, tariffKey, 'd15', Math.round(fullNum * 0.85))
     updateTariffField(regionKey, tariffKey, 'd20', Math.round(fullNum * 0.8))
+    // Recalculate any custom discounts too
+    getCustomDiscountKeys(pricing[regionKey]?.[tariffKey]).forEach(key => {
+      const pct = Number(key.slice(1))
+      if (pct > 0) updateTariffField(regionKey, tariffKey, key, Math.round(fullNum * (1 - pct / 100)))
+    })
+  }
+
+  // Custom discount keys = dN where N is any percent except the standard 10/15/20
+  const STANDARD_DISCOUNTS = ['d10', 'd15', 'd20']
+  const getCustomDiscountKeys = (tariff) => {
+    if (!tariff) return []
+    return Object.keys(tariff)
+      .filter(k => /^d\d+$/.test(k) && !STANDARD_DISCOUNTS.includes(k))
+      .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)))
+  }
+
+  // Draft state for adding a custom discount: { regionKey, tariffKey, percent } | null
+  const [discountDraft, setDiscountDraft] = useState(null)
+
+  const commitCustomDiscount = () => {
+    if (!discountDraft) return
+    const { regionKey, tariffKey, percent } = discountDraft
+    const pct = Math.round(Number(percent))
+    if (!pct || pct <= 0 || pct >= 100) { setDiscountDraft(null); return }
+    const key = `d${pct}`
+    const full = Number(pricing[regionKey]?.[tariffKey]?.full) || 0
+    const autoPrice = full > 0 ? Math.round(full * (1 - pct / 100)) : ''
+    updateTariffField(regionKey, tariffKey, key, autoPrice)
+    setDiscountDraft(null)
+  }
+
+  const removeCustomDiscount = (regionKey, tariffKey, key) => {
+    setPricing(prev => {
+      const copy = JSON.parse(JSON.stringify(prev))
+      if (copy[regionKey]?.[tariffKey]) delete copy[regionKey][tariffKey][key]
+      return copy
+    })
   }
 
   const handleSubmit = (e) => {
@@ -189,9 +226,12 @@ export default function CourseForm({ course, onClose, onSave }) {
         const cleaned = {
           full: Number(values.full) || 0,
         }
-        if (values.d10) cleaned.d10 = Number(values.d10)
-        if (values.d15) cleaned.d15 = Number(values.d15)
-        if (values.d20) cleaned.d20 = Number(values.d20)
+        // Persist every discount key (dN — standard and custom)
+        for (const [k, v] of Object.entries(values)) {
+          if (/^d\d+$/.test(k) && v !== '' && v != null && Number(v) > 0) {
+            cleaned[k] = Number(v)
+          }
+        }
         if (values.monthly) cleaned.monthly = true
         if (values.label) cleaned.label = values.label
         if (values.durationMonths && Number(values.durationMonths) > 0) {
@@ -658,6 +698,67 @@ export default function CourseForm({ course, onClose, onSave }) {
                         >
                           {t('courseForm.auto_calc')}
                         </button>
+
+                        {/* Custom discounts */}
+                        {(() => {
+                          const customKeys = getCustomDiscountKeys(tp)
+                          const isDrafting = discountDraft?.regionKey === regionKey && discountDraft?.tariffKey === tariffKey
+                          return (
+                            <div className="mt-2 pt-2 border-t border-slate-100">
+                              {customKeys.length > 0 && (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                                  {customKeys.map(key => {
+                                    const pct = Number(key.slice(1))
+                                    return (
+                                      <div key={key} className="relative">
+                                        <label className="text-[10px] text-emerald-600 mb-0.5 block font-medium">−{pct}%</label>
+                                        <div className="flex items-center gap-1">
+                                          <input
+                                            type="number"
+                                            value={tp[key] ?? ''}
+                                            onChange={e => updateTariffField(regionKey, tariffKey, key, e.target.value)}
+                                            placeholder="0"
+                                            className="w-full px-2 py-1.5 bg-emerald-50/50 border border-emerald-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                          />
+                                          <button type="button" onClick={() => removeCustomDiscount(regionKey, tariffKey, key)}
+                                            className="text-red-400 hover:text-red-600 flex-shrink-0">
+                                            <Trash2 size={11} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                              {isDrafting ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-500">Скидка</span>
+                                  <input
+                                    type="number" min="1" max="99" autoFocus
+                                    value={discountDraft.percent}
+                                    onChange={e => setDiscountDraft(d => ({ ...d, percent: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitCustomDiscount() } }}
+                                    placeholder="50"
+                                    className="w-16 px-2 py-1 bg-white border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                  />
+                                  <span className="text-[10px] text-slate-500">%</span>
+                                  <button type="button" onClick={commitCustomDiscount}
+                                    className="text-[10px] text-white bg-emerald-600 px-2 py-1 rounded hover:bg-emerald-700">Добавить</button>
+                                  <button type="button" onClick={() => setDiscountDraft(null)}
+                                    className="text-[10px] text-slate-400 hover:text-slate-600">Отмена</button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setDiscountDraft({ regionKey, tariffKey, percent: '' })}
+                                  className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700 font-medium"
+                                >
+                                  <Plus size={11} /> Добавить свою скидку
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )
                   })}
