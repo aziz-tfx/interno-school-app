@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useData } from '../../contexts/DataContext'
@@ -6,12 +6,13 @@ import { useLanguage } from '../../contexts/LanguageContext'
 import {
   ArrowLeft, ChevronLeft, ChevronRight, CheckCircle2,
   BookOpen, Play, FileText, Link2, Download, Video,
-  Clock, Award, Send, Pencil, AlertCircle, Shield, Lock
+  Clock, Award, Send, Pencil, AlertCircle, Shield, Lock, Eye
 } from 'lucide-react'
 import { isLessonAccessible } from '../../utils/lessonAccess'
 import { updateStreak, XP_RULES } from '../../data/gamification'
 import XPGainAnimation from '../../components/XPGainAnimation'
 import AIChat from '../../components/AIChat'
+import TrackedVideoPlayer from '../../components/TrackedVideoPlayer'
 import { Bot } from 'lucide-react'
 
 // ─── Content Protection Hook ────────────────────────────────────────
@@ -151,6 +152,7 @@ export default function LMSLessonView() {
     lmsSubmissions, lmsProgress, addLmsProgress, deleteLmsProgress,
     addLmsSubmission, updateLmsSubmission,
     studentGameData, updateStudentGameData,
+    lmsVideoProgress, saveVideoProgress,
   } = useData()
 
   const isStudent = user?.role === 'student'
@@ -250,6 +252,39 @@ export default function LMSLessonView() {
       s.assignmentId === linkedAssignment.id && s.studentId === myStudent.id
     ) || null
   }, [lmsSubmissions, linkedAssignment, myStudent])
+
+  // ─── Video watch progress ───
+  const myVideoProgress = useMemo(() => {
+    if (!myStudent) return null
+    return (lmsVideoProgress || []).find(v => v.studentId === myStudent.id && v.lessonId === lessonId) || null
+  }, [lmsVideoProgress, myStudent, lessonId])
+
+  const [livePercent, setLivePercent] = useState(0)
+  const lastSaveRef = useRef(0)
+  const handleVideoProgress = useCallback(({ percent, currentTime, duration }) => {
+    setLivePercent(p => Math.max(p, percent))
+    if (!isStudent || !myStudent) return
+    const now = Date.now()
+    // Throttle writes: every 10s, or on each new 10%-milestone
+    const milestone = percent >= 25 && Math.floor(percent / 10) > Math.floor((myVideoProgress?.percent || 0) / 10)
+    if (now - lastSaveRef.current > 10000 || milestone) {
+      lastSaveRef.current = now
+      saveVideoProgress({
+        studentId: myStudent.id, lessonId, courseId: course?.id || '',
+        percent, watchedSeconds: currentTime, lastPosition: currentTime, duration,
+      })
+    }
+  }, [isStudent, myStudent, lessonId, course, myVideoProgress, saveVideoProgress])
+
+  // Per-student video stats for teachers/admins
+  const lessonVideoStats = useMemo(() => {
+    if (isStudent) return []
+    return (lmsVideoProgress || [])
+      .filter(v => v.lessonId === lessonId)
+      .map(v => ({ ...v, student: students.find(s => String(s.id) === String(v.studentId)) }))
+      .filter(v => v.student)
+      .sort((a, b) => (b.percent || 0) - (a.percent || 0))
+  }, [lmsVideoProgress, lessonId, students, isStudent])
 
   const handleToggleComplete = async () => {
     if (!myStudent) return
@@ -429,59 +464,56 @@ export default function LMSLessonView() {
       </div>
 
       {/* Video player with protection */}
-      {videoInfo?.type === 'kinescope' && (() => {
+      {videoInfo && (videoInfo.type === 'kinescope' || videoInfo.type === 'youtube') && (() => {
         const watermarkName = myStudent?.name || user?.name || ''
         const watermarkPhone = myStudent?.phone || ''
-        const watermarkText = `${watermarkName} ${watermarkPhone}`.trim()
-        const params = new URLSearchParams()
-        // Watermark — displays student name over video
-        if (watermarkText) {
-          params.set('watermark_text', watermarkText)
-          params.set('watermark_mode', 'viewer')
-        }
-        // DRM & security
-        params.set('drm', 'true')
-        params.set('dnt', '1')
-        // Disable download button
-        params.set('download', 'false')
-        const embedUrl = `https://kinescope.io/embed/${videoInfo.id}?${params.toString()}`
+        const watermarkText = isStudent ? `${watermarkName} ${watermarkPhone}`.trim() : ''
+        const resumeAt = (isStudent && myVideoProgress?.lastPosition > 5) ? myVideoProgress.lastPosition : 0
+        const watchedPct = isStudent ? Math.max(livePercent, myVideoProgress?.percent || 0) : 0
         return (
           <div className="glass-card rounded-2xl overflow-hidden">
-            <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-              <iframe
-                src={embedUrl}
-                title={lesson.title}
-                allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full border-0"
-                referrerPolicy="no-referrer-when-downgrade"
-                sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
-              />
-              {/* Subtle watermark overlay with student name */}
-              {isStudent && watermarkText && (
-                <div className="pointer-events-none absolute inset-0 z-10 select-none" aria-hidden="true">
-                  <div className="absolute top-3 left-4 text-white/[0.12] text-[11px] font-medium tracking-wide">{watermarkText}</div>
-                  <div className="absolute bottom-3 right-4 text-white/[0.12] text-[11px] font-medium tracking-wide">{watermarkText}</div>
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-30 text-white/[0.06] text-sm font-semibold tracking-widest whitespace-nowrap">{watermarkText} · INTERNO</div>
+            <TrackedVideoPlayer
+              videoInfo={videoInfo}
+              lessonTitle={lesson.title}
+              isStudent={isStudent}
+              watermarkText={watermarkText}
+              startAt={resumeAt}
+              onProgress={handleVideoProgress}
+            />
+            {/* Student watch-progress bar */}
+            {isStudent && (
+              <div className="px-4 py-3 border-t border-slate-100 flex items-center gap-3">
+                <Eye size={14} className={watchedPct >= 90 ? 'text-emerald-500' : 'text-slate-400'} />
+                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all ${watchedPct >= 90 ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                    style={{ width: `${watchedPct}%` }} />
                 </div>
-              )}
-            </div>
+                <span className={`text-xs font-semibold ${watchedPct >= 90 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                  {watchedPct >= 90 ? 'Просмотрено' : `${watchedPct}%`}
+                </span>
+              </div>
+            )}
           </div>
         )
       })()}
 
-      {videoInfo?.type === 'youtube' && embedUrl && (
-        <div className="glass-card rounded-2xl overflow-hidden">
-          <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-            <iframe
-              src={embedUrl}
-              title={lesson.title}
-              allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="absolute inset-0 w-full h-full"
-              sandbox="allow-scripts allow-same-origin allow-presentation"
-            />
-            {isStudent && <Watermark studentName={myStudent?.name || user?.name} />}
+      {/* Teacher/admin: who watched this video */}
+      {!isStudent && lessonVideoStats.length > 0 && (
+        <div className="glass-card rounded-2xl p-5">
+          <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+            <Eye size={16} className="text-blue-500" /> Просмотры видео ({lessonVideoStats.length})
+          </h3>
+          <div className="space-y-2">
+            {lessonVideoStats.map(v => (
+              <div key={v.id} className="flex items-center gap-3">
+                <span className="text-sm text-slate-700 w-40 truncate">{v.student.name}</span>
+                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${v.percent >= 90 ? 'bg-emerald-500' : v.percent >= 40 ? 'bg-amber-500' : 'bg-red-400'}`}
+                    style={{ width: `${v.percent || 0}%` }} />
+                </div>
+                <span className="text-xs font-semibold text-slate-500 w-10 text-right">{v.percent || 0}%</span>
+              </div>
+            ))}
           </div>
         </div>
       )}

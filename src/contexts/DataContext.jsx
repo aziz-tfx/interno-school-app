@@ -55,12 +55,15 @@ export function DataProvider({ children, currentUser }) {
   // Messages collection (student ↔ teacher chat)
   const [messages, setMessages] = useState([])
 
+  // Video watch progress (lmsVideoProgress)
+  const [lmsVideoProgress, setLmsVideoProgress] = useState([])
+
   // Track whether initial load has resolved for each collection
-  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false, studentGameData: false, schedule: false, auditLogs: false, messages: false })
+  const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false, studentGameData: false, schedule: false, auditLogs: false, messages: false, lmsVideoProgress: false })
 
   const checkAllLoaded = () => {
     const r = loadedRef.current
-    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress && r.studentGameData && r.schedule && r.auditLogs && r.messages) {
+    if (r.branches && r.courses && r.groups && r.students && r.teachers && r.payments && r.attendance && r.salesPlans && r.rooms && r.lmsLessons && r.lmsAssignments && r.lmsSubmissions && r.lmsAnnouncements && r.lmsModules && r.lmsProgress && r.studentGameData && r.schedule && r.auditLogs && r.messages && r.lmsVideoProgress) {
       setLoading(false)
     }
   }
@@ -134,6 +137,7 @@ export function DataProvider({ children, currentUser }) {
     subscribeCollection('lmsAnnouncements', setLmsAnnouncements, 'lmsAnnouncements')
     subscribeCollection('lmsModules', setLmsModules, 'lmsModules')
     subscribeCollection('lmsProgress', setLmsProgress, 'lmsProgress')
+    subscribeCollection('lmsVideoProgress', setLmsVideoProgress, 'lmsVideoProgress')
     subscribeCollection('studentGameData', setStudentGameData, 'studentGameData')
     subscribeCollection('schedule', setSchedule, 'schedule')
     subscribeCollection('auditLog', setAuditLogs, 'auditLogs')
@@ -543,6 +547,24 @@ export function DataProvider({ children, currentUser }) {
   }
 
   // --- LMS Progress CRUD ---
+  // --- Video watch progress (upsert by studentId_lessonId) ---
+  const saveVideoProgress = async ({ studentId, lessonId, courseId, percent, watchedSeconds, lastPosition, duration }) => {
+    if (!studentId || !lessonId) return
+    const id = `${studentId}_${lessonId}`
+    const existing = lmsVideoProgress.find(v => v.id === id)
+    // Never let percent / watchedSeconds go backwards
+    const nextPercent = Math.max(Math.round(percent || 0), existing?.percent || 0)
+    const nextWatched = Math.max(Math.round(watchedSeconds || 0), existing?.watchedSeconds || 0)
+    await setDoc(doc(db, 'lmsVideoProgress', id), withTenant({
+      studentId, lessonId, courseId: courseId || '',
+      percent: Math.min(nextPercent, 100),
+      watchedSeconds: nextWatched,
+      lastPosition: Math.round(lastPosition || 0),
+      duration: Math.round(duration || existing?.duration || 0),
+      updatedAt: new Date().toISOString(),
+    }), { merge: true })
+  }
+
   const addLmsProgress = async (progress) => {
     const docRef = await addDoc(collection(db, 'lmsProgress'), withTenant(progress))
     return { ...progress, id: docRef.id }
@@ -678,6 +700,7 @@ export function DataProvider({ children, currentUser }) {
       messages, sendMessage, markMessagesRead,
       lmsModules, addLmsModule, updateLmsModule, deleteLmsModule,
       lmsProgress, addLmsProgress, deleteLmsProgress,
+      lmsVideoProgress, saveVideoProgress,
       studentGameData, updateStudentGameData,
       schedule, addScheduleEntry, updateScheduleEntry, deleteScheduleEntry,
       auditLogs,
