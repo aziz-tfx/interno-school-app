@@ -214,9 +214,17 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       return { value: key, label: customLabel || key, tKey: std?.tKey || null }
     })
   })()
-  const availableDiscounts = coursePricing
-    ? DISCOUNT_OPTIONS.filter(d => coursePricing[d.value] !== undefined)
-    : DISCOUNT_OPTIONS
+  // Build discount options dynamically from the tariff: 'full' + every dN key
+  // present (standard 10/15/20 and custom like d30, d50), sorted by percent.
+  const availableDiscounts = (() => {
+    if (!coursePricing) return DISCOUNT_OPTIONS
+    const opts = [{ value: 'full', label: t('paymentForm.discount_none') }]
+    Object.keys(coursePricing)
+      .filter(k => /^d\d+$/.test(k) && Number(coursePricing[k]) > 0)
+      .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)))
+      .forEach(k => opts.push({ value: k, label: `−${k.slice(1)}%` }))
+    return opts
+  })()
 
   // Use course price from selection, or fallback to student's saved totalCoursePrice
   const totalCoursePrice = courseFullPrice || selectedStudent?.totalCoursePrice || 0
@@ -277,6 +285,16 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     const tariffDur = c?.pricing?.[region]?.[form.tariff]?.durationMonths
     if (tariffDur && Number(tariffDur) > 0) {
       setForm(prev => ({ ...prev, durationMonths: String(Number(tariffDur)) }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.tariff, form.course, region])
+
+  // Reset discount to "full" if the selected discount isn't offered by the new tariff
+  useEffect(() => {
+    if (form.discount === 'full') return
+    const tariffPricing = selectedCourse?.pricing?.[region]?.[form.tariff]
+    if (tariffPricing && !(form.discount in tariffPricing)) {
+      setForm(prev => ({ ...prev, discount: 'full' }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.tariff, form.course, region])
@@ -489,8 +507,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     const tariffOpt = TARIFF_OPTIONS.find(to => to.value === form.tariff)
     const customLbl = selectedCourse?.pricing?.[region]?.[form.tariff]?.label
     const tariffLbl = customLbl || (tariffOpt ? t(tariffOpt.tKey) : form.tariff)
-    const discountOpt = DISCOUNT_OPTIONS.find(d => d.value === form.discount)
-    const discountLbl = discountOpt ? t(discountOpt.tKey) : ''
+    const discountLbl = form.discount === 'full' || !form.discount
+      ? t('paymentForm.discount_none')
+      : `−${String(form.discount).replace(/^d/, '')}%`
     const paymentData = {
       type: form.type,
       student: form.type === 'income' ? form.clientName : form.expenseDescription,
@@ -1320,7 +1339,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_discount')}</label>
                     <select value={form.discount} onChange={(e) => set('discount', e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {availableDiscounts.map(d => <option key={d.value} value={d.value}>{t(d.tKey)}</option>)}
+                      {availableDiscounts.map(d => <option key={d.value} value={d.value}>{d.tKey ? t(d.tKey) : d.label}</option>)}
                     </select>
                   </div>
 
