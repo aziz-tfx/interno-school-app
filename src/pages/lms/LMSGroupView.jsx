@@ -805,6 +805,17 @@ export default function LMSGroupView() {
     return Math.max(0, (myStudent.totalCoursePrice || 0) - totalPaid)
   }, [payments, myStudent, isStudent])
 
+  // Contract-signing gate
+  const { contractUnsigned, unsignedPaymentId } = useMemo(() => {
+    if (!isStudent || !myStudent) return { contractUnsigned: false, unsignedPaymentId: null }
+    const studentPays = (payments || []).filter(p => p.type === 'income' && String(p.studentId) === String(myStudent.id))
+    if (studentPays.length === 0) return { contractUnsigned: false, unsignedPaymentId: null }
+    const isSigned = (p) => p.contractSigned === true || !!p.signatureData
+    if (studentPays.some(isSigned)) return { contractUnsigned: false, unsignedPaymentId: null }
+    const unsigned = studentPays.find(p => p.contractNumber) || studentPays[0]
+    return { contractUnsigned: true, unsignedPaymentId: unsigned?.id || null }
+  }, [payments, myStudent, isStudent])
+
   const courseModules = useMemo(() => {
     if (!course) return []
     return (lmsModules || []).filter(m => m.courseId === course.id).sort((a, b) => (a.order || 0) - (b.order || 0))
@@ -842,6 +853,27 @@ export default function LMSGroupView() {
       <div className="text-center py-20">
         <p className="text-slate-400">{t('lms.group_not_found')}</p>
         <button onClick={() => navigate('/lms')} className="text-blue-600 text-sm mt-2 hover:underline">{t('lms.go_back')}</button>
+      </div>
+    )
+  }
+
+  // Block student from accessing group content if contract not signed
+  if (!studentBlocked && contractUnsigned) {
+    return (
+      <div className="text-center py-20 max-w-sm mx-auto">
+        <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-blue-100">
+          <FileText size={28} className="text-blue-500" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Подпишите договор</h3>
+        <p className="text-slate-500 text-sm mb-5">
+          Для доступа к урокам необходимо подписать договор. Это займёт меньше минуты.
+        </p>
+        {unsignedPaymentId && (
+          <button onClick={() => navigate(`/contract/${unsignedPaymentId}`)}
+            className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-violet-600 text-white rounded-xl text-sm font-medium hover:from-blue-700 hover:to-violet-700 transition-all">
+            Подписать договор
+          </button>
+        )}
       </div>
     )
   }

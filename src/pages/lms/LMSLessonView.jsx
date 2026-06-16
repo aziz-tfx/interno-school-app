@@ -386,6 +386,30 @@ export default function LMSLessonView() {
     )
   }
 
+  // ─── Contract not signed: block lesson ───
+  if (isStudent && myStudent) {
+    const studentPays = (payments || []).filter(p => p.type === 'income' && String(p.studentId) === String(myStudent.id))
+    const isSigned = (p) => p.contractSigned === true || !!p.signatureData
+    if (studentPays.length > 0 && !studentPays.some(isSigned)) {
+      const unsigned = studentPays.find(p => p.contractNumber) || studentPays[0]
+      return (
+        <div className="max-w-md mx-auto text-center py-20">
+          <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <FileText size={32} className="text-blue-500" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Подпишите договор</h2>
+          <p className="text-slate-500 text-sm mb-6">Для доступа к урокам необходимо подписать договор.</p>
+          {unsigned?.id && (
+            <button onClick={() => navigate(`/contract/${unsigned.id}`)}
+              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-violet-600 text-white rounded-xl text-sm font-medium hover:from-blue-700 hover:to-violet-700 transition-all">
+              Подписать договор
+            </button>
+          )}
+        </div>
+      )
+    }
+  }
+
   // ─── Access denied for locked lessons ───
   if (isStudent && !lessonAccess.accessible) {
     return (
