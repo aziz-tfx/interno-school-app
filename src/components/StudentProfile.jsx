@@ -6,18 +6,20 @@ import {
   User, Phone, BookOpen, Calendar, CreditCard, FileText,
   Image, Download, AlertTriangle, CheckCircle, Clock, Plus,
   ChevronDown, ChevronUp, Paperclip, Eye, Monitor, ToggleLeft, ToggleRight,
-  FileDown, ExternalLink, Link2, Copy, Check,
+  FileDown, ExternalLink, Link2, Copy, Check, KeyRound, RefreshCw,
 } from 'lucide-react'
 import Modal from './Modal'
 import PaymentForm from './PaymentForm'
 import { useLanguage } from '../contexts/LanguageContext'
 import { generateContract } from '../utils/generateContract'
+import { toast } from './Toaster'
 
 export default function StudentProfile({ student, onClose }) {
   const { payments, branches, updateStudent } = useData()
-  const { hasPermission } = useAuth()
+  const { hasPermission, employees, updateEmployee, addEmployee, user } = useAuth()
   const { t } = useLanguage()
   const canPayments = hasPermission('finance', 'payments')
+  const canEditStudents = hasPermission('students', 'edit')
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [expandedPayment, setExpandedPayment] = useState(null)
@@ -27,6 +29,62 @@ export default function StudentProfile({ student, onClose }) {
   const [copiedLink, setCopiedLink] = useState(null)
   const [editingPrice, setEditingPrice] = useState(false)
   const [coursePrice, setCoursePrice] = useState(student.totalCoursePrice || '')
+  const [resettingPwd, setResettingPwd] = useState(false)
+
+  // Reset (or create) the student's LMS login credentials
+  const handleResetCredentials = async () => {
+    if (resettingPwd) return
+    setResettingPwd(true)
+    try {
+      const phoneDigits = (student.phone || '').replace(/\D/g, '')
+      const newPassword = String(100000 + Math.floor(Math.random() * 900000))
+      // Login = existing or phone digits
+      const login = student.lmsLogin || phoneDigits
+      if (!login) {
+        toast.error('У студента не указан телефон — невозможно создать логин')
+        setResettingPwd(false)
+        return
+      }
+
+      // Find the linked LMS account (by studentId, then by phone)
+      const acct = employees.find(e =>
+        e.role === 'student' && (
+          String(e.studentId) === String(student.id) ||
+          (phoneDigits && (e.phone || '').replace(/\D/g, '') === phoneDigits) ||
+          (e.login || '').replace(/\D/g, '') === phoneDigits
+        )
+      )
+
+      if (acct) {
+        await updateEmployee(acct.id, { password: newPassword, login, deleted: false })
+      } else {
+        // No account yet — create one
+        await addEmployee({
+          login,
+          password: newPassword,
+          name: student.name,
+          role: 'student',
+          branch: student.branch || 'tashkent',
+          phone: student.phone || '',
+          studentId: student.id,
+          tenantId: student.tenantId || user?.tenantId || 'default',
+        })
+      }
+
+      // Mirror credentials onto the student record + ensure access
+      await updateStudent(student.id, {
+        lmsLogin: login,
+        lmsPassword: newPassword,
+        lmsAccess: true,
+      })
+
+      toast.success(`Пароль обновлён! Логин: ${login} · Пароль: ${newPassword}`, 'success', 8000)
+    } catch (err) {
+      console.error('reset credentials failed:', err)
+      toast.error('Не удалось сбросить пароль. Попробуйте ещё раз.')
+    }
+    setResettingPwd(false)
+  }
 
   // Get all payments for this student
   const studentPayments = payments
@@ -126,19 +184,46 @@ export default function StudentProfile({ student, onClose }) {
         )}
       </div>
 
-      {/* LMS Credentials (if account exists) */}
-      {student.lmsLogin && (
+      {/* LMS Credentials */}
+      {student.lmsLogin ? (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Monitor size={16} className="text-blue-600" />
-            <p className="text-sm font-semibold text-blue-800">{t('studentProfile.lms_credentials')}</p>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Monitor size={16} className="text-blue-600" />
+              <p className="text-sm font-semibold text-blue-800">{t('studentProfile.lms_credentials')}</p>
+            </div>
+            {canEditStudents && (
+              <button onClick={handleResetCredentials} disabled={resettingPwd}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white text-blue-700 text-xs font-medium rounded-lg border border-blue-200 hover:bg-blue-100 disabled:opacity-50 transition-colors">
+                <RefreshCw size={12} className={resettingPwd ? 'animate-spin' : ''} /> Сбросить пароль
+              </button>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <span className="text-slate-500">{t('studentProfile.lms_login')}</span>
-            <span className="font-mono font-bold text-slate-900">{student.lmsLogin}</span>
+            <span className="font-mono font-bold text-slate-900 flex items-center gap-1.5">
+              {student.lmsLogin}
+              <button onClick={() => { navigator.clipboard?.writeText(student.lmsLogin); toast.success('Логин скопирован') }}
+                className="text-slate-400 hover:text-blue-600"><Copy size={12} /></button>
+            </span>
             <span className="text-slate-500">{t('studentProfile.lms_password')}</span>
-            <span className="font-mono font-bold text-slate-900">{student.lmsPassword}</span>
+            <span className="font-mono font-bold text-slate-900 flex items-center gap-1.5">
+              {student.lmsPassword}
+              <button onClick={() => { navigator.clipboard?.writeText(student.lmsPassword); toast.success('Пароль скопирован') }}
+                className="text-slate-400 hover:text-blue-600"><Copy size={12} /></button>
+            </span>
           </div>
+        </div>
+      ) : canEditStudents && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <KeyRound size={16} className="text-amber-600" />
+            <p className="text-sm text-amber-800">У студента ещё нет доступа к LMS</p>
+          </div>
+          <button onClick={handleResetCredentials} disabled={resettingPwd}
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
+            <KeyRound size={12} /> Создать доступ
+          </button>
         </div>
       )}
 

@@ -132,6 +132,10 @@ service cloud.firestore {
       allow read, write: if hasAppCheck() && docSmallEnough();
     }
 
+    match /lmsVideoProgress/{id} {
+      allow read, write: if hasAppCheck() && docSmallEnough();
+    }
+
     match /studentGameData/{id} {
       allow read, write: if hasAppCheck() && docSmallEnough();
     }
