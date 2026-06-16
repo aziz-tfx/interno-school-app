@@ -3,6 +3,30 @@
 // Online students: modules unlock weekly every Monday 00:01 from group start date
 
 /**
+ * Contract-signing gate: a student with payments must have at least one
+ * signed contract to access the LMS. Students with no payments at all are
+ * not blocked by this rule (they're gated by payment/lmsAccess logic).
+ *
+ * @param {string|number} studentId
+ * @param {Array} payments - all payments
+ * @returns {{ needsContract: boolean, signed: boolean, unsignedPaymentId: string|null }}
+ */
+export function getContractGate(studentId, payments) {
+  const studentPays = (payments || []).filter(
+    p => p.type === 'income' && String(p.studentId) === String(studentId)
+  )
+  if (studentPays.length === 0) {
+    return { needsContract: false, signed: false, unsignedPaymentId: null }
+  }
+  const isSigned = (p) => p.contractSigned === true || !!p.signatureData
+  const signed = studentPays.some(isSigned)
+  const unsigned =
+    studentPays.find(p => !isSigned(p) && p.contractNumber) ||
+    studentPays.find(p => !isSigned(p))
+  return { needsContract: true, signed, unsignedPaymentId: unsigned?.id || null }
+}
+
+/**
  * Calculate how many modules are unlocked for an online group
  * @param {string} startDate - Group start date (ISO format: YYYY-MM-DD)
  * @returns {number} Number of unlocked modules (1-based)

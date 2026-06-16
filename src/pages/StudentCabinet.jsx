@@ -88,6 +88,15 @@ export default function StudentCabinet() {
   const coursePrice = myStudent?.totalCoursePrice || 0
   const debt = Math.max(0, coursePrice - totalPaid)
 
+  // ─── Contract gate: signed contract required for LMS access ───
+  const { contractSigned, unsignedPaymentId } = useMemo(() => {
+    const isSigned = (p) => p.contractSigned === true || !!p.signatureData
+    if (myPayments.length === 0) return { contractSigned: true, unsignedPaymentId: null }
+    const signed = myPayments.some(isSigned)
+    const unsigned = myPayments.find(p => !isSigned(p) && p.contractNumber) || myPayments.find(p => !isSigned(p))
+    return { contractSigned: signed, unsignedPaymentId: unsigned?.id || null }
+  }, [myPayments])
+
   // ─── LMS Progress ─────────────────────────────────────────────
   const myProgressIds = useMemo(() => {
     if (!myStudent) return new Set()
@@ -230,6 +239,30 @@ export default function StudentCabinet() {
             <p className="text-sm text-slate-600 mb-4">Группа: <b>{myStudent.group}</b></p>
           )}
           <p className="text-xs text-slate-400 mt-4">Свяжитесь с нами: <span className="font-medium text-slate-600">+998 95 387 79 27</span></p>
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Contract-not-signed screen ───────────────────────────────
+  if (myStudent && !contractSigned && unsignedPaymentId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-200 p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <FileText size={32} className="text-blue-500" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">Подпишите договор</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            Для доступа к урокам необходимо подписать договор. Это займёт меньше минуты.
+          </p>
+          <button
+            onClick={() => navigate(`/contract/${unsignedPaymentId}`)}
+            className="w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3 rounded-xl font-medium hover:from-blue-700 hover:to-violet-700 transition-all flex items-center justify-center gap-2"
+          >
+            <PenTool size={18} /> Подписать договор
+          </button>
+          <p className="text-xs text-slate-400 mt-4">После подписи доступ откроется автоматически</p>
         </div>
       </div>
     )
