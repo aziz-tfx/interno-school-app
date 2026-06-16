@@ -370,7 +370,29 @@ export function AuthProvider({ children }) {
     : employees
 
   const login = (loginStr, password) => {
-    const found = employees.find(u => u.login === loginStr && u.password === password)
+    const rawLogin = (loginStr ?? '').toString().trim()
+    const rawPass = (password ?? '').toString().trim()
+
+    // Phone logins are stored as digits-only (e.g. "998935435567"), but
+    // students may type them with +, spaces, or without the 998 country
+    // code. Normalise to compare robustly.
+    const digitsOnly = (s) => (s ?? '').toString().replace(/\D/g, '')
+    const stripCC = (d) => d.replace(/^998/, '') // Uzbekistan country code
+    const inputDigits = digitsOnly(rawLogin)
+    const inputTail = stripCC(inputDigits)
+
+    const matchesLogin = (storedLogin) => {
+      if (storedLogin == null) return false
+      const sl = storedLogin.toString().trim()
+      // Exact text login (admin/owner/etc.) — case-insensitive
+      if (sl.toLowerCase() === rawLogin.toLowerCase()) return true
+      // Phone-style: compare last digits ignoring country code & formatting
+      const storedTail = stripCC(digitsOnly(sl))
+      return inputTail.length >= 7 && storedTail.length >= 7 && storedTail === inputTail
+    }
+    const matchesPass = (storedPass) => (storedPass ?? '').toString().trim() === rawPass
+
+    const found = employees.find(u => matchesLogin(u.login) && matchesPass(u.password))
     if (found) {
       if (found.status === 'pending') {
         setError('Ваша заявка на регистрацию ещё не одобрена. Обратитесь к администратору.')
