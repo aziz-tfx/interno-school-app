@@ -6,6 +6,7 @@ import { DataProvider } from './contexts/DataContext'
 import { LanguageProvider } from './contexts/LanguageContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Toaster from './components/Toaster'
+import UpdateBanner from './components/UpdateBanner'
 import App from './App'
 import './index.css'
 
@@ -23,6 +24,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <DataProviderWithUser>
               <App />
               <Toaster />
+              <UpdateBanner />
             </DataProviderWithUser>
           </AuthProvider>
         </LanguageProvider>
