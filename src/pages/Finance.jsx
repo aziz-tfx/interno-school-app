@@ -4,7 +4,7 @@ import {
   DollarSign, Plus, CreditCard, FileBarChart, TrendingUp, TrendingDown,
   Users, Target, BarChart3, ArrowUpRight, ArrowDownRight, Eye,
   ChevronLeft, ChevronRight, Filter, ShoppingCart, UserCheck, Phone,
-  Percent, CalendarDays, Pencil, Save, X, Trash2,
+  Percent, CalendarDays, Pencil, Save, X, Trash2, CheckCircle,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
@@ -62,6 +62,7 @@ export default function Finance() {
 
   // ─── State ──────────────────────────────────────────────────────────────
   const [paymentModal, setPaymentModal] = useState(false)
+  const [showDoplataList, setShowDoplataList] = useState(false)
   const [paymentType, setPaymentType] = useState('new') // 'new' | 'doplata'
   const [branchFilter, setBranchFilter] = useState(user?.branch !== 'all' ? user.branch : 'all')
   const [editingPayment, setEditingPayment] = useState(null)
@@ -590,6 +591,31 @@ export default function Finance() {
     return { revenue, salesCount, doplata, offlineCount, onlineCount }
   }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, employees])
 
+  // ─── Pending doplata list (students with remaining debt + next payment date) ─
+  const pendingDoplataList = useMemo(() => {
+    return students
+      .filter(s => {
+        if (branchFilter !== 'all' && s.branch !== branchFilter) return false
+        const price = s.totalCoursePrice || 0
+        if (price <= 0) return false
+        const paid = payments.filter(p => p.type === 'income' && String(p.studentId) === String(s.id))
+          .reduce((sum, p) => sum + (p.amount || 0), 0)
+        return paid > 0 && paid < price
+      })
+      .map(s => {
+        const studentPays = payments.filter(p => p.type === 'income' && String(p.studentId) === String(s.id))
+          .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        const totalPaid = studentPays.reduce((sum, p) => sum + (p.amount || 0), 0)
+        const debt = (s.totalCoursePrice || 0) - totalPaid
+        const nextPaymentDate = s.nextPaymentDate || studentPays[0]?.nextPaymentDate || ''
+        const daysUntil = nextPaymentDate ? Math.ceil((new Date(nextPaymentDate) - new Date()) / (1000 * 60 * 60 * 24)) : 999
+        const lastPayDate = studentPays[0]?.date || ''
+        const manager = studentPays[0]?.createdByName || ''
+        return { ...s, debt, totalPaid, nextPaymentDate, daysUntil, lastPayDate, manager, trancheCount: studentPays.length }
+      })
+      .sort((a, b) => a.daysUntil - b.daysUntil)
+  }, [students, payments, branchFilter])
+
   // ─── Month navigation ──────────────────────────────────────────────────
   const prevMonth = () => {
     if (selectedMonth === 1) { setSelectedYear(y => y - 1); setSelectedMonth(12) }
@@ -735,12 +761,13 @@ export default function Finance() {
             </div>
             <p className="text-lg font-bold text-slate-900">{realRevenueData.salesCount} <span className="text-sm text-slate-400">/ {teamTotals.planSales}</span></p>
           </div>
-          <div className="glass-card rounded-2xl p-4">
+          <div className="glass-card rounded-2xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all" onClick={() => setShowDoplataList(true)}>
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-amber-50 rounded-lg"><CreditCard size={16} className="text-amber-600" /></div>
               <span className="text-xs text-slate-500">{t('finance.expected_doplata')}</span>
             </div>
             <p className="text-lg font-bold text-amber-600">{formatRevenue(realRevenueData.doplata)}</p>
+            <p className="text-[10px] text-amber-500 mt-0.5">{pendingDoplataList.length} учеников · нажмите для подробностей</p>
           </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -1437,6 +1464,70 @@ export default function Finance() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* ─── Pending Doplata Modal ────────────────────────────────────── */}
+      <Modal isOpen={showDoplataList} onClose={() => setShowDoplataList(false)} title="Ожидаемые доплаты" size="xl">
+        {pendingDoplataList.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            <CheckCircle size={32} className="mx-auto mb-2 opacity-50" />
+            <p>Нет ожидаемых доплат</p>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[70vh] overflow-auto">
+            <div className="grid grid-cols-6 gap-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-3 py-1 sticky top-0 bg-white z-10 border-b border-slate-100">
+              <span className="col-span-2">Студент</span>
+              <span>Долг</span>
+              <span>Оплачено</span>
+              <span>Следующий платёж</span>
+              <span>Менеджер</span>
+            </div>
+            {pendingDoplataList.map(s => {
+              const isOverdue = s.daysUntil < 0
+              const isToday = s.daysUntil === 0
+              const isUrgent = s.daysUntil <= 3 && s.daysUntil >= 0
+              const urgencyColor = isOverdue ? 'border-l-red-500 bg-red-50/30' : isToday ? 'border-l-amber-500 bg-amber-50/30' : isUrgent ? 'border-l-amber-400' : 'border-l-slate-200'
+              return (
+                <div key={s.id} className={`grid grid-cols-6 gap-2 items-center px-3 py-3 rounded-xl border-l-4 ${urgencyColor} hover:bg-slate-50 transition-colors`}>
+                  <div className="col-span-2 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">{s.name}</p>
+                    <p className="text-xs text-slate-400 truncate">{s.course || '—'} · {s.group || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-red-600">{formatRevenue(s.debt)}</p>
+                    <p className="text-[10px] text-slate-400">из {formatRevenue(s.totalCoursePrice || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-600">{formatRevenue(s.totalPaid)}</p>
+                    <p className="text-[10px] text-slate-400">{s.trancheCount} транш(ей)</p>
+                  </div>
+                  <div>
+                    {s.nextPaymentDate ? (
+                      <>
+                        <p className={`text-sm font-medium ${isOverdue ? 'text-red-600' : isToday ? 'text-amber-600' : 'text-slate-700'}`}>
+                          {s.nextPaymentDate}
+                        </p>
+                        <p className={`text-[10px] font-semibold ${isOverdue ? 'text-red-500' : isToday ? 'text-amber-500' : isUrgent ? 'text-amber-500' : 'text-slate-400'}`}>
+                          {isOverdue ? `просрочено ${Math.abs(s.daysUntil)} дн.` : isToday ? 'сегодня!' : `через ${s.daysUntil} дн.`}
+                        </p>
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-300">не указано</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 truncate">{s.manager || '—'}</p>
+                    <p className="text-[10px] text-slate-400">{s.lastPayDate || ''}</p>
+                  </div>
+                </div>
+              )
+            })}
+            <div className="border-t border-slate-100 pt-3 px-3 flex items-center justify-between text-sm">
+              <span className="text-slate-500">Итого: <b>{pendingDoplataList.length}</b> учеников</span>
+              <span className="text-red-600 font-bold">{formatRevenue(pendingDoplataList.reduce((s, d) => s + d.debt, 0))} долга</span>
+            </div>
           </div>
         )}
       </Modal>
