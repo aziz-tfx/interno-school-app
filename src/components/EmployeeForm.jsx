@@ -32,6 +32,7 @@ export default function EmployeeForm({ employee, onClose }) {
     role: 'sales',
     branch: 'tashkent',
     phone: '',
+    telegramChatId: '',
     subject: '',
     salary: '',
     amoUserId: '',
@@ -73,6 +74,7 @@ export default function EmployeeForm({ employee, onClose }) {
         role: employee.role || 'sales',
         branch: employee.branch || 'tashkent',
         phone: employee.phone || '',
+        telegramChatId: employee.telegramChatId || '',
         subject,
         salary,
         amoUserId: employee.amoUserId != null ? String(employee.amoUserId) : '',
@@ -219,6 +221,17 @@ export default function EmployeeForm({ employee, onClose }) {
             placeholder={t('employeeForm.placeholder_phone')}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
+
+        {/* Telegram Chat ID for personal notifications */}
+        {(form.role === 'sales' || form.role === 'rop' || form.role === 'branch_director') && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Telegram Chat ID</label>
+            <input type="text" value={form.telegramChatId || ''} onChange={e => set('telegramChatId', e.target.value)}
+              placeholder="Напр. 123456789"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <p className="text-[10px] text-slate-400 mt-1">Для личных уведомлений о доплатах. Менеджер может узнать свой ID через @userinfobot в Telegram.</p>
+          </div>
+        )}
 
         {/* Sales-side accounts can be linked to an amoCRM user so the
             Finance manager card pulls live "Заявки" and conversion. */}
