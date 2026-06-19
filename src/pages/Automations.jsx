@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = {
   debtorGraceDays: 0,
   autoBlockLms: true,
   blockLmsOnDebt: false,
+  managerDoplataAlerts: true,
 }
 
 export default function Automations() {
@@ -149,6 +150,22 @@ export default function Automations() {
             label="Блокировать при долге"
             description="Дополнительно блокировать LMS, если ученик в статусе «должник»"
           />
+        </div>
+      ),
+    },
+    {
+      id: 'managerAlerts',
+      icon: Bell,
+      color: 'from-blue-500 to-indigo-600',
+      title: 'Уведомления менеджерам о доплатах',
+      description: 'Каждый менеджер получает в Telegram личную сводку по доплатам своих студентов: просроченные, ближайшие, суммы долгов.',
+      enabled: settings.managerDoplataAlerts,
+      toggle: (v) => setSettings(s => ({ ...s, managerDoplataAlerts: v })),
+      extra: (
+        <div className="mt-3 bg-blue-50 rounded-xl p-3 text-xs text-blue-700 space-y-1">
+          <p>• Менеджеру приходит персональный список его студентов-должников</p>
+          <p>• В чат филиала — сводка срочных доплат (просрочено + ближайшие 3 дня)</p>
+          <p>• Для ЛС менеджеру нужно заполнить <b>telegramChatId</b> в профиле сотрудника</p>
         </div>
       ),
     },
