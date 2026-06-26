@@ -422,39 +422,24 @@ export default function ContractSign() {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 flex items-start gap-2">
                   <span className="text-amber-500 text-sm mt-0.5">⚠️</span>
                   <div>
-                    <p className="text-xs text-amber-800 font-medium">Вы в Telegram-браузере</p>
-                    <p className="text-xs text-amber-700">Подпись может работать некорректно. Если не получается — нажмите «Подписать без рисования» или откройте ссылку в Chrome/Safari.</p>
+                    <p className="text-xs text-amber-800 font-medium">{isRu ? 'Вы в Telegram-браузере' : 'Siz Telegram brauzerdasiz'}</p>
+                    <p className="text-xs text-amber-700">{isRu ? 'Если подпись не работает — откройте ссылку в Chrome или Safari.' : "Agar imzo ishlamasa — havolani Chrome yoki Safari'da oching."}</p>
+                    <button onClick={() => {
+                      const url = window.location.href
+                      navigator.clipboard?.writeText(url)
+                      window.open(url, '_system') || window.open(url, '_blank')
+                    }} className="mt-2 px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700">
+                      {isRu ? 'Открыть в браузере' : "Brauzerda ochish"}
+                    </button>
                   </div>
                 </div>
               )}
               <p className="text-sm font-semibold text-blue-800 mb-3">{isRu ? 'Подпись' : "Imzo qo'yish"}</p>
               {!signing ? (
-                <div className="space-y-2">
-                  <button onClick={initCanvas}
-                    className="w-full py-4 border-2 border-dashed border-blue-400 rounded-xl text-blue-600 font-medium hover:bg-blue-50 transition-colors text-sm">
-                    {isRu ? '✍ Нажмите для подписи' : "✍ Imzo qo'yish uchun bosing"}
-                  </button>
-                  <button onClick={async () => {
-                    setSaving(true)
-                    try {
-                      await updateDoc(doc(db, 'payments', paymentId), {
-                        contractSigned: true,
-                        signedAt: new Date().toISOString(),
-                        signatureData: null,
-                        signatureType: 'button',
-                      })
-                      setSigned(true)
-                      toast.success(isRu ? 'Договор подписан!' : "Shartnoma imzolandi!")
-                    } catch (err) {
-                      console.error(err)
-                      toast.error(isRu ? 'Ошибка подписания' : 'Imzolashda xatolik')
-                    }
-                    setSaving(false)
-                  }} disabled={saving}
-                    className="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                    {saving ? '...' : (isRu ? '✓ Подписать без рисования (подтвердить согласие)' : "✓ Chizmasdan imzolash (rozilikni tasdiqlash)")}
-                  </button>
-                </div>
+                <button onClick={initCanvas}
+                  className="w-full py-4 border-2 border-dashed border-blue-400 rounded-xl text-blue-600 font-medium hover:bg-blue-50 transition-colors text-sm">
+                  {isRu ? '✍ Нажмите для подписи от руки' : "✍ Qo'lda imzo qo'yish uchun bosing"}
+                </button>
               ) : (
                 <div className="space-y-3">
                   <canvas ref={canvasRef} width={500} height={150}
