@@ -271,12 +271,13 @@ export function AuthProvider({ children }) {
     setTgTenantId(tid)
   }, [user])
 
-  // Real-time sync for permissions from Firestore
+  // Real-time sync for permissions from Firestore (tenant-scoped)
+  const userTenantId = user?.tenantId || DEFAULT_TENANT_ID
   useEffect(() => {
-    const unsubscribe = onSnapshot(permissionsDocRef, (snapshot) => {
+    const permDocRef = doc(db, 'settings', `permissions_${userTenantId}`)
+    const unsubscribe = onSnapshot(permDocRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data()
-        // Deep merge: Firestore overrides per-section, defaults fill new sections
         const merged = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
         Object.keys(data).forEach(role => {
           if (role === '_id') return
@@ -289,13 +290,31 @@ export function AuthProvider({ children }) {
         PERMISSIONS = merged
         setCustomPermissions(merged)
       } else {
-        // No custom permissions saved yet, use defaults
-        PERMISSIONS = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
-        setCustomPermissions(null)
+        // Fallback: try legacy global doc for backward compatibility
+        const legacyUnsub = onSnapshot(permissionsDocRef, (legacySnap) => {
+          if (legacySnap.exists()) {
+            const data = legacySnap.data()
+            const merged = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
+            Object.keys(data).forEach(role => {
+              if (role === '_id') return
+              if (merged[role]) {
+                Object.keys(data[role]).forEach(section => {
+                  merged[role][section] = data[role][section]
+                })
+              }
+            })
+            PERMISSIONS = merged
+            setCustomPermissions(merged)
+          } else {
+            PERMISSIONS = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS))
+            setCustomPermissions(null)
+          }
+        })
+        return () => legacyUnsub()
       }
     })
     return () => unsubscribe()
-  }, [])
+  }, [userTenantId])
 
   // Real-time sync with Firestore + seed ONCE (guarded by bootstrap flag)
   // Loads ALL employees for login lookup, then filters by tenantId for the UI
@@ -511,11 +530,13 @@ export function AuthProvider({ children }) {
   }
 
   const updatePermissions = async (newPermissions) => {
-    await setDoc(permissionsDocRef, newPermissions)
+    const permDocRef = doc(db, 'settings', `permissions_${userTenantId}`)
+    await setDoc(permDocRef, newPermissions)
   }
 
   const resetPermissions = async () => {
-    await deleteDoc(permissionsDocRef)
+    const permDocRef = doc(db, 'settings', `permissions_${userTenantId}`)
+    await deleteDoc(permDocRef)
   }
 
   return (

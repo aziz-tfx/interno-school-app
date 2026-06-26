@@ -10,7 +10,7 @@ import { pushSaleToAmo } from '../utils/amocrm'
 import { pushSaleToTelegram } from '../utils/telegram'
 import { branchToSlug } from '../utils/branchSlug'
 import { db, storage } from '../firebase'
-import { doc, setDoc, getDoc } from 'firebase/firestore'
+import { doc, setDoc, getDoc, increment } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Logo from './Logo'
 import Modal from './Modal'
@@ -572,21 +572,14 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           const tenantId = user?.tenantId || 'default'
           const docId = `${monthKey}_${tenantId}_${managerName}_${day}`
           const dailyRef = doc(db, 'reportDaily', docId)
-          const existing = await getDoc(dailyRef)
-          const existingData = existing.exists() ? existing.data() : {}
-
           await setDoc(dailyRef, {
             monthKey,
             tenantId,
             manager: managerName,
             day,
-            leads: existingData.leads || 0,
-            conversations: existingData.conversations || 0,
-            signups: existingData.signups || 0,
-            visited: existingData.visited || 0,
-            sales: (existingData.sales || 0) + 1,
-            revenue: (existingData.revenue || 0) + Number(form.amount),
-          })
+            sales: increment(1),
+            revenue: increment(Number(form.amount) || 0),
+          }, { merge: true })
         }
       } catch (err) {
         console.error('Failed to update report:', err)

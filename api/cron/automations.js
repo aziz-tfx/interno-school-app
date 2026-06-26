@@ -90,25 +90,16 @@ export default async function handler(req, res) {
           }
         }
 
-        // Load students for this tenant (fallback: all students for default tenant)
-        let studentsSnap = await db.collection('students').where('tenantId', '==', tenant.id).get()
-        if (studentsSnap.empty && isDefault) {
-          studentsSnap = await db.collection('students').get()
-        }
+        // Load students for this tenant
+        const studentsSnap = await db.collection('students').where('tenantId', '==', tenant.id).get()
         const students = studentsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
 
         // Load payments for this tenant
-        let paymentsSnap = await db.collection('payments').where('tenantId', '==', tenant.id).get()
-        if (paymentsSnap.empty && isDefault) {
-          paymentsSnap = await db.collection('payments').get()
-        }
+        const paymentsSnap = await db.collection('payments').where('tenantId', '==', tenant.id).get()
         const payments = paymentsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
 
         // Load employees for manager notifications
-        let employeesSnap = await db.collection('employees').where('tenantId', '==', tenant.id).get()
-        if (employeesSnap.empty && isDefault) {
-          employeesSnap = await db.collection('employees').get()
-        }
+        const employeesSnap = await db.collection('employees').where('tenantId', '==', tenant.id).get()
         const employees = employeesSnap.docs.map(d => ({ id: d.id, ...d.data() }))
 
         // ─── Rule 1: Payment reminders ─────────────────────────
