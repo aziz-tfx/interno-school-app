@@ -127,13 +127,43 @@ export default function ContractSign() {
     }
   }
 
+  // Loading timeout — don't leave students stuck forever
+  const [loadingTooLong, setLoadingTooLong] = useState(false)
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => setLoadingTooLong(true), 8000)
+    return () => clearTimeout(t)
+  }, [loading])
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto" />
+          {loadingTooLong && (
+            <div className="mt-6 max-w-sm">
+              <p className="text-sm text-slate-500 mb-3">Загрузка занимает дольше обычного...</p>
+              <button onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 mr-2">
+                Перезагрузить
+              </button>
+              <button onClick={() => {
+                const url = window.location.href
+                navigator.clipboard?.writeText(url)
+                window.open(url, '_blank')
+              }}
+                className="px-4 py-2 bg-slate-200 text-slate-700 text-sm rounded-xl hover:bg-slate-300">
+                Открыть в браузере
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
+
+  // Detect Telegram in-app browser
+  const isTelegramBrowser = /Telegram/i.test(navigator.userAgent || '')
 
   if (error) {
     return (
@@ -141,7 +171,20 @@ export default function ContractSign() {
         <div className="bg-white rounded-2xl shadow-xl p-8 text-center max-w-md">
           <div className="text-4xl mb-4">❌</div>
           <h2 className="text-xl font-bold text-slate-900 mb-2">Ошибка</h2>
-          <p className="text-slate-500">{error}</p>
+          <p className="text-slate-500 mb-4">{error}</p>
+          {isTelegramBrowser && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+              <p className="text-xs text-blue-700">Откройте эту ссылку в обычном браузере (Chrome, Safari) для корректной работы.</p>
+            </div>
+          )}
+          <button onClick={() => {
+            const url = window.location.href
+            if (navigator.clipboard) { navigator.clipboard.writeText(url) }
+            window.open(url, '_system') || window.open(url, '_blank')
+          }}
+            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700">
+            Открыть в браузере
+          </button>
         </div>
       </div>
     )
@@ -375,12 +418,43 @@ export default function ContractSign() {
           {/* Sign Action */}
           {!signed && (
             <div className="mt-6 pt-4 border-t border-blue-200">
+              {isTelegramBrowser && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 flex items-start gap-2">
+                  <span className="text-amber-500 text-sm mt-0.5">⚠️</span>
+                  <div>
+                    <p className="text-xs text-amber-800 font-medium">Вы в Telegram-браузере</p>
+                    <p className="text-xs text-amber-700">Подпись может работать некорректно. Если не получается — нажмите «Подписать без рисования» или откройте ссылку в Chrome/Safari.</p>
+                  </div>
+                </div>
+              )}
               <p className="text-sm font-semibold text-blue-800 mb-3">{isRu ? 'Подпись' : "Imzo qo'yish"}</p>
               {!signing ? (
-                <button onClick={initCanvas}
-                  className="w-full py-4 border-2 border-dashed border-blue-400 rounded-xl text-blue-600 font-medium hover:bg-blue-50 transition-colors text-sm">
-                  {isRu ? '✍ Нажмите для подписи' : "✍ Imzo qo'yish uchun bosing"}
-                </button>
+                <div className="space-y-2">
+                  <button onClick={initCanvas}
+                    className="w-full py-4 border-2 border-dashed border-blue-400 rounded-xl text-blue-600 font-medium hover:bg-blue-50 transition-colors text-sm">
+                    {isRu ? '✍ Нажмите для подписи' : "✍ Imzo qo'yish uchun bosing"}
+                  </button>
+                  <button onClick={async () => {
+                    setSaving(true)
+                    try {
+                      await updateDoc(doc(db, 'payments', paymentId), {
+                        contractSigned: true,
+                        signedAt: new Date().toISOString(),
+                        signatureData: null,
+                        signatureType: 'button',
+                      })
+                      setSigned(true)
+                      toast.success(isRu ? 'Договор подписан!' : "Shartnoma imzolandi!")
+                    } catch (err) {
+                      console.error(err)
+                      toast.error(isRu ? 'Ошибка подписания' : 'Imzolashda xatolik')
+                    }
+                    setSaving(false)
+                  }} disabled={saving}
+                    className="w-full py-3 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                    {saving ? '...' : (isRu ? '✓ Подписать без рисования (подтвердить согласие)' : "✓ Chizmasdan imzolash (rozilikni tasdiqlash)")}
+                  </button>
+                </div>
               ) : (
                 <div className="space-y-3">
                   <canvas ref={canvasRef} width={500} height={150}
