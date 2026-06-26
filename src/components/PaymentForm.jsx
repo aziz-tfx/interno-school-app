@@ -607,7 +607,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     // will reject/hang — we race it against a 5-second timeout so the
     // Telegram push still fires reliably.
     let contractUploadPromise = Promise.resolve(null)
-    if (form.type === 'income') {
+    if (form.type === 'income' && !isDoplata) {
       contractUploadPromise = (async () => {
         try {
           const contractData = {
