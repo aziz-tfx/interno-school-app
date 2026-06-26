@@ -761,7 +761,12 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
     } catch (err) {
       console.error('PaymentForm submit failed:', err)
-      toast.error('Не удалось сохранить продажу. Попробуйте ещё раз.')
+      const msg = err?.code === 'permission-denied'
+        ? 'Нет прав для сохранения. Проверьте App Check / Firestore правила.'
+        : err?.message?.includes('bytes')
+          ? 'Файл(ы) слишком большие. Попробуйте прикрепить фото меньшего размера.'
+          : `Не удалось сохранить продажу: ${err?.message || 'неизвестная ошибка'}`
+      toast.error(msg)
     } finally {
       submittingRef.current = false
       setSubmitting(false)
