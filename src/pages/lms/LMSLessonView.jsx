@@ -182,6 +182,10 @@ export default function LMSLessonView() {
   // Find student
   const myStudent = useMemo(() => {
     if (!isStudent) return null
+    if (user?.studentId) {
+      const byId = students.find(s => String(s.id) === String(user.studentId))
+      if (byId) return byId
+    }
     return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user, isStudent])
 
@@ -408,6 +412,23 @@ export default function LMSLessonView() {
         </div>
       )
     }
+  }
+
+  // ─── LMS access expired ───
+  if (isStudent && myStudent?.lmsExpiresAt && new Date(myStudent.lmsExpiresAt) < new Date()) {
+    return (
+      <div className="max-w-md mx-auto text-center py-20">
+        <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Clock size={32} className="text-orange-500" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800 mb-2">Срок доступа истёк</h2>
+        <p className="text-slate-500 text-sm mb-6">Ваш 6-месячный доступ к записям уроков истёк. Для продления обратитесь к администратору.</p>
+        <button onClick={() => navigate(-1)}
+          className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
+          Назад
+        </button>
+      </div>
+    )
   }
 
   // ─── Access denied for locked lessons ───
