@@ -392,7 +392,13 @@ export function AuthProvider({ children }) {
     }
     const matchesPass = (storedPass) => (storedPass ?? '').toString().trim() === rawPass
 
-    const found = employees.find(u => matchesLogin(u.login) && matchesPass(u.password))
+    // Find all matching accounts (may span tenants if logins collide)
+    const matches = employees.filter(u => matchesLogin(u.login) && matchesPass(u.password))
+    // If multiple matches, prefer the previously-used tenant (from localStorage session)
+    const savedSession = (() => { try { return JSON.parse(localStorage.getItem('interno_user')) } catch { return null } })()
+    const found = matches.length > 1
+      ? matches.find(u => u.tenantId === savedSession?.tenantId) || matches[0]
+      : matches[0] || null
     if (found) {
       if (found.status === 'pending') {
         setError('Ваша заявка на регистрацию ещё не одобрена. Обратитесь к администратору.')

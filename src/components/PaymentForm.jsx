@@ -337,20 +337,18 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         toast.error(t('paymentForm.file_too_large').replace('{name}', file.name))
         return
       }
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        setFiles(prev => {
-          if (prev.length >= MAX_FILES) return prev
-          return [...prev, {
-            id: Date.now() + Math.random(),
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            data: ev.target.result,
-          }]
-        })
-      }
-      reader.readAsDataURL(file)
+      // Store the raw File object — will be uploaded to Storage on submit
+      setFiles(prev => {
+        if (prev.length >= MAX_FILES) return prev
+        return [...prev, {
+          id: Date.now() + Math.random(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          rawFile: file,
+          preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+        }]
+      })
     })
     e.target.value = ''
   }
@@ -543,7 +541,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       payerCompanyBank: form.payerCompanyBank || '',
       payerCompanyPhone: form.payerCompanyPhone || '',
       templateId: selectedTemplateId || '',
-      files: files.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size, data: f.data })),
+      files: [], // placeholder — will be populated with Storage URLs after upload
       trancheNumber: studentPayments.length + 1,
       managerId: user?.managerId || null,
       createdBy: user?.id || null,
@@ -598,7 +596,26 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     // LMS credentials returned directly from addPayment if account was created
     const lmsCredentials = saved?.lmsCredentials || null
 
-    setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials })
+    // ─── Upload attached files to Firebase Storage (not base64 in Firestore) ───
+    let uploadedFiles = []
+    if (files.length > 0) {
+      try {
+        const tenantPath = user?.tenantId || 'default'
+        uploadedFiles = await Promise.all(files.map(async (f) => {
+          if (!f.rawFile) return { id: f.id, name: f.name, type: f.type, size: f.size }
+          const path = `${tenantPath}/payments/${saved.id}/${Date.now()}_${f.name}`
+          const fileRef = storageRef(storage, path)
+          await uploadBytes(fileRef, f.rawFile, { contentType: f.type })
+          const url = await getDownloadURL(fileRef)
+          return { id: f.id, name: f.name, type: f.type, size: f.size, url }
+        }))
+        updatePayment(saved.id, { files: uploadedFiles }).catch(() => {})
+      } catch (err) {
+        console.warn('File upload failed, payment saved without attachments:', err)
+      }
+    }
+
+    setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials, files: uploadedFiles })
     setShowReceipt(true)
 
     // ─── Auto-generate contract & upload to Firebase Storage ───
