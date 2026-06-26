@@ -413,6 +413,28 @@ export function DataProvider({ children, currentUser }) {
     const before = paymentsList.find(p => p.id === id)
     await deleteDoc(doc(db, 'payments', id))
     logAudit({ action: 'delete', collection: 'payments', documentId: id, user: auditUser(), before, description: `Удалён платёж на ${before?.amount || 0} сум` })
+
+    // Recalculate student balance from remaining payments (Bug #3 + #8 fix)
+    if (before?.type === 'income' && before?.studentId) {
+      try {
+        const remaining = paymentsList.filter(p =>
+          p.id !== id && p.type === 'income' && String(p.studentId) === String(before.studentId)
+        )
+        const totalPaid = remaining.reduce((s, p) => s + (p.amount || 0), 0)
+        const student = students.find(s => String(s.id) === String(before.studentId))
+        if (student) {
+          const coursePrice = student.totalCoursePrice || 0
+          const newBalance = totalPaid
+          const newStatus = coursePrice > 0 && totalPaid < coursePrice ? 'debtor' : 'active'
+          await updateDoc(doc(db, 'students', before.studentId), {
+            balance: newBalance,
+            status: student.status === 'frozen' ? 'frozen' : newStatus,
+          })
+        }
+      } catch (err) {
+        console.warn('Failed to recalculate student balance after payment delete:', err)
+      }
+    }
   }
 
   // --- Attendance ---
