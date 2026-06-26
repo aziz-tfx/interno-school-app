@@ -568,7 +568,7 @@ export default function LMSDashboard() {
 
   const myStudent = useMemo(() => {
     if (!isStudent) return null
-    return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
+    return (user?.studentId ? students.find(s => String(s.id) === String(user.studentId)) : null) || students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user, isStudent])
 
   const lmsExpired = isStudent && myStudent?.lmsExpiresAt && new Date(myStudent.lmsExpiresAt) < new Date()
@@ -663,7 +663,7 @@ export default function LMSDashboard() {
 
   const mySubmissions = useMemo(() => {
     if (!isStudent) return []
-    const ms = students.find(s => s.name === user?.name || s.phone === user?.phone)
+    const ms = (user?.studentId ? students.find(s => String(s.id) === String(user.studentId)) : null) || students.find(s => s.name === user?.name || s.phone === user?.phone)
     if (!ms) return []
     return lmsSubmissions.filter(s => s.studentId === ms.id)
   }, [lmsSubmissions, students, user, isStudent])

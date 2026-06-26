@@ -235,7 +235,7 @@ function SubmissionView({ assignment, groupId }) {
   const groupStudents = students.filter(s => s.groupId === groupId || s.group === groupId)
   const submissions = lmsSubmissions.filter(s => s.assignmentId === assignment.id)
 
-  const myStudent = isStudent ? students.find(s => s.name === user?.name || s.phone === user?.phone) : null
+  const myStudent = isStudent ? (user?.studentId ? students.find(s => String(s.id) === String(user.studentId)) : null) || students.find(s => s.name === user?.name || s.phone === user?.phone) : null
   const mySubmission = myStudent ? submissions.find(s => s.studentId === myStudent.id) : null
 
   const [answer, setAnswer] = useState(mySubmission?.answer || '')
@@ -791,7 +791,7 @@ export default function LMSGroupView() {
   const course = courses.find(c => c.name === group?.course)
 
   // Check student LMS access (including 6-month expiry)
-  const myStudent = isStudent ? students.find(s => s.name === user?.name || s.phone === user?.phone) : null
+  const myStudent = isStudent ? (user?.studentId ? students.find(s => String(s.id) === String(user.studentId)) : null) || students.find(s => s.name === user?.name || s.phone === user?.phone) : null
   const lmsExpired = isStudent && myStudent?.lmsExpiresAt && new Date(myStudent.lmsExpiresAt) < new Date()
   const studentBlocked = isStudent && (!myStudent || myStudent.lmsAccess !== true || myStudent.status !== 'active' || lmsExpired)
 

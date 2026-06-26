@@ -43,6 +43,10 @@ export default function StudentCabinet() {
 
   // ─── Student identity ──────────────────────────────────────────
   const myStudent = useMemo(() => {
+    if (user?.studentId) {
+      const byId = students.find(s => String(s.id) === String(user.studentId))
+      if (byId) return byId
+    }
     return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user])
 
