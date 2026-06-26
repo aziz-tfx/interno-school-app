@@ -195,8 +195,11 @@ export function isLessonAccessible({ lesson, student, group, modules, debt }) {
  * @param {boolean} [hasPaid=true] - Whether student has made any payment
  */
 export function isModuleUnlocked(moduleOrder, startDate, isOnline, debt = 0, hasPaid = true, coursePrice = 0) {
+  // No course price set → all modules open (same as isLessonAccessible)
+  if (coursePrice <= 0) return true
   const paid = coursePrice - debt
-  const paidPercent = coursePrice > 0 ? (paid / coursePrice) * 100 : 0
+  const paidPercent = (paid / coursePrice) * 100
+  // 50%+ paid → all modules open
   if (paidPercent >= 50) return true
 
   if (!isOnline) {
