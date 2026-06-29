@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -11,6 +11,17 @@ export default function Login() {
   const { login, error, setError } = useAuth()
   const [form, setForm] = useState({ login: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
+
+  // Prefill credentials handed off from the course landing registration
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('interno_prefill_login') || 'null')
+      if (saved?.login) {
+        setForm({ login: saved.login, password: saved.password || '' })
+        localStorage.removeItem('interno_prefill_login')
+      }
+    } catch {}
+  }, [])
 
   const handleSubmit = (e) => {
     e.preventDefault()

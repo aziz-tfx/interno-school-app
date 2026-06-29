@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { db } from '../firebase'
@@ -17,6 +17,9 @@ export default function CourseLanding() {
   const { courseId } = useParams()
   const navigate = useNavigate()
   const { login: authLogin } = useAuth()
+  // Keep a ref to the latest login fn — avoids stale closure in retry timers
+  const loginRef = useRef(authLogin)
+  loginRef.current = authLogin
 
   const [course, setCourse] = useState(null)
   const [modules, setModules] = useState([])
@@ -84,9 +87,18 @@ export default function CourseLanding() {
   }, [firstModuleId, lessons])
 
   const tryAutoLogin = (login, password, attempts = 0) => {
-    const ok = authLogin(login, password)
+    // Use the latest login fn (ref) so it sees freshly-synced employees
+    const ok = loginRef.current(login, password)
     if (ok) { navigate('/'); return }
-    if (attempts < 5) setTimeout(() => tryAutoLogin(login, password, attempts + 1), 1000)
+    if (attempts < 8) {
+      setTimeout(() => tryAutoLogin(login, password, attempts + 1), 1200)
+    } else {
+      // Fallback: send the student to the login page with prefilled creds
+      try {
+        localStorage.setItem('interno_prefill_login', JSON.stringify({ login, password }))
+      } catch {}
+      toast.info("Shaxsiy kabinetga kirish uchun 'Kirish' tugmasini bosing")
+    }
   }
 
   const handleRegister = async (e) => {
@@ -191,6 +203,14 @@ export default function CourseLanding() {
     setSubmitting(false)
   }
 
+  const goToCabinet = () => {
+    if (credentials) {
+      if (loginRef.current(credentials.login, credentials.password)) { navigate('/'); return }
+      try { localStorage.setItem('interno_prefill_login', JSON.stringify(credentials)) } catch {}
+    }
+    navigate('/login')
+  }
+
   const handleLessonClick = (lesson) => {
     const isFree = freeLessonIds.includes(lesson.id)
     if (!isFree || !registered) { setShowRegForm(true); return }
@@ -229,7 +249,7 @@ export default function CourseLanding() {
       <header className="sticky top-0 z-40 bg-black/30 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <Logo size="sm" variant="light" />
-          <button onClick={() => registered ? navigate('/') : setShowRegForm(true)}
+          <button onClick={() => registered ? goToCabinet() : setShowRegForm(true)}
             className="px-5 py-2 bg-gradient-to-r from-violet-600 to-blue-600 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity">
             {registered ? "✓ Shaxsiy kabinet" : "Bepul boshlash"}
           </button>
@@ -254,7 +274,7 @@ export default function CourseLanding() {
             <span className="flex items-center gap-1.5"><Clock size={16} /> {course.duration || '3 oy'}</span>
             <span className="flex items-center gap-1.5"><Award size={16} /> Sertifikat</span>
           </div>
-          <button onClick={() => registered ? navigate('/') : setShowRegForm(true)}
+          <button onClick={() => registered ? goToCabinet() : setShowRegForm(true)}
             className="px-8 py-4 bg-gradient-to-r from-violet-600 to-blue-600 text-white text-lg font-bold rounded-2xl hover:scale-105 transition-transform shadow-2xl shadow-violet-500/30">
             {registered ? "✓ Shaxsiy kabinetga o'tish" : "🎯 Bepul boshlash — 1-modul ochiq"}
           </button>
@@ -432,7 +452,7 @@ export default function CourseLanding() {
           <p className="text-white/50 mb-6">
             {registered ? "Yuqoriga o'ting va ochiq darslarni bosing yoki shaxsiy kabinetga kiring" : "Ro'yxatdan o'ting va kursning birinchi moduliga bepul ruxsat oling"}
           </p>
-          <button onClick={() => registered ? navigate('/') : setShowRegForm(true)}
+          <button onClick={() => registered ? goToCabinet() : setShowRegForm(true)}
             className="px-8 py-4 bg-gradient-to-r from-violet-600 to-blue-600 text-white text-lg font-bold rounded-2xl hover:scale-105 transition-transform shadow-2xl shadow-violet-500/30">
             {registered ? "Shaxsiy kabinetga o'tish" : "Bepul ruxsat olish"}
           </button>
