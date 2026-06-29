@@ -100,6 +100,19 @@ export function isLessonAccessible({ lesson, student, group, modules, debt }) {
     return { accessible: false, reason: 'no_data' }
   }
 
+  // ─── Free/landing students: only the FIRST module is accessible ───
+  if (student.freeAccess) {
+    const sorted = [...(modules || [])].sort((a, b) => (a.order || 1) - (b.order || 1))
+    const firstModuleId = sorted[0]?.id
+    if (lesson.moduleId && firstModuleId) {
+      if (lesson.moduleId === firstModuleId) return { accessible: true, reason: null }
+      return { accessible: false, reason: 'free_locked', message: "Bu dars to'liq kurs uchun. To'lov qiling yoki menejer bilan bog'laning." }
+    }
+    // No modules — allow first 3 lessons by order
+    if ((lesson.order || 1) <= 3) return { accessible: true, reason: null }
+    return { accessible: false, reason: 'free_locked', message: "Bu dars to'liq kurs uchun. To'lov qiling yoki menejer bilan bog'laning." }
+  }
+
   const isOnline = student.learningFormat === 'Онлайн'
   const coursePrice = student.totalCoursePrice || 0
   const paid = coursePrice - debt
