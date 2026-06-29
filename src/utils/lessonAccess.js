@@ -2,6 +2,78 @@
 // Offline students: all lessons available only when fully paid (debt = 0)
 // Online students: modules unlock weekly every Monday 00:01 from group start date
 
+// Synthetic group id prefix for landing students with freeAccess=true who
+// have no real group attached. The cabinet / LMS rely on a group object to
+// list a student's course; this lets us "show" the course without polluting
+// Firestore with a placeholder group document.
+export const FREE_GROUP_PREFIX = 'free-'
+
+/**
+ * Build a synthetic group for a landing student so the cabinet/LMS can show
+ * their course. Returns null if the student doesn't qualify (no freeAccess,
+ * or no course name, or the matching course can't be found).
+ */
+export function buildFreeAccessGroup(student, courses) {
+  if (!student?.freeAccess || !student.course) return null
+  const course = (courses || []).find(c => c.name === student.course)
+  if (!course) return null
+  return {
+    id: `${FREE_GROUP_PREFIX}${course.id}`,
+    name: 'Bepul (1-modul)',
+    course: course.name,
+    courseId: course.id,
+    branch: student.branch || 'online',
+    status: 'active',
+    teacherId: null,
+    startDate: student.startDate || new Date().toISOString().split('T')[0],
+    schedule: '',
+    synthetic: true,
+  }
+}
+
+/**
+ * Resolve a student's groups, falling back to a synthetic free-access group
+ * when no real group is attached. Returns [] when nothing can be resolved.
+ */
+export function resolveStudentGroups(student, groups, courses) {
+  if (!student) return []
+  const real = (groups || []).filter(
+    g => (student.groupId && g.id === student.groupId) ||
+         (student.group && g.name === student.group)
+  )
+  if (real.length > 0) return real
+  const synth = buildFreeAccessGroup(student, courses)
+  return synth ? [synth] : []
+}
+
+/**
+ * Resolve a group by id, materializing a synthetic free-access group when
+ * the id has the free- prefix. Returns null when no match.
+ */
+export function resolveGroupById(groupId, groups, courses, student) {
+  if (!groupId) return null
+  const real = (groups || []).find(g => g.id === groupId)
+  if (real) return real
+  if (groupId.startsWith(FREE_GROUP_PREFIX)) {
+    const courseId = groupId.slice(FREE_GROUP_PREFIX.length)
+    const course = (courses || []).find(c => c.id === courseId)
+    if (!course) return null
+    return {
+      id: groupId,
+      name: 'Bepul (1-modul)',
+      course: course.name,
+      courseId: course.id,
+      branch: student?.branch || 'online',
+      status: 'active',
+      teacherId: null,
+      startDate: student?.startDate || new Date().toISOString().split('T')[0],
+      schedule: '',
+      synthetic: true,
+    }
+  }
+  return null
+}
+
 /**
  * Contract-signing gate: a student with payments must have at least one
  * signed contract to access the LMS. Students with no payments at all are

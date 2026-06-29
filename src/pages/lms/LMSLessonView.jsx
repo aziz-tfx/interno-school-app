@@ -8,7 +8,7 @@ import {
   BookOpen, Play, FileText, Link2, Download, Video,
   Clock, Award, Send, Pencil, AlertCircle, Shield, Lock, Eye
 } from 'lucide-react'
-import { isLessonAccessible } from '../../utils/lessonAccess'
+import { isLessonAccessible, buildFreeAccessGroup } from '../../utils/lessonAccess'
 import { updateStreak, XP_RULES } from '../../data/gamification'
 import XPGainAnimation from '../../components/XPGainAnimation'
 import AIChat from '../../components/AIChat'
@@ -189,12 +189,15 @@ export default function LMSLessonView() {
     return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user, isStudent])
 
-  // Student's group (for access check)
+  // Student's group (for access check) — fall back to a synthetic free-access
+  // group when a landing student has no real group attached.
   const { payments, lmsModules } = useData()
   const myGroup = useMemo(() => {
     if (!myStudent) return null
-    return groups.find(g => g.name === myStudent.group || g.id === myStudent.groupId) || null
-  }, [myStudent, groups])
+    const real = groups.find(g => g.name === myStudent.group || g.id === myStudent.groupId)
+    if (real) return real
+    return buildFreeAccessGroup(myStudent, courses)
+  }, [myStudent, groups, courses])
 
   const studentDebt = useMemo(() => {
     if (!myStudent) return 0

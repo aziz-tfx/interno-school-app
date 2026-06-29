@@ -10,6 +10,7 @@ import {
   Save, Search, Eye, GraduationCap, DollarSign, CheckCircle, Layers,
   Play, BarChart3, Video, Link2, File, ChevronDown, ChevronUp
 } from 'lucide-react'
+import { resolveStudentGroups } from '../../utils/lessonAccess'
 
 // ─── Lesson Form Modal ─────────────────────────────────────────────
 function LessonFormModal({ courseId, lesson, modules, onSave, onClose }) {
@@ -609,10 +610,10 @@ export default function LMSDashboard() {
     }
     if (isStudent) {
       if (!myStudent || !hasLmsAccess) return []
-      return groups.filter(g => g.name === myStudent.group || g.id === myStudent.groupId)
+      return resolveStudentGroups(myStudent, groups, courses)
     }
     return groups.filter(g => g.status === 'active')
-  }, [groups, students, user, isTeacher, isStudent, myStudent, hasLmsAccess])
+  }, [groups, courses, user, isTeacher, isStudent, myStudent, hasLmsAccess])
 
   const myGroupIds = myGroups.map(g => g.id)
 
