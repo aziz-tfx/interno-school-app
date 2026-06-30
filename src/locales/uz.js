@@ -217,6 +217,8 @@ export default {
   "finance.export_csv_title_self": "O'z sotuvlarim bo'yicha hisobotni yuklab olish (CSV)",
   "finance.export_csv_title_all": "Sotuvlar bo'yicha hisobotni yuklab olish (CSV)",
   "finance.export_totals_label": "JAMI",
+  "finance.export_toast_sales": "sotuv",
+  "finance.fmt_sum": "so'm",
   "finance.no_sales_period": "Tanlangan davrda sotuvlar yo'q",
   "finance.tranche_number": "Transh №",
   "finance.debt_label": "Qarz:",

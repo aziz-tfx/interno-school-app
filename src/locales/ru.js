@@ -217,6 +217,8 @@ export default {
   "finance.export_csv_title_self": "Скачать отчёт по моим продажам (CSV)",
   "finance.export_csv_title_all": "Скачать отчёт по продажам (CSV)",
   "finance.export_totals_label": "ИТОГО",
+  "finance.export_toast_sales": "продаж",
+  "finance.fmt_sum": "сум",
   "finance.no_sales_period": "Нет продаж за выбранный период",
   "finance.tranche_number": "Транш №",
   "finance.debt_label": "Долг:",

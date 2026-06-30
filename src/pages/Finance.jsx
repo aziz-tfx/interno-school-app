@@ -696,10 +696,13 @@ export default function Finance() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    const ownerTag = isSales ? `_${user?.name || 'manager'}`.replace(/\s+/g, '-') : ''
-    link.download = `sales${ownerTag}_${monthKey}.csv`
+    const ownerTag = isSales ? `_${(user?.name || 'manager').replace(/\s+/g, '-')}` : ''
+    const monthLabel = MONTH_NAMES[selectedMonth - 1] || monthKey
+    link.download = `sales${ownerTag}_${monthLabel}_${selectedYear}.csv`
     link.click()
     URL.revokeObjectURL(link.href)
+    const fmtSum = Number(totalAmount).toLocaleString('ru-RU').replace(/,/g, ' ')
+    toast.success(`${filteredTransactions.length} ${t('finance.export_toast_sales') || 'продаж'} • ${fmtSum} ${t('finance.fmt_sum') || 'сум'}`)
   }
 
   // Status helpers
