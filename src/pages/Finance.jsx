@@ -5,7 +5,9 @@ import {
   Users, Target, BarChart3, ArrowUpRight, ArrowDownRight, Eye,
   ChevronLeft, ChevronRight, Filter, ShoppingCart, UserCheck, Phone,
   Percent, CalendarDays, Pencil, Save, X, Trash2, CheckCircle, Download,
+  FileSpreadsheet, FileText,
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -69,6 +71,13 @@ export default function Finance() {
   const [editForm, setEditForm] = useState({})
   const [editSaving, setEditSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // ─── Sales export modal state ───────────────────────────────────────────
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportFrom, setExportFrom] = useState('')
+  const [exportTo, setExportTo] = useState('')
+  const [exportFormat, setExportFormat] = useState('xlsx') // 'csv' | 'xlsx'
+  const [exportPreset, setExportPreset] = useState('this_month')
 
   // ─── Manager KPI editor state ───────────────────────────────────────────
   const [editingKpi, setEditingKpi] = useState(null) // mgr object
@@ -649,27 +658,84 @@ export default function Finance() {
     [filteredTransactions, isSales]
   )
 
-  // ─── Export sales for the current period to CSV ────────────────────────
-  // Sales reps export ONLY their own sales (matches the visible list).
-  // Other roles export the full filtered list they're already seeing.
-  const exportSalesCsv = () => {
-    if (filteredTransactions.length === 0) {
-      toast.error(t('finance.no_sales_period') || 'Нет продаж за период')
-      return
+  // ─── Date math helpers for export presets ──────────────────────────────
+  const toISO = (d) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  const computePreset = (preset) => {
+    const now = new Date()
+    const y = now.getFullYear(), m = now.getMonth()
+    switch (preset) {
+      case 'this_month':
+        return { from: toISO(new Date(y, m, 1)), to: toISO(new Date(y, m + 1, 0)) }
+      case 'last_month':
+        return { from: toISO(new Date(y, m - 1, 1)), to: toISO(new Date(y, m, 0)) }
+      case 'this_week': {
+        const dow = (now.getDay() + 6) % 7 // Mon=0
+        const monday = new Date(y, m, now.getDate() - dow)
+        return { from: toISO(monday), to: toISO(now) }
+      }
+      case 'last_week': {
+        const dow = (now.getDay() + 6) % 7
+        const lastSun = new Date(y, m, now.getDate() - dow - 1)
+        const lastMon = new Date(y, m, now.getDate() - dow - 7)
+        return { from: toISO(lastMon), to: toISO(lastSun) }
+      }
+      case 'this_year':
+        return { from: toISO(new Date(y, 0, 1)), to: toISO(new Date(y, 11, 31)) }
+      case 'all':
+        return { from: '', to: '' }
+      default:
+        return { from: '', to: '' }
     }
+  }
+
+  const openExportModal = () => {
+    const range = computePreset('this_month')
+    setExportFrom(range.from)
+    setExportTo(range.to)
+    setExportPreset('this_month')
+    setExportOpen(true)
+  }
+
+  const applyExportPreset = (preset) => {
+    setExportPreset(preset)
+    const range = computePreset(preset)
+    setExportFrom(range.from)
+    setExportTo(range.to)
+  }
+
+  // Resolve the list of sales to export based on the modal's period inputs.
+  // Sales reps still only get their own sales (matches list filter).
+  const buildExportableSales = () => {
+    let list = payments.filter(p => p.type === 'income')
+    if (exportFrom) list = list.filter(p => (p.date || '') >= exportFrom)
+    if (exportTo) list = list.filter(p => (p.date || '') <= exportTo)
+    if (branchFilter !== 'all') list = list.filter(p => p.branch === branchFilter)
+    if (isSales && user?.managerId) {
+      list = list.filter(p =>
+        p.managerId === user.managerId ||
+        (Array.isArray(p.splits) && p.splits.some(s => s.managerId === user.managerId))
+      )
+    }
+    if ((isRop || isBranchDirector) && user.branch !== 'all') {
+      list = list.filter(p => p.branch === user.branch)
+    }
+    return list.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  }
+
+  // Build the sheet rows (headers, data, totals) used by both formats.
+  const buildExportTable = (list) => {
+    const branchName = (id) => branches.find(b => b.id === id)?.name || id || ''
     const headers = [
       'Дата', 'Клиент', 'Телефон', 'Курс', 'Группа', 'Филиал',
       'Сумма', 'Метод', 'Транш', 'Долг', 'Стоимость курса',
       'Менеджер', '№ договора', 'Формат',
     ]
-    const branchName = (id) => branches.find(b => b.id === id)?.name || id || ''
-    const escape = (v) => {
-      const s = v == null ? '' : String(v)
-      return s.includes(';') || s.includes('"') || s.includes('\n')
-        ? `"${s.replace(/"/g, '""')}"`
-        : s
-    }
-    const rows = filteredTransactions.map(p => [
+    const rows = list.map(p => [
       p.date || '',
       p.student || '',
       p.phone || '',
@@ -684,25 +750,69 @@ export default function Finance() {
       p.createdByName || '',
       p.contractNumber || '',
       p.learningFormat || '',
-    ].map(escape).join(';'))
-    // Totals row: count of sales + sum of amounts
-    const totalAmount = filteredTransactions.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+    ])
+    const totalAmount = list.reduce((s, p) => s + (Number(p.amount) || 0), 0)
     const totalsLabel = t('finance.export_totals_label') || 'ИТОГО'
     const totalsRow = [
-      `${totalsLabel} (${filteredTransactions.length})`,
+      `${totalsLabel} (${list.length})`,
       '', '', '', '', '', totalAmount, '', '', '', '', '', '', '',
-    ].map(escape).join(';')
-    const csv = '﻿' + [headers.join(';'), ...rows, totalsRow].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
+    ]
+    return { headers, rows, totalsRow, totalAmount }
+  }
+
+  // Compose a human-readable filename suffix from the chosen period.
+  const periodSuffix = () => {
+    if (exportPreset === 'all') return 'all-time'
+    if (!exportFrom && !exportTo) return 'all-time'
+    if (exportFrom === exportTo) return exportFrom
+    return `${exportFrom || '...'}_${exportTo || '...'}`
+  }
+
+  const runExport = () => {
+    const list = buildExportableSales()
+    if (list.length === 0) {
+      toast.error(t('finance.no_sales_period') || 'Нет продаж за период')
+      return
+    }
+    const { headers, rows, totalsRow, totalAmount } = buildExportTable(list)
     const ownerTag = isSales ? `_${(user?.name || 'manager').replace(/\s+/g, '-')}` : ''
-    const monthLabel = MONTH_NAMES[selectedMonth - 1] || monthKey
-    link.download = `sales${ownerTag}_${monthLabel}_${selectedYear}.csv`
-    link.click()
-    URL.revokeObjectURL(link.href)
+    const baseName = `sales${ownerTag}_${periodSuffix()}`
+
+    if (exportFormat === 'xlsx') {
+      const aoa = [headers, ...rows, totalsRow]
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      ws['!cols'] = [
+        { wch: 11 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 14 },
+        { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 7 }, { wch: 12 },
+        { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 10 },
+      ]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Продажи')
+      XLSX.writeFile(wb, `${baseName}.xlsx`)
+    } else {
+      const escape = (v) => {
+        const s = v == null ? '' : String(v)
+        return s.includes(';') || s.includes('"') || s.includes('\n')
+          ? `"${s.replace(/"/g, '""')}"`
+          : s
+      }
+      const csvLines = [
+        headers.map(escape).join(';'),
+        ...rows.map(r => r.map(escape).join(';')),
+        totalsRow.map(escape).join(';'),
+      ]
+      const csv = '﻿' + csvLines.join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${baseName}.csv`
+      link.click()
+      URL.revokeObjectURL(link.href)
+    }
+
     const fmtSum = Number(totalAmount).toLocaleString('ru-RU').replace(/,/g, ' ')
-    toast.success(`${filteredTransactions.length} ${t('finance.export_toast_sales') || 'продаж'} • ${fmtSum} ${t('finance.fmt_sum') || 'сум'}`)
+    toast.success(`${list.length} ${t('finance.export_toast_sales') || 'продаж'} • ${fmtSum} ${t('finance.fmt_sum') || 'сум'}`)
+    setExportOpen(false)
   }
 
   // Status helpers
@@ -1065,13 +1175,12 @@ export default function Finance() {
               </span>
             )}
             <button
-              onClick={exportSalesCsv}
-              disabled={filteredTransactions.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+              onClick={openExportModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
               title={isSales ? t('finance.export_csv_title_self') : t('finance.export_csv_title_all')}
             >
               <Download size={14} />
-              {t('finance.export_csv')}
+              {t('finance.export_btn') || 'Экспорт'}
             </button>
           </div>
         </h3>
@@ -1123,6 +1232,98 @@ export default function Finance() {
       <Modal isOpen={paymentModal} onClose={() => setPaymentModal(false)}
         title={paymentType === 'doplata' ? t('finance.modal_doplata') : t('finance.modal_new_sale')} size="lg">
         <PaymentForm onClose={() => setPaymentModal(false)} mode={paymentType} />
+      </Modal>
+
+      {/* ─── Sales Export Modal ─────────────────────────────────────────── */}
+      <Modal isOpen={exportOpen} onClose={() => setExportOpen(false)}
+        title={t('finance.export_modal_title') || 'Экспорт отчёта по продажам'} size="md">
+        <div className="space-y-5">
+          {/* Quick presets */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              {t('finance.export_period') || 'Период'}
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                ['this_month',  t('finance.preset_this_month')  || 'Этот месяц'],
+                ['last_month',  t('finance.preset_last_month')  || 'Прошлый месяц'],
+                ['this_week',   t('finance.preset_this_week')   || 'Эта неделя'],
+                ['last_week',   t('finance.preset_last_week')   || 'Прошлая неделя'],
+                ['this_year',   t('finance.preset_this_year')   || 'Этот год'],
+                ['all',         t('finance.preset_all_time')    || 'Всё время'],
+              ].map(([key, label]) => {
+                const active = exportPreset === key
+                return (
+                  <button key={key} type="button" onClick={() => applyExportPreset(key)}
+                    className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                      active
+                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}>
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Custom date range */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">
+                {t('finance.export_from') || 'С'}
+              </label>
+              <input type="date" value={exportFrom}
+                onChange={e => { setExportFrom(e.target.value); setExportPreset('custom') }}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">
+                {t('finance.export_to') || 'По'}
+              </label>
+              <input type="date" value={exportTo}
+                onChange={e => { setExportTo(e.target.value); setExportPreset('custom') }}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+            </div>
+          </div>
+
+          {/* Format toggle */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              {t('finance.export_format') || 'Формат'}
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setExportFormat('xlsx')}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium rounded-lg border transition-colors ${
+                  exportFormat === 'xlsx'
+                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}>
+                <FileSpreadsheet size={16} /> Excel (.xlsx)
+              </button>
+              <button type="button" onClick={() => setExportFormat('csv')}
+                className={`flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium rounded-lg border transition-colors ${
+                  exportFormat === 'csv'
+                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}>
+                <FileText size={16} /> CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+            <button type="button" onClick={() => setExportOpen(false)}
+              className="px-4 py-2 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">
+              {t('finance.btn_cancel') || 'Отмена'}
+            </button>
+            <button type="button" onClick={runExport}
+              className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm">
+              <Download size={14} /> {t('finance.export_download') || 'Скачать'}
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* ─── Edit Payment Modal ────────────────────────────────────────── */}
