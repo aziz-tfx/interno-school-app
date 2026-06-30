@@ -611,14 +611,103 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials, files: uploadedFiles })
     setShowReceipt(true)
 
-    // ─── Auto-generate contract & upload to Firebase Storage ───
-    // Runs in parallel, does NOT block Telegram/amoCRM notifications.
-    // If Firebase Storage is not provisioned (Spark plan), this promise
-    // will reject/hang — we race it against a 5-second timeout so the
-    // Telegram push still fires reliably.
-    let contractUploadPromise = Promise.resolve(null)
+    // ─── Notifications: fire IMMEDIATELY after saving ───
+    // Decoupled from contract upload so they reliably go out for both new
+    // sales and doplata, even if Firebase Storage hangs / fails / is missing.
+    // The contract URL is enriched in a follow-up edit once the upload
+    // finishes (best-effort; the manager already has the notification).
+    if (form.type === 'income') {
+      // Push to amoCRM (non-blocking)
+      try {
+        pushSaleToAmo({
+          clientName: form.clientName,
+          phone: form.phone,
+          course: form.course,
+          group: selectedGroup?.name || '',
+          amount: Number(form.amount),
+          method: form.method,
+          date: form.paymentDate,
+          branch: form.branch,
+          tariff: form.tariff,
+          contractNumber: form.contractNumber,
+          debt: autoDebt,
+          trancheNumber: studentPayments.length + 1,
+          managerName: user?.name || '',
+          comment: form.comment,
+        }).then(result => {
+          if (result.success) console.log('Sale pushed to amoCRM:', result.leadId)
+          else console.warn('amoCRM sync skipped:', result.error)
+        }).catch(e => console.error('amoCRM push threw:', e))
+      } catch (e) {
+        console.error('amoCRM push sync error:', e)
+      }
+
+      // Build manager sales fact for this month
+      const now = new Date()
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+      const managerSalesThisMonth = payments.filter(p =>
+        p.type === 'income' &&
+        (p.managerId === user?.managerId || p.createdBy === user?.id) &&
+        p.date >= monthStart
+      )
+      const thisMonthCount = managerSalesThisMonth.length + 1
+      const thisMonthRevenue = managerSalesThisMonth.reduce((s, p) => s + (Number(p.amount) || 0), 0) + Number(form.amount)
+      const fmtRev = (n) => Number(n).toLocaleString('ru-RU').replace(/,/g, ' ')
+      const salesFact = `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
+
+      // Resolve a canonical slug for the manager's branch — branch docs in
+      // new tenants have random Firestore ids, but the Telegram chat config
+      // is keyed by canonical slugs (tashkent / samarkand / fergana / …).
+      const managerBranchId = (user?.branch && user.branch !== 'all') ? user.branch : form.branch
+      const managerBranchObj = branches.find(b => b.id === managerBranchId)
+      const managerBranchSlug = branchToSlug(managerBranchObj) || branchToSlug(managerBranchId)
+
+      // Push to Telegram group (non-blocking, contractUrl filled in later)
+      try {
+        pushSaleToTelegram({
+          clientName: form.clientName,
+          phone: form.phone,
+          course: form.course,
+          group: selectedGroup?.name || '',
+          amount: Number(form.amount),
+          method: form.method,
+          date: form.paymentDate,
+          courseStartDate: form.courseStartDate,
+          branch: managerBranchId,
+          branchKey: managerBranchSlug,
+          tariff: tariffLbl,
+          discount: discountLbl,
+          contractNumber: form.contractNumber,
+          debt: autoDebt,
+          totalCoursePrice: courseFullPrice || 0,
+          trancheNumber: studentPayments.length + 1,
+          managerName: user?.name || '',
+          salesFact,
+          comment: form.comment,
+          learningFormat: form.learningFormat,
+          contractUrl: null,
+        }).then(result => {
+          if (result.success) {
+            console.log('Sale notification sent to Telegram:', result.messageId)
+            updatePayment(saved.id, {
+              telegramSent: true,
+              telegramSentAt: new Date().toISOString(),
+              telegramMessageId: result.messageId || null,
+            }).catch(e => console.warn('Failed to mark telegramSent:', e))
+          } else {
+            console.warn('Telegram notification skipped:', result.error)
+          }
+        }).catch(e => console.error('Telegram push threw:', e))
+      } catch (e) {
+        console.error('Telegram push sync error:', e)
+      }
+    }
+
+    // ─── Auto-generate contract & upload (parallel, best-effort) ───
+    // Runs in the background. Persists contractUrl on the payment record
+    // when it finishes; the Telegram message has already gone out.
     if (form.type === 'income' && !isDoplata) {
-      contractUploadPromise = (async () => {
+      (async () => {
         try {
           const contractData = {
             clientName: form.clientName,
@@ -634,7 +723,6 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             schedule: form.schedule || '',
             learningFormat: form.learningFormat,
             lang: form.contractLang || 'uz',
-            // Three-party (company payer)
             isCompanyPayer: !!form.isCompanyPayer,
             payerCompanyName: form.payerCompanyName || '',
             payerCompanyInn: form.payerCompanyInn || '',
@@ -643,12 +731,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             payerCompanyBank: form.payerCompanyBank || '',
             payerCompanyPhone: form.payerCompanyPhone || '',
           }
-          // Выбран кастомный шаблон — рендерим через docxtemplater.
-          // Только default-тенант (INTERNO) может использовать встроенный шаблон.
           const selectedTpl = customTemplates.find(t => t.id === selectedTemplateId)
           if (!selectedTpl && !isDefaultTenant) {
             console.warn('Non-default tenant without custom template — skipping contract generation.')
-            return null
+            return
           }
           const { blob, fileName } = selectedTpl
             ? await renderTemplateBlob(selectedTpl, contractData)
@@ -666,108 +752,12 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             },
           })
           const url = await getDownloadURL(fileRef)
-          // Persist URL on the payment record (best-effort, don't block)
           updatePayment(saved.id, { contractUrl: url, contractFileName: fileName })
             .catch(e => console.warn('Failed to persist contractUrl on payment:', e))
-          return url
         } catch (err) {
-          console.error('Contract upload failed, continuing without URL:', err)
-          return null
+          console.error('Contract upload failed:', err)
         }
       })()
-    }
-
-    // Wait up to 5s for contract URL, then fire notifications regardless.
-    const contractUrl = await Promise.race([
-      contractUploadPromise,
-      new Promise(resolve => setTimeout(() => resolve(null), 5000)),
-    ])
-
-    // Push to amoCRM (non-blocking — doesn't prevent the sale)
-    if (form.type === 'income') {
-      pushSaleToAmo({
-        clientName: form.clientName,
-        phone: form.phone,
-        course: form.course,
-        group: selectedGroup?.name || '',
-        amount: Number(form.amount),
-        method: form.method,
-        date: form.paymentDate,
-        branch: form.branch,
-        tariff: form.tariff,
-        contractNumber: form.contractNumber,
-        debt: autoDebt,
-        trancheNumber: studentPayments.length + 1,
-        managerName: user?.name || '',
-        comment: form.comment,
-      }).then(result => {
-        if (result.success) {
-          console.log('Sale pushed to amoCRM:', result.leadId)
-        } else {
-          console.warn('amoCRM sync skipped:', result.error)
-        }
-      })
-
-      // Build manager sales fact for this month
-      const now = new Date()
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-      const managerSalesThisMonth = payments.filter(p =>
-        p.type === 'income' &&
-        (p.managerId === user?.managerId || p.createdBy === user?.id) &&
-        p.date >= monthStart
-      )
-      const thisMonthCount = managerSalesThisMonth.length + 1 // +1 for current sale
-      const thisMonthRevenue = managerSalesThisMonth.reduce((s, p) => s + (Number(p.amount) || 0), 0) + Number(form.amount)
-      const fmtRev = (n) => Number(n).toLocaleString('ru-RU').replace(/,/g, ' ')
-      const salesFact = `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
-
-      // Resolve a canonical slug for the manager's branch — branch docs in
-      // new tenants have random Firestore ids, but the Telegram chat config
-      // is keyed by canonical slugs (tashkent / samarkand / fergana / …).
-      // The server falls back to chats[branch] if branchKey isn't set.
-      const managerBranchId = (user?.branch && user.branch !== 'all') ? user.branch : form.branch
-      const managerBranchObj = branches.find(b => b.id === managerBranchId)
-      const managerBranchSlug = branchToSlug(managerBranchObj) || branchToSlug(managerBranchId)
-
-      // Push to Telegram group (non-blocking)
-      pushSaleToTelegram({
-        clientName: form.clientName,
-        phone: form.phone,
-        course: form.course,
-        group: selectedGroup?.name || '',
-        amount: Number(form.amount),
-        method: form.method,
-        date: form.paymentDate,
-        courseStartDate: form.courseStartDate,
-        // Route to the manager's branch group, not the sale's branch — a
-        // Tashkent manager closing a Samarkand client should still notify
-        // their own Tashkent group.
-        branch: managerBranchId,
-        branchKey: managerBranchSlug,
-        tariff: tariffLbl,
-        discount: discountLbl,
-        contractNumber: form.contractNumber,
-        debt: autoDebt,
-        totalCoursePrice: courseFullPrice || 0,
-        trancheNumber: studentPayments.length + 1,
-        managerName: user?.name || '',
-        salesFact,
-        comment: form.comment,
-        learningFormat: form.learningFormat,
-        contractUrl,
-      }).then(result => {
-        if (result.success) {
-          console.log('Sale notification sent to Telegram:', result.messageId)
-          // Mark payment as notified so admin tools can filter missed ones
-          updatePayment(saved.id, {
-            telegramSent: true,
-            telegramSentAt: new Date().toISOString(),
-            telegramMessageId: result.messageId || null,
-          }).catch(e => console.warn('Failed to mark telegramSent:', e))
-        } else {
-          console.warn('Telegram notification skipped:', result.error)
-        }
-      })
     }
     } catch (err) {
       console.error('PaymentForm submit failed:', err)

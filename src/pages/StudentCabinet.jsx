@@ -16,6 +16,7 @@ import useStudentNotifications from '../hooks/useStudentNotifications'
 import AIChat from '../components/AIChat'
 import Certificate from '../components/Certificate'
 import StudentOnboarding from '../components/StudentOnboarding'
+import { resolveStudentGroups } from '../utils/lessonAccess'
 
 // ─── Format currency ───────────────────────────────────────────────
 function fmt(n) {
@@ -50,20 +51,20 @@ export default function StudentCabinet() {
     return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user])
 
-  const myGroup = useMemo(() => {
-    if (!myStudent) return null
-    return groups.find(g => g.name === myStudent.group || g.id === myStudent.groupId) || null
-  }, [myStudent, groups])
-
   const myGroups = useMemo(() => {
     if (!myStudent) return []
-    // Prioritize groupId match, fallback to name match, deduplicate by course name
-    const byId = myStudent.groupId ? groups.filter(g => g.id === myStudent.groupId) : []
-    if (byId.length > 0) return byId
-    const byName = groups.filter(g => g.name === myStudent.group)
+    const resolved = resolveStudentGroups(myStudent, groups, courses)
+    // Deduplicate by course
     const seen = new Set()
-    return byName.filter(g => { const k = g.course || g.id; if (seen.has(k)) return false; seen.add(k); return true })
-  }, [myStudent, groups])
+    return resolved.filter(g => {
+      const k = g.course || g.id
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+  }, [myStudent, groups, courses])
+
+  const myGroup = myGroups[0] || null
 
   const myCourse = useMemo(() => {
     if (!myGroup) return null

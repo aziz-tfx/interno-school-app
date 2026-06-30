@@ -8,6 +8,7 @@ import {
   Clock, FileText, Lock, Play, Users, Calendar, Award,
   Plus, Pencil, Trash2, X, Save, GripVertical, AlertCircle, Video
 } from 'lucide-react'
+import { resolveGroupById } from '../../utils/lessonAccess'
 
 // ─── Module Form Modal ──────────────────────────────────────────────
 function ModuleFormModal({ mod, courseId, onSave, onClose, nextOrder }) {
@@ -89,14 +90,21 @@ export default function LMSCourseView() {
   const [editingModule, setEditingModule] = useState(null)
   const [deleteModuleConfirm, setDeleteModuleConfirm] = useState(null)
 
-  // Find group and course
-  const group = groups.find(g => g.id === courseId)
-  const course = courses.find(c => c.name === group?.course)
-
   const myStudent = useMemo(() => {
     if (!isStudent) return null
+    if (user?.studentId) {
+      const byId = students.find(s => String(s.id) === String(user.studentId))
+      if (byId) return byId
+    }
     return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user, isStudent])
+
+  // Find group and course (resolve synthetic free-* ids for landing students)
+  const group = useMemo(
+    () => resolveGroupById(courseId, groups, courses, myStudent),
+    [courseId, groups, courses, myStudent]
+  )
+  const course = courses.find(c => c.name === group?.course)
 
   const teacher = useMemo(() => {
     if (!group?.teacherId) return null
