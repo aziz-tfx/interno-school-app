@@ -4,7 +4,7 @@ import {
   DollarSign, Plus, CreditCard, FileBarChart, TrendingUp, TrendingDown,
   Users, Target, BarChart3, ArrowUpRight, ArrowDownRight, Eye,
   ChevronLeft, ChevronRight, Filter, ShoppingCart, UserCheck, Phone,
-  Percent, CalendarDays, Pencil, Save, X, Trash2, CheckCircle,
+  Percent, CalendarDays, Pencil, Save, X, Trash2, CheckCircle, Download,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
@@ -633,7 +633,7 @@ export default function Finance() {
   // ─── Filtered recent transactions ───────────────────────────────────────
   // Management roles (admin/owner/rop/branch_director) see EVERY sale for
   // their scope; sales-only users still get a short preview.
-  const recentTransactions = useMemo(() => {
+  const filteredTransactions = useMemo(() => {
     if (!canSeeSalesList) return []
     let filtered = payments.filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey))
     if (branchFilter !== 'all') filtered = filtered.filter(p => p.branch === branchFilter)
@@ -641,9 +641,59 @@ export default function Finance() {
     if ((isRop || isBranchDirector) && user.branch !== 'all') {
       filtered = filtered.filter(p => p.branch === user.branch)
     }
-    const sorted = filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-    return isSales ? sorted.slice(0, 10) : sorted
+    return filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, canSeeSalesList])
+
+  const recentTransactions = useMemo(
+    () => (isSales ? filteredTransactions.slice(0, 10) : filteredTransactions),
+    [filteredTransactions, isSales]
+  )
+
+  // ─── Export sales for the current period to CSV ────────────────────────
+  // Sales reps export ONLY their own sales (matches the visible list).
+  // Other roles export the full filtered list they're already seeing.
+  const exportSalesCsv = () => {
+    if (filteredTransactions.length === 0) {
+      toast.error(t('finance.no_sales_period') || 'Нет продаж за период')
+      return
+    }
+    const headers = [
+      'Дата', 'Клиент', 'Телефон', 'Курс', 'Группа', 'Филиал',
+      'Сумма', 'Метод', 'Транш', 'Долг', 'Стоимость курса',
+      'Менеджер', '№ договора', 'Формат',
+    ]
+    const branchName = (id) => branches.find(b => b.id === id)?.name || id || ''
+    const escape = (v) => {
+      const s = v == null ? '' : String(v)
+      return s.includes(';') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s
+    }
+    const rows = filteredTransactions.map(p => [
+      p.date || '',
+      p.student || '',
+      p.phone || '',
+      p.course || '',
+      p.group || '',
+      branchName(p.branch),
+      Number(p.amount) || 0,
+      p.method || '',
+      p.trancheNumber || 1,
+      Number(p.debt) || 0,
+      Number(p.totalCoursePrice) || 0,
+      p.createdByName || '',
+      p.contractNumber || '',
+      p.learningFormat || '',
+    ].map(escape).join(';'))
+    const csv = '﻿' + [headers.join(';'), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    const ownerTag = isSales ? `_${user?.name || 'manager'}`.replace(/\s+/g, '-') : ''
+    link.download = `sales${ownerTag}_${monthKey}.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
 
   // Status helpers
   const statusColor = (pct) => {
@@ -998,11 +1048,22 @@ export default function Finance() {
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <ArrowUpRight size={20} className="text-emerald-600" />
           {t('finance.recent_sales')}
-          {!isSales && (
-            <span className="ml-auto text-xs font-normal text-slate-400">
-              {recentTransactions.length}
-            </span>
-          )}
+          <div className="ml-auto flex items-center gap-3">
+            {!isSales && (
+              <span className="text-xs font-normal text-slate-400">
+                {recentTransactions.length}
+              </span>
+            )}
+            <button
+              onClick={exportSalesCsv}
+              disabled={filteredTransactions.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+              title={isSales ? 'Скачать отчёт по моим продажам (CSV)' : 'Скачать отчёт по продажам (CSV)'}
+            >
+              <Download size={14} />
+              CSV
+            </button>
+          </div>
         </h3>
         {recentTransactions.length === 0 ? (
           <p className="text-sm text-slate-400 text-center py-6">{t('finance.no_sales_period')}</p>
