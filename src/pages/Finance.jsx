@@ -685,7 +685,14 @@ export default function Finance() {
       p.contractNumber || '',
       p.learningFormat || '',
     ].map(escape).join(';'))
-    const csv = '﻿' + [headers.join(';'), ...rows].join('\n')
+    // Totals row: count of sales + sum of amounts
+    const totalAmount = filteredTransactions.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+    const totalsLabel = t('finance.export_totals_label') || 'ИТОГО'
+    const totalsRow = [
+      `${totalsLabel} (${filteredTransactions.length})`,
+      '', '', '', '', '', totalAmount, '', '', '', '', '', '', '',
+    ].map(escape).join(';')
+    const csv = '﻿' + [headers.join(';'), ...rows, totalsRow].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
@@ -1058,10 +1065,10 @@ export default function Finance() {
               onClick={exportSalesCsv}
               disabled={filteredTransactions.length === 0}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
-              title={isSales ? 'Скачать отчёт по моим продажам (CSV)' : 'Скачать отчёт по продажам (CSV)'}
+              title={isSales ? t('finance.export_csv_title_self') : t('finance.export_csv_title_all')}
             >
               <Download size={14} />
-              CSV
+              {t('finance.export_csv')}
             </button>
           </div>
         </h3>
