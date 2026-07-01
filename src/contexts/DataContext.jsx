@@ -335,10 +335,29 @@ export function DataProvider({ children, currentUser }) {
     return { ...newStudent, id: docRef.id }
   }
 
+  // Fields written by internal bookkeeping (LMS access flags, credentials
+  // generated on first payment, extended expiry on every payment). Not
+  // interesting for the audit trail.
+  const SILENT_STUDENT_KEYS = new Set([
+    'balance',
+    'lmsAccess',
+    'lmsAccessGrantedAt',
+    'lmsExpiresAt',
+    'lmsLogin',
+    'lmsPassword',
+    'nextPaymentDate',
+  ])
+  const isSilentStudentUpdate = (updates) => {
+    const keys = Object.keys(updates || {})
+    return keys.length > 0 && keys.every(k => SILENT_STUDENT_KEYS.has(k))
+  }
+
   const updateStudent = async (id, updates) => {
     const before = students.find(s => s.id === id)
     await updateDoc(doc(db, 'students', id), updates)
-    logAudit({ action: 'update', collection: 'students', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён студент "${before?.name || id}"` })
+    if (!isSilentStudentUpdate(updates)) {
+      logAudit({ action: 'update', collection: 'students', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён студент "${before?.name || id}"` })
+    }
   }
 
   const deleteStudent = async (id) => {
@@ -494,10 +513,29 @@ export function DataProvider({ children, currentUser }) {
     return { ...newPayment, id: docRef.id }
   }
 
+  // Fields written by internal bookkeeping (file uploads, contract-URL
+  // stamping, Telegram send-flags). These aren't user-visible edits and
+  // shouldn't produce audit-log entries — each entry costs a Firestore
+  // write + N reads on all subscribed admin clients.
+  const SILENT_PAYMENT_KEYS = new Set([
+    'files',
+    'contractUrl',
+    'contractFileName',
+    'telegramSent',
+    'telegramSentAt',
+    'telegramMessageId',
+  ])
+  const isSilentPaymentUpdate = (updates) => {
+    const keys = Object.keys(updates || {})
+    return keys.length > 0 && keys.every(k => SILENT_PAYMENT_KEYS.has(k))
+  }
+
   const updatePayment = async (id, updates) => {
     const before = paymentsList.find(p => p.id === id)
     await updateDoc(doc(db, 'payments', id), updates)
-    logAudit({ action: 'update', collection: 'payments', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён платёж #${id}` })
+    if (!isSilentPaymentUpdate(updates)) {
+      logAudit({ action: 'update', collection: 'payments', documentId: id, user: auditUser(), before, after: { ...before, ...updates }, description: `Обновлён платёж #${id}` })
+    }
   }
 
   const deletePayment = async (id) => {

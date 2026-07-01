@@ -45,15 +45,49 @@ export function getTenantId(req) {
   ).toString().trim()
 }
 
-/** Load one integration block for a tenant. Returns {} if nothing found. */
+// ─── In-memory TTL cache for tenantIntegrations ──────────────────────────
+// Vercel serverless functions keep module state across warm invocations,
+// so caching here means the same warm instance doesn't re-read Firestore
+// on every request. Big deal for cron jobs and amoCRM sync that fire
+// every few minutes for the same tenant.
+//
+// TTL is short enough that config edits in the UI take effect quickly.
+const INTEGRATION_TTL_MS = 60 * 1000 // 60 seconds
+const _integrationCache = new Map() // tenantId → { data, expiresAt }
+
+function readCache(tenantId) {
+  const entry = _integrationCache.get(tenantId)
+  if (!entry) return null
+  if (Date.now() > entry.expiresAt) {
+    _integrationCache.delete(tenantId)
+    return null
+  }
+  return entry.data
+}
+
+function writeCache(tenantId, data) {
+  _integrationCache.set(tenantId, { data, expiresAt: Date.now() + INTEGRATION_TTL_MS })
+}
+
+/** Invalidate the cache — call after saveTenantIntegration so the next
+ *  read picks up the fresh value. */
+function invalidateCache(tenantId) {
+  if (tenantId) _integrationCache.delete(tenantId)
+}
+
+/** Load one integration block for a tenant. Returns {} if nothing found.
+ *  Cached in-memory for INTEGRATION_TTL_MS to reduce Firestore reads. */
 export async function loadTenantIntegration(tenantId, key /* telegram|amocrm|onpbx */) {
   if (!tenantId) return {}
+  // Cache holds the WHOLE tenantIntegrations doc; slice out the requested key.
+  const cached = readCache(tenantId)
+  if (cached) return cached[key] || {}
   const db = getDb()
   if (!db) return {}
   try {
     const snap = await db.collection('tenantIntegrations').doc(tenantId).get()
-    if (!snap.exists) return {}
-    const data = snap.data() || {}
+    const data = snap.exists ? (snap.data() || {}) : {}
+    writeCache(tenantId, data)
     return data[key] || {}
   } catch (e) {
     console.warn('loadTenantIntegration failed:', e.message)
@@ -61,7 +95,8 @@ export async function loadTenantIntegration(tenantId, key /* telegram|amocrm|onp
   }
 }
 
-/** Persist refreshed tokens back to Firestore so future requests use them. */
+/** Persist refreshed tokens back to Firestore so future requests use them.
+ *  Invalidates the in-memory cache so the next read picks up the new value. */
 export async function saveTenantIntegration(tenantId, key, patch) {
   if (!tenantId) return false
   const db = getDb()
@@ -71,6 +106,7 @@ export async function saveTenantIntegration(tenantId, key, patch) {
       { [key]: patch, updatedAt: new Date().toISOString() },
       { merge: true }
     )
+    invalidateCache(tenantId)
     return true
   } catch (e) {
     console.warn('saveTenantIntegration failed:', e.message)
