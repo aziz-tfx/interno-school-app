@@ -11,6 +11,8 @@ import {
   setDoc,
   query,
   where,
+  orderBy,
+  limit,
 } from 'firebase/firestore'
 import { logAudit } from '../utils/auditLog'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
@@ -69,6 +71,18 @@ export function DataProvider({ children, currentUser }) {
   }
 
   const tenantId = currentUser?.tenantId || DEFAULT_TENANT_ID
+  const role = currentUser?.role || 'anonymous'
+
+  // ─── Role → which collections this user actually needs ─────────────
+  // Firestore has a daily read quota; subscribing to heavy collections
+  // (auditLog, messages, lmsProgress, …) for every user regardless of
+  // role burns through it fast. Everyone gets the essentials, and the
+  // rest is gated by role.
+  const needsLms       = ['owner', 'admin', 'teacher', 'student'].includes(role)
+  const needsMessages  = ['owner', 'admin', 'teacher', 'student'].includes(role)
+  const needsAudit     = ['owner', 'admin'].includes(role)
+  const needsGame      = ['owner', 'admin', 'teacher', 'student'].includes(role)
+  const needsSchedule  = role !== 'anonymous'
 
   useEffect(() => {
     const unsubscribers = []
@@ -120,33 +134,110 @@ export function DataProvider({ children, currentUser }) {
       unsubscribers.push(unsub)
     }
 
+    // Mark a collection as "loaded" without ever subscribing (role gating).
+    function skipCollection(loadKey) {
+      if (!loadedRef.current[loadKey]) {
+        loadedRef.current[loadKey] = true
+        checkAllLoaded()
+      }
+    }
+
+    // Everyone needs these — school-level essentials.
     subscribeCollection('branches', setBranches, 'branches')
     subscribeCollection('courses', setCourses, 'courses')
     subscribeCollection('groups', setGroups, 'groups')
     subscribeCollection('students', setStudents, 'students')
     subscribeCollection('teachers', setTeachers, 'teachers')
     subscribeCollection('payments', setPaymentsList, 'payments')
+    subscribeCollection('rooms', setRooms, 'rooms')
     subscribeMetaDoc('attendance', setAttendance, 'attendance')
     subscribeMetaDoc('salesPlans', setSalesPlansState, 'salesPlans')
 
-    // Additional collections
-    subscribeCollection('rooms', setRooms, 'rooms')
-    subscribeCollection('lmsLessons', setLmsLessons, 'lmsLessons')
-    subscribeCollection('lmsAssignments', setLmsAssignments, 'lmsAssignments')
-    subscribeCollection('lmsSubmissions', setLmsSubmissions, 'lmsSubmissions')
-    subscribeCollection('lmsAnnouncements', setLmsAnnouncements, 'lmsAnnouncements')
-    subscribeCollection('lmsModules', setLmsModules, 'lmsModules')
-    subscribeCollection('lmsProgress', setLmsProgress, 'lmsProgress')
-    subscribeCollection('lmsVideoProgress', setLmsVideoProgress, 'lmsVideoProgress')
-    subscribeCollection('studentGameData', setStudentGameData, 'studentGameData')
-    subscribeCollection('schedule', setSchedule, 'schedule')
-    subscribeCollection('auditLog', setAuditLogs, 'auditLogs')
-    subscribeCollection('messages', setMessages, 'messages')
+    // Schedule — everyone except anonymous
+    if (needsSchedule) subscribeCollection('schedule', setSchedule, 'schedule')
+    else skipCollection('schedule')
+
+    // LMS collections — only for LMS-active roles (owner/admin/teacher/student)
+    if (needsLms) {
+      subscribeCollection('lmsLessons', setLmsLessons, 'lmsLessons')
+      subscribeCollection('lmsAssignments', setLmsAssignments, 'lmsAssignments')
+      subscribeCollection('lmsSubmissions', setLmsSubmissions, 'lmsSubmissions')
+      subscribeCollection('lmsAnnouncements', setLmsAnnouncements, 'lmsAnnouncements')
+      subscribeCollection('lmsModules', setLmsModules, 'lmsModules')
+      subscribeCollection('lmsProgress', setLmsProgress, 'lmsProgress')
+      subscribeCollection('lmsVideoProgress', setLmsVideoProgress, 'lmsVideoProgress')
+    } else {
+      skipCollection('lmsLessons')
+      skipCollection('lmsAssignments')
+      skipCollection('lmsSubmissions')
+      skipCollection('lmsAnnouncements')
+      skipCollection('lmsModules')
+      skipCollection('lmsProgress')
+      skipCollection('lmsVideoProgress')
+    }
+
+    // Gamification streak data — only for LMS users
+    if (needsGame) subscribeCollection('studentGameData', setStudentGameData, 'studentGameData')
+    else skipCollection('studentGameData')
+
+    // Audit log — huge collection, only for owner/admin (the audit page).
+    // Cap at the last 500 entries: the page paginates client-side within
+    // that window. Without the cap older records would pull thousands of
+    // docs per session and burn through Firestore read quota.
+    if (needsAudit) {
+      const auditLogSetter = (docs) => {
+        setAuditLogs(docs)
+        if (!loadedRef.current.auditLogs) {
+          loadedRef.current.auditLogs = true
+          checkAllLoaded()
+        }
+      }
+      const auditLogError = (err, isFallback) => {
+        console.error('Collection auditLog error:', err)
+        if (!isFallback && err?.code === 'failed-precondition') {
+          // Composite index (tenantId, timestamp desc) missing → fall back
+          // to unordered where + limit. Client-side sort will re-order.
+          console.warn('auditLog composite index missing; falling back to unordered query')
+          const fallbackQ = query(
+            collection(db, 'auditLog'),
+            where('tenantId', '==', tenantId),
+            limit(500),
+          )
+          const fbUnsub = onSnapshot(
+            fallbackQ,
+            (snap) => auditLogSetter(snap.docs.map(d => ({ ...d.data(), id: d.id }))),
+            (e) => auditLogError(e, true),
+          )
+          unsubscribers.push(fbUnsub)
+        } else if (!loadedRef.current.auditLogs) {
+          loadedRef.current.auditLogs = true
+          checkAllLoaded()
+        }
+      }
+      const q = query(
+        collection(db, 'auditLog'),
+        where('tenantId', '==', tenantId),
+        orderBy('timestamp', 'desc'),
+        limit(500),
+      )
+      const unsub = onSnapshot(
+        q,
+        (snap) => auditLogSetter(snap.docs.map(d => ({ ...d.data(), id: d.id }))),
+        (err) => auditLogError(err, false),
+      )
+      unsubscribers.push(unsub)
+    } else {
+      skipCollection('auditLogs')
+    }
+
+    // Student ↔ teacher chat — only for LMS-participating roles
+    if (needsMessages) subscribeCollection('messages', setMessages, 'messages')
+    else skipCollection('messages')
 
     return () => {
       unsubscribers.forEach(unsub => unsub())
     }
-  }, [tenantId])
+  }, [tenantId, role, needsLms, needsMessages, needsAudit, needsGame, needsSchedule])
 
   // Helper: get user info for audit
   const auditUser = () => currentUser ? { id: currentUser.id || currentUser._docId, name: currentUser.name, role: currentUser.role } : {}
