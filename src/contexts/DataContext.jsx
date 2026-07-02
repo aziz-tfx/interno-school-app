@@ -85,61 +85,87 @@ export function DataProvider({ children, currentUser }) {
   const needsSchedule  = role !== 'anonymous'
 
   useEffect(() => {
-    const unsubscribers = []
+    // Listener registry + retry machinery.
+    //
+    // КЛЮЧЕВОЕ: onSnapshot-листенер, получивший ошибку (quota throttling,
+    // обрыв сети, transient unavailable), УМИРАЕТ НАВСЕГДА — Firestore SDK
+    // не переподключает его сам. Раньше это значило: коллекция, чей
+    // листенер словил отказ при загрузке страницы, оставалась пустой до
+    // полного рефреша — «то грузится, то нет». Теперь каждый умерший
+    // листенер пересоздаётся с экспоненциальным backoff (2s → 4s → … 60s),
+    // так что временные отказы самоизлечиваются без участия пользователя.
+    let cancelled = false
+    const activeUnsubs = new Map() // registryKey → unsub fn
 
-    // Subscribe to a Firestore collection filtered by tenantId.
-    // No cross-tenant fallback — empty means empty.
-    function subscribeCollection(collectionName, setter, loadKey) {
-      const q = query(collection(db, collectionName), where('tenantId', '==', tenantId))
-      const unsub = onSnapshot(q, (snapshot) => {
-        const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
-        setter(items)
-        if (!loadedRef.current[loadKey]) {
-          loadedRef.current[loadKey] = true
-          checkAllLoaded()
-        }
-      }, (err) => {
-        console.error(`Collection ${collectionName} error:`, err)
-        if (!loadedRef.current[loadKey]) {
-          loadedRef.current[loadKey] = true
-          checkAllLoaded()
-        }
-      })
-      unsubscribers.push(unsub)
-    }
+    const RETRY_BASE_MS = 2000
+    const RETRY_MAX_MS = 60000
+    const retryDelay = (attempt) => Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** attempt)
 
-    // Subscribe to a single-doc meta collection (attendance, salesPlans)
-    // Meta docs use tenantId as part of their doc key: `_meta_{tenantId}`
-    function subscribeMetaDoc(collectionName, setter, loadKey) {
-      const metaDocId = `_meta_${tenantId}`
-      const unsub = onSnapshot(doc(db, collectionName, metaDocId), (snapshot) => {
-        if (snapshot.exists()) {
-          setter(snapshot.data().data)
-        } else if (tenantId === DEFAULT_TENANT_ID) {
-          // Legacy _meta doc only for the original default tenant (pre-migration)
-          const legacyUnsub = onSnapshot(doc(db, collectionName, '_meta'), (legacySnap) => {
-            if (legacySnap.exists()) {
-              setter(legacySnap.data().data)
-            }
-          })
-          unsubscribers.push(legacyUnsub)
-        } else {
-          setter({})
-        }
-        if (!loadedRef.current[loadKey]) {
-          loadedRef.current[loadKey] = true
-          checkAllLoaded()
-        }
-      })
-      unsubscribers.push(unsub)
-    }
-
-    // Mark a collection as "loaded" without ever subscribing (role gating).
-    function skipCollection(loadKey) {
+    function markLoaded(loadKey) {
       if (!loadedRef.current[loadKey]) {
         loadedRef.current[loadKey] = true
         checkAllLoaded()
       }
+    }
+
+    // Subscribe to a Firestore collection filtered by tenantId.
+    // No cross-tenant fallback — empty means empty.
+    function subscribeCollection(collectionName, setter, loadKey, attempt = 0) {
+      if (cancelled) return
+      const q = query(collection(db, collectionName), where('tenantId', '==', tenantId))
+      const unsub = onSnapshot(q, (snapshot) => {
+        attempt = 0 // healthy again — future errors restart backoff from scratch
+        const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
+        setter(items)
+        markLoaded(loadKey)
+      }, (err) => {
+        console.error(`Collection ${collectionName} error (retry in ${retryDelay(attempt)}ms):`, err)
+        markLoaded(loadKey) // never block the initial loading gate on a dead listener
+        activeUnsubs.delete(loadKey)
+        setTimeout(() => subscribeCollection(collectionName, setter, loadKey, attempt + 1), retryDelay(attempt))
+      })
+      activeUnsubs.set(loadKey, unsub)
+    }
+
+    // Subscribe to a single-doc meta collection (attendance, salesPlans)
+    // Meta docs use tenantId as part of their doc key: `_meta_{tenantId}`
+    function subscribeMetaDoc(collectionName, setter, loadKey, attempt = 0) {
+      if (cancelled) return
+      const metaDocId = `_meta_${tenantId}`
+      const unsub = onSnapshot(doc(db, collectionName, metaDocId), (snapshot) => {
+        attempt = 0
+        if (snapshot.exists()) {
+          setter(snapshot.data().data)
+        } else if (tenantId === DEFAULT_TENANT_ID) {
+          // Legacy _meta doc only for the original default tenant (pre-migration)
+          const legacyKey = `${loadKey}_legacy`
+          if (!activeUnsubs.has(legacyKey)) {
+            const legacyUnsub = onSnapshot(doc(db, collectionName, '_meta'), (legacySnap) => {
+              if (legacySnap.exists()) {
+                setter(legacySnap.data().data)
+              }
+            }, (err) => {
+              console.error(`Meta doc ${collectionName}/_meta error:`, err)
+              activeUnsubs.delete(legacyKey)
+            })
+            activeUnsubs.set(legacyKey, legacyUnsub)
+          }
+        } else {
+          setter({})
+        }
+        markLoaded(loadKey)
+      }, (err) => {
+        console.error(`Meta doc ${collectionName} error (retry in ${retryDelay(attempt)}ms):`, err)
+        markLoaded(loadKey)
+        activeUnsubs.delete(loadKey)
+        setTimeout(() => subscribeMetaDoc(collectionName, setter, loadKey, attempt + 1), retryDelay(attempt))
+      })
+      activeUnsubs.set(loadKey, unsub)
+    }
+
+    // Mark a collection as "loaded" without ever subscribing (role gating).
+    function skipCollection(loadKey) {
+      markLoaded(loadKey)
     }
 
     // Everyone needs these — school-level essentials.
@@ -184,58 +210,41 @@ export function DataProvider({ children, currentUser }) {
     // Cap at the last 500 entries: the page paginates client-side within
     // that window. Without the cap older records would pull thousands of
     // docs per session and burn through Firestore read quota.
-    if (needsAudit) {
-      const auditLogSetter = (docs) => {
-        setAuditLogs(docs)
-        if (!loadedRef.current.auditLogs) {
-          loadedRef.current.auditLogs = true
-          checkAllLoaded()
-        }
-      }
-      const auditLogError = (err, isFallback) => {
+    // useFallback: composite index (tenantId, timestamp desc) missing →
+    // unordered where + limit; клиент отсортирует сам.
+    function subscribeAuditLog(attempt = 0, useFallback = false) {
+      if (cancelled) return
+      const q = useFallback
+        ? query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), limit(500))
+        : query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), orderBy('timestamp', 'desc'), limit(500))
+      const unsub = onSnapshot(q, (snap) => {
+        attempt = 0
+        setAuditLogs(snap.docs.map(d => ({ ...d.data(), id: d.id })))
+        markLoaded('auditLogs')
+      }, (err) => {
         console.error('Collection auditLog error:', err)
-        if (!isFallback && err?.code === 'failed-precondition') {
-          // Composite index (tenantId, timestamp desc) missing → fall back
-          // to unordered where + limit. Client-side sort will re-order.
+        markLoaded('auditLogs')
+        activeUnsubs.delete('auditLogs')
+        if (!useFallback && err?.code === 'failed-precondition') {
           console.warn('auditLog composite index missing; falling back to unordered query')
-          const fallbackQ = query(
-            collection(db, 'auditLog'),
-            where('tenantId', '==', tenantId),
-            limit(500),
-          )
-          const fbUnsub = onSnapshot(
-            fallbackQ,
-            (snap) => auditLogSetter(snap.docs.map(d => ({ ...d.data(), id: d.id }))),
-            (e) => auditLogError(e, true),
-          )
-          unsubscribers.push(fbUnsub)
-        } else if (!loadedRef.current.auditLogs) {
-          loadedRef.current.auditLogs = true
-          checkAllLoaded()
+          subscribeAuditLog(0, true)
+          return
         }
-      }
-      const q = query(
-        collection(db, 'auditLog'),
-        where('tenantId', '==', tenantId),
-        orderBy('timestamp', 'desc'),
-        limit(500),
-      )
-      const unsub = onSnapshot(
-        q,
-        (snap) => auditLogSetter(snap.docs.map(d => ({ ...d.data(), id: d.id }))),
-        (err) => auditLogError(err, false),
-      )
-      unsubscribers.push(unsub)
-    } else {
-      skipCollection('auditLogs')
+        setTimeout(() => subscribeAuditLog(attempt + 1, useFallback), retryDelay(attempt))
+      })
+      activeUnsubs.set('auditLogs', unsub)
     }
+    if (needsAudit) subscribeAuditLog()
+    else skipCollection('auditLogs')
 
     // Student ↔ teacher chat — only for LMS-participating roles
     if (needsMessages) subscribeCollection('messages', setMessages, 'messages')
     else skipCollection('messages')
 
     return () => {
-      unsubscribers.forEach(unsub => unsub())
+      cancelled = true
+      activeUnsubs.forEach(unsub => unsub())
+      activeUnsubs.clear()
     }
   }, [tenantId, role, needsLms, needsMessages, needsAudit, needsGame, needsSchedule])
 
