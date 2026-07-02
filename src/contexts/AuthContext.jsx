@@ -318,10 +318,20 @@ export function AuthProvider({ children }) {
 
   // Real-time sync with Firestore + seed ONCE (guarded by bootstrap flag)
   // Loads ALL employees for login lookup, then filters by tenantId for the UI
+  //
+  // Auto-retry: an errored onSnapshot listener is permanently dead (the SDK
+  // never reconnects it). Without retry, a transient refusal (quota
+  // throttling, network blip) during page load left `employees` empty for
+  // the whole session — login rejected every password until a full refresh.
   useEffect(() => {
     const bootstrapRef = doc(db, 'settings', 'bootstrap')
+    let cancelled = false
+    let currentUnsub = null
 
-    const unsubscribe = onSnapshot(employeesRef, async (snapshot) => {
+    const subscribe = (attempt = 0) => {
+      if (cancelled) return
+      currentUnsub = onSnapshot(employeesRef, async (snapshot) => {
+      attempt = 0 // healthy — future errors restart backoff from scratch
       // Always update local state first so UI never blocks on the seed check
       const list = snapshot.docs
         .map((d) => ({ ...d.data(), _docId: d.id }))
@@ -374,9 +384,16 @@ export function AuthProvider({ children }) {
           }
         } catch (_err) { /* non-critical */ }
       }
-    })
+      }, (err) => {
+        const delay = Math.min(60000, 2000 * 2 ** attempt)
+        console.error(`employees listener error (retry in ${delay}ms):`, err)
+        setLoading(false) // don't leave the login page stuck on a spinner
+        setTimeout(() => { if (!cancelled) subscribe(attempt + 1) }, delay)
+      })
+    }
 
-    return () => unsubscribe()
+    subscribe()
+    return () => { cancelled = true; currentUnsub?.() }
   }, [])
 
   // Employees filtered by current user's tenantId (for UI display)
