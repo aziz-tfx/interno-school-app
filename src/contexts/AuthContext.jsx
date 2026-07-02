@@ -385,7 +385,7 @@ export function AuthProvider({ children }) {
         } catch (_err) { /* non-critical */ }
       }
       }, (err) => {
-        const delay = Math.min(60000, 2000 * 2 ** attempt)
+        const delay = Math.min(15000, 1000 * 2 ** attempt)
         console.error(`employees listener error (retry in ${delay}ms):`, err)
         setLoading(false) // don't leave the login page stuck on a spinner
         setTimeout(() => { if (!cancelled) subscribe(attempt + 1) }, delay)
