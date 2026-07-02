@@ -104,8 +104,10 @@ export function DataProvider({ children, currentUser }) {
     let cancelled = false
     const activeUnsubs = new Map() // registryKey → unsub fn
 
-    const RETRY_BASE_MS = 2000
-    const RETRY_MAX_MS = 60000
+    // Aggressive-ish retry: transient refusals usually clear within seconds,
+    // and a listener stuck in a long backoff window reads as "the app hangs".
+    const RETRY_BASE_MS = 1000
+    const RETRY_MAX_MS = 15000
     const retryDelay = (attempt) => Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** attempt)
 
     function markLoaded(loadKey) {
