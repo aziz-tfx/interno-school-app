@@ -14,6 +14,7 @@ import { doc, setDoc, getDoc, increment } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Logo from './Logo'
 import Modal from './Modal'
+import SaleCelebration from './SaleCelebration'
 import { toast } from './Toaster'
 import { useLanguage } from '../contexts/LanguageContext'
 
@@ -52,7 +53,7 @@ const FORMAT_OPTIONS = [
 
 export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new' }) {
   const isDoplata = mode === 'doplata'
-  const { branches, students, payments, addPayment, updatePayment, addStudent, updateStudent, groups, courses } = useData()
+  const { branches, students, payments, addPayment, updatePayment, addStudent, updateStudent, groups, courses, getSalesPlan } = useData()
   const { user, hasPermission, employees } = useAuth()
   const { t } = useLanguage()
 
@@ -152,6 +153,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const submittingRef = useRef(false)
   const [showReceipt, setShowReceipt] = useState(false)
   const [savedPayment, setSavedPayment] = useState(null)
+  // Victory overlay data ({amount, salesCount, planRevenue, prevRevenue, newRevenue})
+  const [celebration, setCelebration] = useState(null)
   const [generatingContract, setGeneratingContract] = useState(false)
   const [customTemplates, setCustomTemplates] = useState([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('') // '' = INTERNO default (only allowed for default tenant)
@@ -655,6 +658,15 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       const fmtRev = (n) => Number(n).toLocaleString('ru-RU').replace(/,/g, ' ')
       const salesFact = `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
 
+      // 🎉 Victory moment: confetti + jackpot count-up + plan progress + sound
+      setCelebration({
+        amount: Number(form.amount) || 0,
+        salesCount: thisMonthCount,
+        planRevenue: user?.managerId ? getSalesPlan(user.managerId) : 0,
+        prevRevenue: thisMonthRevenue - (Number(form.amount) || 0),
+        newRevenue: thisMonthRevenue,
+      })
+
       // Resolve a canonical slug for the manager's branch — branch docs in
       // new tenants have random Firestore ids, but the Telegram chat config
       // is keyed by canonical slugs (tashkent / samarkand / fergana / …).
@@ -824,6 +836,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   if (showReceipt && savedPayment) {
     return (
       <div className="space-y-4">
+        {celebration && (
+          <SaleCelebration {...celebration} onClose={() => setCelebration(null)} />
+        )}
         <div className="flex items-center gap-2 text-emerald-600 mb-2">
           <Receipt size={20} />
           <span className="font-semibold">{t('paymentForm.receipt_success')}</span>
