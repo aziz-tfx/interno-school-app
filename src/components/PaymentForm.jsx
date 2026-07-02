@@ -561,58 +561,69 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
     const saved = await addPayment(paymentData)
 
-    // Auto-update reports if this is an income payment
-    if (form.type === 'income') {
-      try {
-        const paymentDate = new Date(form.paymentDate)
-        const year = paymentDate.getFullYear()
-        const month = paymentDate.getMonth() + 1
-        const day = paymentDate.getDate()
-        const monthKey = `${year}-${String(month).padStart(2, '0')}`
-        const managerName = user?.name || ''
-
-        if (managerName) {
-          const tenantId = user?.tenantId || 'default'
-          const docId = `${monthKey}_${tenantId}_${managerName}_${day}`
-          const dailyRef = doc(db, 'reportDaily', docId)
-          await setDoc(dailyRef, {
-            monthKey,
-            tenantId,
-            manager: managerName,
-            day,
-            sales: increment(1),
-            revenue: increment(Number(form.amount) || 0),
-          }, { merge: true })
-        }
-      } catch (err) {
-        console.error('Failed to update report:', err)
-      }
-    }
-
     // LMS credentials returned directly from addPayment if account was created
     const lmsCredentials = saved?.lmsCredentials || null
 
-    // ─── Upload attached files to Firebase Storage (not base64 in Firestore) ───
-    let uploadedFiles = []
-    if (files.length > 0) {
-      try {
-        const tenantPath = user?.tenantId || 'default'
-        uploadedFiles = await Promise.all(files.map(async (f) => {
-          if (!f.rawFile) return { id: f.id, name: f.name, type: f.type, size: f.size }
-          const path = `${tenantPath}/payments/${saved.id}/${Date.now()}_${f.name}`
-          const fileRef = storageRef(storage, path)
-          await uploadBytes(fileRef, f.rawFile, { contentType: f.type })
-          const url = await getDownloadURL(fileRef)
-          return { id: f.id, name: f.name, type: f.type, size: f.size, url }
-        }))
-        updatePayment(saved.id, { files: uploadedFiles }).catch(() => {})
-      } catch (err) {
-        console.warn('File upload failed, payment saved without attachments:', err)
+    // ─── Show the receipt IMMEDIATELY — the sale is saved ───
+    // Everything below (report stats, file uploads, notifications, contract)
+    // is enrichment and runs in the background. Keeping the save button
+    // spinning through a multi-MB Storage upload read as "app hangs".
+    setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials, files: [] })
+    setShowReceipt(true)
+
+    // Auto-update reports (background, best-effort)
+    if (form.type === 'income') {
+      const updateDailyReport = async () => {
+        try {
+          const paymentDate = new Date(form.paymentDate)
+          const year = paymentDate.getFullYear()
+          const month = paymentDate.getMonth() + 1
+          const day = paymentDate.getDate()
+          const monthKey = `${year}-${String(month).padStart(2, '0')}`
+          const managerName = user?.name || ''
+
+          if (managerName) {
+            const tenantId = user?.tenantId || 'default'
+            const docId = `${monthKey}_${tenantId}_${managerName}_${day}`
+            const dailyRef = doc(db, 'reportDaily', docId)
+            await setDoc(dailyRef, {
+              monthKey,
+              tenantId,
+              manager: managerName,
+              day,
+              sales: increment(1),
+              revenue: increment(Number(form.amount) || 0),
+            }, { merge: true })
+          }
+        } catch (err) {
+          console.error('Failed to update report:', err)
+        }
       }
+      updateDailyReport()
     }
 
-    setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials, files: uploadedFiles })
-    setShowReceipt(true)
+    // ─── Upload attached files to Firebase Storage (background) ───
+    // Patches the payment doc and the on-screen receipt when done.
+    if (files.length > 0) {
+      const uploadFiles = async () => {
+        try {
+          const tenantPath = user?.tenantId || 'default'
+          const uploadedFiles = await Promise.all(files.map(async (f) => {
+            if (!f.rawFile) return { id: f.id, name: f.name, type: f.type, size: f.size }
+            const path = `${tenantPath}/payments/${saved.id}/${Date.now()}_${f.name}`
+            const fileRef = storageRef(storage, path)
+            await uploadBytes(fileRef, f.rawFile, { contentType: f.type })
+            const url = await getDownloadURL(fileRef)
+            return { id: f.id, name: f.name, type: f.type, size: f.size, url }
+          }))
+          updatePayment(saved.id, { files: uploadedFiles }).catch(() => {})
+          setSavedPayment(prev => (prev && prev.id === saved.id) ? { ...prev, files: uploadedFiles } : prev)
+        } catch (err) {
+          console.warn('File upload failed, payment saved without attachments:', err)
+        }
+      }
+      uploadFiles()
+    }
 
     // ─── Notifications: fire IMMEDIATELY after saving ───
     // Decoupled from contract upload so they reliably go out for both new
