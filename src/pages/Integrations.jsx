@@ -334,6 +334,18 @@ export default function Integrations() {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Username бота (для напоминаний студентам)</label>
+            <input type="text" value={cfg.telegram.botUsername || ''}
+              onChange={(e) => updateSection('telegram', { botUsername: e.target.value.replace(/^@/, '') })}
+              placeholder="interno_school_bot"
+              className="w-full md:w-1/2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <p className="text-xs text-slate-400 mt-1">
+              Студенты подключают личные напоминания об оплате по ссылке t.me/&lt;username&gt; из кабинета.
+              Не забудьте зарегистрировать webhook: <code className="font-mono">/api/telegram/webhook?tenantId={tenantId}</code>
+            </p>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-slate-700 mb-3">Chat ID групп по филиалам</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {Object.entries(BRANCH_LABELS).map(([key, label]) => (
@@ -628,6 +640,56 @@ export default function Integrations() {
               <RefreshCw size={14} className={pbxStatus === 'checking' ? 'animate-spin' : ''} /> Проверить
             </button>
             {saveBtn('onpbx', 'emerald')}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════ Payme ═══════ */}
+      <div className="glass rounded-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-cyan-500 to-blue-500 p-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+              <Zap size={24} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">Payme</h3>
+              <p className="text-white/80 text-sm">Онлайн-оплата из кабинета студента</p>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-white text-sm cursor-pointer select-none">
+            <input type="checkbox" checked={!!cfg.payme?.enabled}
+              onChange={(e) => updateSection('payme', { enabled: e.target.checked })}
+              className="w-4 h-4 rounded" />
+            Включено
+          </label>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Merchant ID</label>
+              <input type="text" value={cfg.payme?.merchantId || ''}
+                onChange={(e) => updateSection('payme', { merchantId: e.target.value })}
+                placeholder="5e730e8e0b852a417aa49ceb"
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+              <p className="text-xs text-slate-400 mt-1">Из кабинета merchant.payme.uz</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Ключ (пароль эндпоинта)</label>
+              <input type="password" value={cfg.payme?.key || ''}
+                onChange={(e) => updateSection('payme', { key: e.target.value })}
+                placeholder=""
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+              <p className="text-xs text-slate-400 mt-1">Секретный ключ мерчанта — используется для проверки вебхуков</p>
+            </div>
+          </div>
+          <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3 text-xs text-cyan-800">
+            <p className="font-semibold mb-1">Endpoint для кабинета Payme:</p>
+            <code className="font-mono break-all">{`${window.location.origin}/api/pay/payme?tenantId=${tenantId}`}</code>
+            <p className="mt-1.5">Укажите этот URL в настройках мерчанта. После включения у студентов с долгом появится кнопка «Оплатить через Payme» в кабинете, а в напоминаниях — ссылка на оплату.</p>
+          </div>
+          <div className="flex justify-end">
+            {saveBtn('payme', 'cyan')}
           </div>
         </div>
       </div>
