@@ -12,6 +12,10 @@ import { useAuth } from '../contexts/AuthContext'
 // A short grace delay avoids flashing on every normal page load (the
 // cache-first snapshot always arrives before the server one).
 const SHOW_AFTER_MS = 2500
+// Hard cap: never show longer than this per sync episode. If one listener
+// is stuck erroring/retrying, an eternal banner is worse than none — data
+// on screen is already the best available and retries continue silently.
+const MAX_SHOW_MS = 30000
 
 export default function SyncBanner() {
   const { user } = useAuth()
@@ -23,8 +27,9 @@ export default function SyncBanner() {
       setVisible(false)
       return
     }
-    const timer = setTimeout(() => setVisible(true), SHOW_AFTER_MS)
-    return () => clearTimeout(timer)
+    const showTimer = setTimeout(() => setVisible(true), SHOW_AFTER_MS)
+    const capTimer = setTimeout(() => setVisible(false), SHOW_AFTER_MS + MAX_SHOW_MS)
+    return () => { clearTimeout(showTimer); clearTimeout(capTimer) }
   }, [syncPending])
 
   if (!user || !visible) return null

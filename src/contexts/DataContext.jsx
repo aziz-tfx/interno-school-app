@@ -134,12 +134,16 @@ export function DataProvider({ children, currentUser }) {
       if (cancelled) return
       if (attempt === 0) trackAwaitingServer(loadKey)
       const q = query(collection(db, collectionName), where('tenantId', '==', tenantId))
-      const unsub = onSnapshot(q, (snapshot) => {
+      // includeMetadataChanges: без него Firestore НЕ шлёт событие, когда
+      // сервер подтвердил кэш без изменений данных — fromCache никогда не
+      // "переключается" для неизменившихся коллекций и баннер синхронизации
+      // залипает навсегда.
+      const unsub = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
         attempt = 0 // healthy again — future errors restart backoff from scratch
+        if (!snapshot.metadata.fromCache) markServerSynced(loadKey)
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
         setter(items)
         markLoaded(loadKey)
-        if (!snapshot.metadata.fromCache) markServerSynced(loadKey)
       }, (err) => {
         console.error(`Collection ${collectionName} error (retry in ${retryDelay(attempt)}ms):`, err)
         markLoaded(loadKey) // never block the initial loading gate on a dead listener
@@ -155,7 +159,7 @@ export function DataProvider({ children, currentUser }) {
       if (cancelled) return
       if (attempt === 0) trackAwaitingServer(loadKey)
       const metaDocId = `_meta_${tenantId}`
-      const unsub = onSnapshot(doc(db, collectionName, metaDocId), (snapshot) => {
+      const unsub = onSnapshot(doc(db, collectionName, metaDocId), { includeMetadataChanges: true }, (snapshot) => {
         attempt = 0
         if (!snapshot.metadata.fromCache) markServerSynced(loadKey)
         if (snapshot.exists()) {
@@ -242,11 +246,11 @@ export function DataProvider({ children, currentUser }) {
       const q = useFallback
         ? query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), limit(500))
         : query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), orderBy('timestamp', 'desc'), limit(500))
-      const unsub = onSnapshot(q, (snap) => {
+      const unsub = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
         attempt = 0
+        if (!snap.metadata.fromCache) markServerSynced('auditLogs')
         setAuditLogs(snap.docs.map(d => ({ ...d.data(), id: d.id })))
         markLoaded('auditLogs')
-        if (!snap.metadata.fromCache) markServerSynced('auditLogs')
       }, (err) => {
         console.error('Collection auditLog error:', err)
         markLoaded('auditLogs')
