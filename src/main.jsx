@@ -7,6 +7,7 @@ import { LanguageProvider } from './contexts/LanguageContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Toaster from './components/Toaster'
 import UpdateBanner from './components/UpdateBanner'
+import SyncBanner from './components/SyncBanner'
 import App from './App'
 import './index.css'
 
@@ -25,6 +26,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <App />
               <Toaster />
               <UpdateBanner />
+              <SyncBanner />
             </DataProviderWithUser>
           </AuthProvider>
         </LanguageProvider>

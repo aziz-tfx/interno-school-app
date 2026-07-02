@@ -60,6 +60,13 @@ export function DataProvider({ children, currentUser }) {
   // Video watch progress (lmsVideoProgress)
   const [lmsVideoProgress, setLmsVideoProgress] = useState([])
 
+  // Collections still waiting for their FIRST server-confirmed snapshot.
+  // With IndexedDB persistence the first snapshot comes from cache and can
+  // be incomplete (partial data cached during an outage). Until the server
+  // confirms, totals computed from that collection may be understated —
+  // the UI shows a "syncing" banner while this is non-zero.
+  const [pendingServerSync, setPendingServerSync] = useState(0)
+
   // Track whether initial load has resolved for each collection
   const loadedRef = useRef({ branches: false, courses: false, groups: false, students: false, teachers: false, payments: false, attendance: false, salesPlans: false, rooms: false, lmsLessons: false, lmsAssignments: false, lmsSubmissions: false, lmsAnnouncements: false, lmsModules: false, lmsProgress: false, studentGameData: false, schedule: false, auditLogs: false, messages: false, lmsVideoProgress: false })
 
@@ -108,16 +115,29 @@ export function DataProvider({ children, currentUser }) {
       }
     }
 
+    // Track which subscribed collections have received a server-confirmed
+    // (non-fromCache) snapshot. Cache-only data may be incomplete.
+    const awaitingServer = new Set()
+    function trackAwaitingServer(loadKey) {
+      awaitingServer.add(loadKey)
+      setPendingServerSync(awaitingServer.size)
+    }
+    function markServerSynced(loadKey) {
+      if (awaitingServer.delete(loadKey)) setPendingServerSync(awaitingServer.size)
+    }
+
     // Subscribe to a Firestore collection filtered by tenantId.
     // No cross-tenant fallback — empty means empty.
     function subscribeCollection(collectionName, setter, loadKey, attempt = 0) {
       if (cancelled) return
+      if (attempt === 0) trackAwaitingServer(loadKey)
       const q = query(collection(db, collectionName), where('tenantId', '==', tenantId))
       const unsub = onSnapshot(q, (snapshot) => {
         attempt = 0 // healthy again — future errors restart backoff from scratch
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
         setter(items)
         markLoaded(loadKey)
+        if (!snapshot.metadata.fromCache) markServerSynced(loadKey)
       }, (err) => {
         console.error(`Collection ${collectionName} error (retry in ${retryDelay(attempt)}ms):`, err)
         markLoaded(loadKey) // never block the initial loading gate on a dead listener
@@ -131,9 +151,11 @@ export function DataProvider({ children, currentUser }) {
     // Meta docs use tenantId as part of their doc key: `_meta_{tenantId}`
     function subscribeMetaDoc(collectionName, setter, loadKey, attempt = 0) {
       if (cancelled) return
+      if (attempt === 0) trackAwaitingServer(loadKey)
       const metaDocId = `_meta_${tenantId}`
       const unsub = onSnapshot(doc(db, collectionName, metaDocId), (snapshot) => {
         attempt = 0
+        if (!snapshot.metadata.fromCache) markServerSynced(loadKey)
         if (snapshot.exists()) {
           setter(snapshot.data().data)
         } else if (tenantId === DEFAULT_TENANT_ID) {
@@ -214,6 +236,7 @@ export function DataProvider({ children, currentUser }) {
     // unordered where + limit; клиент отсортирует сам.
     function subscribeAuditLog(attempt = 0, useFallback = false) {
       if (cancelled) return
+      if (attempt === 0 && !useFallback) trackAwaitingServer('auditLogs')
       const q = useFallback
         ? query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), limit(500))
         : query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), orderBy('timestamp', 'desc'), limit(500))
@@ -221,6 +244,7 @@ export function DataProvider({ children, currentUser }) {
         attempt = 0
         setAuditLogs(snap.docs.map(d => ({ ...d.data(), id: d.id })))
         markLoaded('auditLogs')
+        if (!snap.metadata.fromCache) markServerSynced('auditLogs')
       }, (err) => {
         console.error('Collection auditLog error:', err)
         markLoaded('auditLogs')
@@ -866,6 +890,9 @@ export function DataProvider({ children, currentUser }) {
       auditLogs,
       tenantId,
       loading,
+      // true while any subscribed collection is still cache-only (no
+      // server-confirmed snapshot yet) — totals may be incomplete
+      syncPending: pendingServerSync > 0,
     }}>
       {children}
     </DataContext.Provider>
