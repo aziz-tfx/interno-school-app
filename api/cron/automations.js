@@ -51,7 +51,7 @@ export default async function handler(req, res) {
 
   const now = new Date()
   const todayStr = now.toISOString().split('T')[0]
-  const results = { tenants: 0, reminders: 0, debtors: 0, blocked: 0, managerAlerts: 0, errors: [] }
+  const results = { tenants: 0, reminders: 0, studentReminders: 0, debtors: 0, blocked: 0, managerAlerts: 0, errors: [] }
 
   try {
     // Load all active tenants
@@ -138,6 +138,76 @@ export default async function handler(req, res) {
                 const sent = await sendTelegram(tgConfig.botToken, chatId, text)
                 if (sent) results.reminders++
               }
+            }
+          }
+        }
+
+        // ─── Rule 5: PERSONAL payment reminders to students ────
+        // Students who linked their Telegram via the cabinet deep link
+        // (students/{id}.telegramChatId) get a direct reminder 3 days
+        // before, 1 day before, on the due date, and when overdue.
+        // Includes a Payme checkout link when the tenant has Payme set up.
+        if (settings.studentReminders !== false) {
+          // Payme config for pay-now links (optional)
+          let paymeCfg = {}
+          try {
+            const piSnap = await db.collection('tenantIntegrations').doc(tenant.id).get()
+            if (piSnap.exists) paymeCfg = piSnap.data()?.payme || {}
+          } catch {}
+          if (isDefault && !paymeCfg.merchantId) {
+            paymeCfg = { merchantId: process.env.PAYME_MERCHANT_ID || '', enabled: !!process.env.PAYME_MERCHANT_ID }
+          }
+          const paymeReady = paymeCfg.enabled !== false && !!paymeCfg.merchantId
+
+          for (const student of students) {
+            if (!student.telegramChatId) continue
+            if (student.status === 'frozen' || student.status === 'archived') continue
+            // Dedup: at most one personal reminder per day
+            if (student.lastStudentReminderDate === todayStr) continue
+
+            const studentPayments = payments.filter(p =>
+              p.type === 'income' && !p.cancelled && String(p.studentId) === String(student.id)
+            )
+            const totalPaid = studentPayments.reduce((s, p) => s + (p.amount || 0), 0)
+            const coursePrice = student.totalCoursePrice || 0
+            const debt = Math.max(0, coursePrice - totalPaid)
+            if (debt <= 0) continue
+
+            const nextDate = student.nextPaymentDate || studentPayments
+              .sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0]?.nextPaymentDate
+            if (!nextDate) continue
+
+            const daysUntil = Math.ceil((new Date(nextDate) - now) / (1000 * 60 * 60 * 24))
+            // 3 days before, 1 day before, due today, or overdue (every day)
+            if (!(daysUntil === 3 || daysUntil === 1 || daysUntil === 0 || daysUntil < 0)) continue
+
+            const debtStr = debt.toLocaleString('ru-RU')
+            let header
+            if (daysUntil < 0) header = `🔴 <b>Оплата просрочена на ${Math.abs(daysUntil)} дн.</b>`
+            else if (daysUntil === 0) header = `🟡 <b>Сегодня день оплаты</b>`
+            else header = `🔔 <b>Оплата через ${daysUntil} дн.</b>`
+
+            let text = `${header}\n\n` +
+              `Здравствуйте, ${student.name}!\n` +
+              (student.course ? `📚 Курс: ${student.course}\n` : '') +
+              `💰 К оплате: <b>${debtStr} сум</b>\n` +
+              `📅 Срок: ${nextDate}\n`
+
+            if (paymeReady) {
+              const amountTiyin = Math.round(debt * 100)
+              const payload = Buffer.from(
+                `m=${paymeCfg.merchantId};ac.student_id=${student.id};ac.tenant_id=${tenant.id};a=${amountTiyin}`
+              ).toString('base64')
+              text += `\n💳 Оплатить онлайн: https://checkout.paycom.uz/${payload}\n`
+            }
+            text += `\nПосле оплаты доступ к урокам продлевается автоматически.`
+
+            const sent = await sendTelegram(tgConfig.botToken, student.telegramChatId, text)
+            if (sent) {
+              results.studentReminders++
+              await db.collection('students').doc(student.id)
+                .update({ lastStudentReminderDate: todayStr })
+                .catch(() => {})
             }
           }
         }

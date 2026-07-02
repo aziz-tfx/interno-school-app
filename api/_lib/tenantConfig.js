@@ -17,7 +17,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 
 let _db = null
 
-function getDb() {
+export function getDb() {
   if (_db) return _db
   if (!getApps().length) {
     const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
@@ -171,6 +171,21 @@ function sanitizeOnpbxDomain(raw) {
   let v = String(raw).trim()
   v = v.replace(/^https?:\/\//i, '').replace(/^\/+|\/+$/g, '').replace(/,+$/g, '')
   return v
+}
+
+// Payme merchant credentials. merchantId is public (it's embedded in every
+// checkout link); key is the webhook Basic-auth secret and must never leave
+// the server.
+export async function resolvePayme(req) {
+  const tenantId = getTenantId(req)
+  const cfg = await loadTenantIntegration(tenantId, 'payme')
+  const useEnv = isDefaultTenant(tenantId)
+  return {
+    tenantId: tenantId || DEFAULT_TENANT_ID,
+    merchantId: cfg.merchantId || envIf(useEnv, process.env.PAYME_MERCHANT_ID),
+    key: cfg.key || envIf(useEnv, process.env.PAYME_KEY),
+    enabled: cfg.enabled === true || (!!envIf(useEnv, process.env.PAYME_MERCHANT_ID) && cfg.enabled !== false),
+  }
 }
 
 export async function resolveOnpbx(req) {

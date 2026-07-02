@@ -10,8 +10,14 @@ const COLLECTION = 'tenantIntegrations'
 const EMPTY = {
   telegram: {
     botToken: '',
+    botUsername: '',
     chats: { tashkent: '', samarkand: '', fergana: '', bukhara: '', online: '' },
     enabled: true,
+  },
+  payme: {
+    merchantId: '',
+    key: '',
+    enabled: false,
   },
   amocrm: {
     subdomain: '',

@@ -42,6 +42,16 @@ export default function StudentCabinet() {
   const [showCertificate, setShowCertificate] = useState(null)
   const [chatText, setChatText] = useState('')
 
+  // Public payment/bot config (safe subset — no secrets)
+  const [payConfig, setPayConfig] = useState(null)
+  useEffect(() => {
+    const tid = user?.tenantId || 'default'
+    fetch(`/api/pay/config?tenantId=${encodeURIComponent(tid)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(setPayConfig)
+      .catch(() => setPayConfig(null))
+  }, [user?.tenantId])
+
   // ─── Student identity ──────────────────────────────────────────
   const myStudent = useMemo(() => {
     if (user?.studentId) {
@@ -927,6 +937,51 @@ export default function StudentCabinet() {
                 <p className={`text-xl font-bold ${debt > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{debt > 0 ? `${fmt(debt)} сум` : 'Оплачено полностью'}</p>
               </div>
             </div>
+            {/* Online payment via Payme */}
+            {debt > 0 && payConfig?.payme?.enabled && myStudent && (
+              <div className="bg-gradient-to-r from-cyan-500 to-blue-500 rounded-2xl p-5 text-white">
+                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                  <div className="flex-1">
+                    <p className="font-bold text-lg mb-0.5">💳 Оплатить онлайн через Payme</p>
+                    <p className="text-white/80 text-sm">Доступ к урокам продлевается автоматически сразу после оплаты</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const amountTiyin = Math.round(debt * 100)
+                      const payload = btoa(`m=${payConfig.payme.merchantId};ac.student_id=${myStudent.id};ac.tenant_id=${user?.tenantId || 'default'};a=${amountTiyin}`)
+                      window.open(`https://checkout.paycom.uz/${payload}`, '_blank', 'noopener')
+                    }}
+                    className="px-6 py-3 bg-white text-cyan-600 rounded-xl font-bold hover:bg-cyan-50 transition-colors whitespace-nowrap"
+                  >
+                    Оплатить {fmt(debt)} сум
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Telegram payment reminders */}
+            {payConfig?.telegramBotUsername && myStudent && !myStudent.telegramChatId && (
+              <a
+                href={`https://t.me/${payConfig.telegramBotUsername}?start=st_${myStudent.id}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-3 bg-white rounded-2xl border border-blue-200 p-4 hover:bg-blue-50/50 transition-colors"
+              >
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Send size={18} className="text-blue-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-800">Подключить Telegram-напоминания</p>
+                  <p className="text-xs text-slate-500">Бот заранее напомнит о платеже, чтобы доступ к урокам не прервался</p>
+                </div>
+                <ChevronRight size={16} className="text-slate-300" />
+              </a>
+            )}
+            {myStudent?.telegramChatId && (
+              <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
+                <CheckCircle2 size={16} /> Telegram-напоминания об оплате подключены
+              </div>
+            )}
+
             {/* Progress bar */}
             {coursePrice > 0 && (
               <div className="bg-white rounded-2xl border border-slate-200 p-5">

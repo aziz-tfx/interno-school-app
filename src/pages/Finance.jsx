@@ -955,6 +955,72 @@ export default function Finance() {
       )}
 
       {/* ─── Manager KPI Cards ──────────────────────────────────────────── */}
+      {/* ─── Revenue forecast (expected doplata cash-in) ─────────────────── */}
+      {(isAdmin || isRop || isBranchDirector) && (() => {
+        const today = new Date()
+        const horizon = (days) => {
+          const d = new Date(today)
+          d.setDate(d.getDate() + days)
+          return d
+        }
+        const h30 = horizon(30), h60 = horizon(60), h90 = horizon(90)
+        let e30 = 0, e60 = 0, e90 = 0, noDate = 0
+        const monthBuckets = {}
+        for (const s of pendingDoplataList) {
+          if (!s.nextPaymentDate) { noDate += s.debt; continue }
+          const d = new Date(s.nextPaymentDate)
+          // Overdue debts are collectible "now" → count into every horizon
+          if (d <= h30) e30 += s.debt
+          if (d <= h60) e60 += s.debt
+          if (d <= h90) e90 += s.debt
+          const mk = s.nextPaymentDate.slice(0, 7)
+          monthBuckets[mk] = (monthBuckets[mk] || 0) + s.debt
+        }
+        const bucketEntries = Object.entries(monthBuckets).sort(([a], [b]) => a.localeCompare(b)).slice(0, 5)
+        const maxBucket = Math.max(1, ...bucketEntries.map(([, v]) => v))
+        const monthLabel = (mk) => {
+          const [y, m] = mk.split('-')
+          return `${MONTH_NAMES[Number(m) - 1]?.slice(0, 3) || m} ${y.slice(2)}`
+        }
+        return (
+          <div className="glass-card rounded-2xl p-4 md:p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <TrendingUp size={20} className="text-cyan-600" />
+              Прогноз выручки — ожидаемые доплаты
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+              {[
+                ['30 дней', e30], ['60 дней', e60], ['90 дней', e90],
+              ].map(([label, val]) => (
+                <div key={label} className="bg-cyan-50/60 border border-cyan-100 rounded-xl p-4 text-center">
+                  <p className="text-xs text-slate-500 mb-1">Ближайшие {label}</p>
+                  <p className="text-xl font-bold text-cyan-700">{formatRevenue(val)} сум</p>
+                </div>
+              ))}
+            </div>
+            {bucketEntries.length > 0 && (
+              <div className="space-y-2">
+                {bucketEntries.map(([mk, val]) => (
+                  <div key={mk} className="flex items-center gap-3">
+                    <span className="w-16 text-xs text-slate-500 text-right flex-shrink-0">{monthLabel(mk)}</span>
+                    <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-lg transition-all"
+                        style={{ width: `${Math.max(3, (val / maxBucket) * 100)}%` }} />
+                    </div>
+                    <span className="w-24 text-xs font-semibold text-slate-700 tabular-nums flex-shrink-0">{formatRevenue(val)}</span>
+                  </div>
+                ))}
+                {noDate > 0 && (
+                  <p className="text-xs text-slate-400 pt-1">
+                    + {formatRevenue(noDate)} сум без назначенной даты платежа
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       {canSeeSalesList && (
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
