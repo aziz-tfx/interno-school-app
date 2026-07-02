@@ -1,5 +1,10 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  getFirestore,
+} from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 
@@ -36,6 +41,26 @@ if (recaptchaKey) {
   }
 }
 
-export const db = getFirestore(app)
+// ─── Firestore with offline (IndexedDB) persistence ─────────────────────
+// A persistent local cache means that once a document/collection has been
+// read successfully even once, it's served from the browser's IndexedDB on
+// subsequent loads — including while the server is throttling reads (e.g.
+// Firestore daily-quota pressure). The UI keeps showing the last-known data
+// instead of blanking to zeros. Multi-tab manager keeps several open tabs
+// in sync over the same cache.
+//
+// If persistence can't initialize (private mode, storage disabled, or the
+// SDK was already initialized), fall back to the default in-memory Firestore.
+let _db
+try {
+  _db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  })
+} catch (err) {
+  console.warn('Firestore persistent cache unavailable, using default:', err)
+  _db = getFirestore(app)
+}
+
+export const db = _db
 export const storage = getStorage(app)
 export default app
