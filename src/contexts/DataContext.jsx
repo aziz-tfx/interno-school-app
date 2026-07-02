@@ -8,6 +8,7 @@ import {
   deleteDoc,
   onSnapshot,
   getDocs,
+  getDoc,
   setDoc,
   query,
   where,
@@ -437,13 +438,14 @@ export function DataProvider({ children, currentUser }) {
     // Update student balance and debt status if it's a student payment
     if (payment.type === 'income' && payment.studentId) {
       let student = students.find(s => String(s.id) === String(payment.studentId))
-      // If student not yet in local state (just created), read from Firestore directly
+      // If student not yet in local state (just created), read the single
+      // doc directly — NOT the whole collection (that was a full-collection
+      // read on every sale for a brand-new client, slow and quota-hungry).
       if (!student) {
         try {
-          const snap = await getDocs(collection(db, 'students'))
-          const freshStudent = snap.docs.find(d => d.id === String(payment.studentId))
-          if (freshStudent) {
-            student = { id: freshStudent.id, ...freshStudent.data() }
+          const snap = await getDoc(doc(db, 'students', String(payment.studentId)))
+          if (snap.exists()) {
+            student = { id: snap.id, ...snap.data() }
           }
         } catch (e) {
           console.error('Failed to fetch student from Firestore:', e)
