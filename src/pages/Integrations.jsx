@@ -341,7 +341,7 @@ export default function Integrations() {
               className="w-full md:w-1/2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <p className="text-xs text-slate-400 mt-1">
               Студенты подключают личные напоминания об оплате по ссылке t.me/&lt;username&gt; из кабинета.
-              Не забудьте зарегистрировать webhook: <code className="font-mono">/api/telegram/webhook?tenantId={tenantId}</code>
+              Не забудьте зарегистрировать webhook: <code className="font-mono">/api/telegram/notify?tenantId={tenantId}</code>
             </p>
           </div>
 

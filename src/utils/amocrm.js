@@ -187,7 +187,7 @@ export async function refreshAmoToken() {
  */
 export async function checkOnpbxStatus() {
   try {
-    const res = await fetch(withTenant('/api/onpbx/status'), { headers: tenantHeaders() })
+    const res = await fetch(withTenant('/api/onpbx/calls?status=1'), { headers: tenantHeaders() })
     return await res.json()
   } catch (err) {
     return { connected: false, message: err.message }

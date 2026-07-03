@@ -1,7 +1,11 @@
 // Vercel Serverless Function — Payme Merchant API (JSON-RPC 2.0)
-// POST /api/pay/payme?tenantId=<tenant>
+// POST /api/pay/payme?tenantId=<tenant>  — Payme JSON-RPC webhook
+// GET  /api/pay/payme?tenantId=<tenant>  — public SAFE config for the
+//        student cabinet (payme enabled/merchantId + bot username).
+//        Combined into one function to stay within the Vercel Hobby
+//        limit of 12 serverless functions per deployment.
 //
-// Register this URL in the Payme merchant cabinet as the endpoint.
+// Register the POST URL in the Payme merchant cabinet as the endpoint.
 // Auth: Payme sends  Authorization: Basic base64("Paycom:<key>")
 //
 // Checkout links are built client-side as:
@@ -13,7 +17,7 @@
 //  -1  — cancelled before perform
 //  -2  — cancelled after perform (payment doc voided, balance rolled back)
 
-import { resolvePayme, getDb } from '../_lib/tenantConfig.js'
+import { resolvePayme, getDb, loadTenantIntegration, getTenantId } from '../_lib/tenantConfig.js'
 
 // Payme error helper — message must carry ru/uz/en variants
 const rpcError = (res, id, code, msg, data) =>
@@ -65,6 +69,24 @@ async function notifyBranch(db, tenantId, student, amountSum) {
 }
 
 export default async function handler(req, res) {
+  // ─── GET: public config for the student cabinet (no secrets) ───
+  if (req.method === 'GET') {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
+    const tenantId = getTenantId(req) || 'default'
+    const payme = await resolvePayme(req)
+    const tg = await loadTenantIntegration(tenantId, 'telegram')
+    const botUsername = tg.botUsername ||
+      (tenantId === 'default' ? (process.env.TG_BOT_USERNAME || '') : '')
+    return res.status(200).json({
+      payme: {
+        enabled: payme.enabled && !!payme.merchantId,
+        merchantId: payme.merchantId || '',
+      },
+      telegramBotUsername: botUsername.replace(/^@/, ''),
+    })
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const body = req.body || {}
