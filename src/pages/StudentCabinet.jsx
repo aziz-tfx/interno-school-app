@@ -46,7 +46,7 @@ export default function StudentCabinet() {
   const [payConfig, setPayConfig] = useState(null)
   useEffect(() => {
     const tid = user?.tenantId || 'default'
-    fetch(`/api/pay/config?tenantId=${encodeURIComponent(tid)}`)
+    fetch(`/api/pay/payme?tenantId=${encodeURIComponent(tid)}`)
       .then(r => r.ok ? r.json() : null)
       .then(setPayConfig)
       .catch(() => setPayConfig(null))

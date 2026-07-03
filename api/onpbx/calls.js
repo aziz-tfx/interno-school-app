@@ -103,11 +103,64 @@ function classifyCall(call) {
   return { type, answered, duration: talkTime, waitTime, ext }
 }
 
+// Connection check (moved here from onpbx/status.js to stay within the
+// Vercel Hobby limit of 12 serverless functions). GET ?status=1
+async function handleStatusCheck(req, res) {
+  const pbx = await resolveOnpbx(req)
+  const ONPBX_DOMAIN = pbx.domain
+  const ONPBX_API_KEY = pbx.apiKey
+  const missing = []
+  if (!ONPBX_DOMAIN) missing.push('domain')
+  if (!ONPBX_API_KEY) missing.push('apiKey')
+  if (missing.length) {
+    return res.status(200).json({
+      connected: false,
+      missing,
+      message: `Не заполнено для этой школы: ${missing.join(', ')}`,
+    })
+  }
+  if (ONPBX_DOMAIN.startsWith('api.')) {
+    return res.status(200).json({
+      connected: false,
+      message: `ONPBX_DOMAIN должен быть клиентским доменом (pbx14950.onpbx.ru), а не ${ONPBX_DOMAIN}.`,
+    })
+  }
+  try {
+    const authRes = await postForm(`${API_BASE}/${ONPBX_DOMAIN}/auth.json`, {}, { auth_key: ONPBX_API_KEY })
+    const data = authRes?.data
+    if (!data?.key_id || !data?.key) {
+      return res.status(200).json({ connected: false, step: 'auth.json', message: 'auth.json не вернул key_id+key' })
+    }
+    const nowTs = Math.floor(Date.now() / 1000)
+    const histRes = await postForm(
+      `${API_BASE}/${ONPBX_DOMAIN}/mongo_history/search.json`,
+      { 'x-pbx-authentication': `${data.key_id}:${data.key}` },
+      { start_stamp_from: nowTs - 24 * 3600, start_stamp_to: nowTs }
+    )
+    return res.status(200).json({
+      connected: !!histRes,
+      domain: ONPBX_DOMAIN,
+      auth: { ok: true, keyId: data.key_id.slice(0, 8) + '...' },
+      history: {
+        ok: !!histRes,
+        callsInLast24h: Array.isArray(histRes?.data) ? histRes.data.length : null,
+      },
+    })
+  } catch (err) {
+    return res.status(200).json({ connected: false, message: err.message })
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+
+  // Connection check mode (?status=1) — replaces the old /api/onpbx/status
+  if (typeof req.query.status !== 'undefined') {
+    return handleStatusCheck(req, res)
+  }
 
   const pbx = await resolveOnpbx(req)
   const ONPBX_DOMAIN = pbx.domain
