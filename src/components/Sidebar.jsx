@@ -77,15 +77,17 @@ export default function Sidebar({ open, onClose }) {
   const allNavItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard'), permission: 'dashboard' },
     { to: '/branches', icon: Building2, label: t('sidebar.branches'), permission: 'branches' },
-    { to: '/students', icon: GraduationCap, label: t('sidebar.students'), permission: 'students' },
-    { to: '/teachers', icon: Users, label: t('sidebar.teachers'), permission: 'teachers' },
     {
       group: 'learning',
       icon: BookOpen,
       label: 'Обучение',
       children: [
+        { to: '/students', icon: GraduationCap, label: t('sidebar.students'), permission: 'students' },
+        { to: '/teachers', icon: Users, label: t('sidebar.teachers'), permission: 'teachers' },
         { to: '/courses', icon: BookOpen, label: t('sidebar.courses'), permission: 'courses' },
         { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
+        { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
+        { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: 'attendance' },
       ],
     },
     {
@@ -96,15 +98,6 @@ export default function Sidebar({ open, onClose }) {
         { to: '/finance', icon: DollarSign, label: t('sidebar.finance'), permission: 'finance' },
         { to: '/amo', icon: Zap, label: 'amoCRM эффективность', permission: 'finance' },
         { to: '/leaderboard', icon: Trophy, label: t('sidebar.leaderboard'), permission: 'finance' },
-      ],
-    },
-    {
-      group: 'schedule',
-      icon: Calendar,
-      label: 'Расписание',
-      children: [
-        { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },
-        { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: 'attendance' },
       ],
     },
     {
