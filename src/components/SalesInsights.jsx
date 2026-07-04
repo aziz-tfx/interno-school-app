@@ -73,7 +73,8 @@ export default function SalesInsights() {
   const isSales = role === 'sales'
   const isRop = role === 'rop' || role === 'branch_director'
   const isOwner = role === 'owner' || role === 'admin'
-  if (!isSales && !isRop && !isOwner) return null
+  // NOTE: no early return here — hooks below must run on every render
+  // (Rules of Hooks). The role check happens right before the JSX return.
 
   const now = new Date()
   const curKey = monthKeyOf(now)
@@ -309,6 +310,9 @@ export default function SalesInsights() {
 
     return { curMTD, prevMTD, momPct, branchMargin, snapshot, totalDebt, topCourses }
   }, [isOwner, payments, curKey, branches, students, debtors, monthPays, dayOfMonth]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Role gate — after all hooks so the hook order never changes
+  if (!isSales && !isRop && !isOwner) return null
 
   const funnelSteps = teamPanel ? [
     ['Заявки', teamPanel.funnel.leads],
