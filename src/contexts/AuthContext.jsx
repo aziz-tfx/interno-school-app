@@ -385,7 +385,11 @@ export function AuthProvider({ children }) {
         } catch (_err) { /* non-critical */ }
       }
       }, (err) => {
-        const delay = Math.min(15000, 1000 * 2 ** attempt)
+        // resource-exhausted: fast retries burn quota with nothing to gain —
+        // wait 5 minutes; other errors retry quickly (1s → 15s cap)
+        const delay = err?.code === 'resource-exhausted'
+          ? 5 * 60 * 1000
+          : Math.min(15000, 1000 * 2 ** attempt)
         console.error(`employees listener error (retry in ${delay}ms):`, err)
         setLoading(false) // don't leave the login page stuck on a spinner
         setTimeout(() => { if (!cancelled) subscribe(attempt + 1) }, delay)

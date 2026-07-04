@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -36,7 +36,10 @@ const COLLECTION_LABELS = {
 
 export default function AuditLog() {
   const { t } = useLanguage()
-  const { auditLogs } = useData()
+  const { auditLogs, enableAuditLogs } = useData()
+
+  // Audit log is subscribed lazily — start it when this page opens
+  useEffect(() => { enableAuditLogs() }, [enableAuditLogs])
   const { employees } = useAuth()
 
   const [search, setSearch] = useState('')
