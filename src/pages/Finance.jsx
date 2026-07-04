@@ -606,6 +606,8 @@ export default function Finance() {
     return students
       .filter(s => {
         if (branchFilter !== 'all' && s.branch !== branchFilter) return false
+        // ROP / branch director: only their own branch
+        if ((isRop || isBranchDirector) && user?.branch !== 'all' && s.branch !== user?.branch) return false
         const price = s.totalCoursePrice || 0
         if (price <= 0) return false
         const paid = payments.filter(p => p.type === 'income' && String(p.studentId) === String(s.id))
@@ -621,10 +623,20 @@ export default function Finance() {
         const daysUntil = nextPaymentDate ? Math.ceil((new Date(nextPaymentDate) - new Date()) / (1000 * 60 * 60 * 24)) : 999
         const lastPayDate = studentPays[0]?.date || ''
         const manager = studentPays[0]?.createdByName || ''
-        return { ...s, debt, totalPaid, nextPaymentDate, daysUntil, lastPayDate, manager, trancheCount: studentPays.length }
+        // Responsible manager: managerId (or creator) of the latest payment —
+        // same attribution rule as the cron alerts and SalesInsights
+        const responsibleManagerId = studentPays[0]?.managerId || null
+        const responsibleCreatorId = studentPays[0]?.createdBy || null
+        return { ...s, debt, totalPaid, nextPaymentDate, daysUntil, lastPayDate, manager, trancheCount: studentPays.length, responsibleManagerId, responsibleCreatorId }
+      })
+      // Sales reps only see THEIR OWN expected installments
+      .filter(s => {
+        if (!isSales) return true
+        return (user?.managerId && s.responsibleManagerId === user.managerId) ||
+               (user?.id && s.responsibleCreatorId === user.id)
       })
       .sort((a, b) => a.daysUntil - b.daysUntil)
-  }, [students, payments, branchFilter])
+  }, [students, payments, branchFilter, isSales, isRop, isBranchDirector, user])
 
   // ─── Month navigation ──────────────────────────────────────────────────
   const prevMonth = () => {
@@ -935,10 +947,10 @@ export default function Finance() {
           <div className="glass-card rounded-2xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all" onClick={() => setShowDoplataList(true)}>
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-amber-50 rounded-lg"><CreditCard size={16} className="text-amber-600" /></div>
-              <span className="text-xs text-slate-500">{t('finance.expected_doplata')}</span>
+              <span className="text-xs text-slate-500">{isSales ? 'Мои ожидаемые доплаты' : t('finance.expected_doplata')}</span>
             </div>
-            <p className="text-lg font-bold text-amber-600">{formatRevenue(realRevenueData.doplata)}</p>
-            <p className="text-[10px] text-amber-500 mt-0.5">{pendingDoplataList.length} учеников · нажмите для подробностей</p>
+            <p className="text-lg font-bold text-amber-600">{formatRevenue(pendingDoplataList.reduce((s, d) => s + d.debt, 0))}</p>
+            <p className="text-[10px] text-amber-500 mt-0.5">{pendingDoplataList.length} {isSales ? 'ваших учеников' : 'учеников'} · нажмите для подробностей</p>
           </div>
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -1811,7 +1823,7 @@ export default function Finance() {
       </Modal>
 
       {/* ─── Pending Doplata Modal ────────────────────────────────────── */}
-      <Modal isOpen={showDoplataList} onClose={() => setShowDoplataList(false)} title="Ожидаемые доплаты" size="xl">
+      <Modal isOpen={showDoplataList} onClose={() => setShowDoplataList(false)} title={isSales ? 'Мои ожидаемые доплаты' : 'Ожидаемые доплаты'} size="xl">
         {pendingDoplataList.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <CheckCircle size={32} className="mx-auto mb-2 opacity-50" />
