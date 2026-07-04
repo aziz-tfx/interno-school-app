@@ -16,6 +16,7 @@ import { db } from '../firebase'
 import { collection, doc, setDoc, query, where, onSnapshot } from 'firebase/firestore'
 import Modal from '../components/Modal'
 import PaymentForm from '../components/PaymentForm'
+import SalesInsights from '../components/SalesInsights'
 import { toast } from '../components/Toaster'
 import { fetchAmoPerformance, fetchAmoPerformanceV2, fetchAmoCalls } from '../utils/amocrm'
 
@@ -953,6 +954,9 @@ export default function Finance() {
           </div>
         </div>
       )}
+
+      {/* ─── Role-aware sales insights (manager / ROP / owner) ──────────── */}
+      <SalesInsights />
 
       {/* ─── Manager KPI Cards ──────────────────────────────────────────── */}
       {/* ─── Revenue forecast (expected doplata cash-in) ─────────────────── */}
