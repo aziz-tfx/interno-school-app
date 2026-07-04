@@ -52,8 +52,10 @@ export function DataProvider({ children, currentUser }) {
   // Schedule collection
   const [schedule, setSchedule] = useState([])
 
-  // Audit log collection
+  // Audit log collection — subscribed lazily, only when the Audit page
+  // requests it via enableAuditLogs() (saves up to 500 reads per admin session)
   const [auditLogs, setAuditLogs] = useState([])
+  const [auditWanted, setAuditWanted] = useState(false)
 
   // Messages collection (student ↔ teacher chat)
   const [messages, setMessages] = useState([])
@@ -109,7 +111,15 @@ export function DataProvider({ children, currentUser }) {
     // and a listener stuck in a long backoff window reads as "the app hangs".
     const RETRY_BASE_MS = 1000
     const RETRY_MAX_MS = 15000
-    const retryDelay = (attempt) => Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** attempt)
+    // EXCEPTION — resource-exhausted (quota). Retrying fast against an
+    // exhausted quota is a self-inflicted death spiral: each attempt on a
+    // big collection burns reads before failing, which burns the quota
+    // faster. Nothing will succeed until the quota recovers, so wait long.
+    const QUOTA_RETRY_MS = 5 * 60 * 1000
+    const retryDelay = (attempt, err) =>
+      err?.code === 'resource-exhausted'
+        ? QUOTA_RETRY_MS
+        : Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** attempt)
 
     function markLoaded(loadKey) {
       if (!loadedRef.current[loadKey]) {
@@ -146,10 +156,10 @@ export function DataProvider({ children, currentUser }) {
         setter(items)
         markLoaded(loadKey)
       }, (err) => {
-        console.error(`Collection ${collectionName} error (retry in ${retryDelay(attempt)}ms):`, err)
+        console.error(`Collection ${collectionName} error (retry in ${retryDelay(attempt, err)}ms):`, err)
         markLoaded(loadKey) // never block the initial loading gate on a dead listener
         activeUnsubs.delete(loadKey)
-        setTimeout(() => subscribeCollection(collectionName, setter, loadKey, attempt + 1), retryDelay(attempt))
+        setTimeout(() => subscribeCollection(collectionName, setter, loadKey, attempt + 1), retryDelay(attempt, err))
       })
       activeUnsubs.set(loadKey, unsub)
     }
@@ -184,10 +194,10 @@ export function DataProvider({ children, currentUser }) {
         }
         markLoaded(loadKey)
       }, (err) => {
-        console.error(`Meta doc ${collectionName} error (retry in ${retryDelay(attempt)}ms):`, err)
+        console.error(`Meta doc ${collectionName} error (retry in ${retryDelay(attempt, err)}ms):`, err)
         markLoaded(loadKey)
         activeUnsubs.delete(loadKey)
-        setTimeout(() => subscribeMetaDoc(collectionName, setter, loadKey, attempt + 1), retryDelay(attempt))
+        setTimeout(() => subscribeMetaDoc(collectionName, setter, loadKey, attempt + 1), retryDelay(attempt, err))
       })
       activeUnsubs.set(loadKey, unsub)
     }
@@ -235,38 +245,11 @@ export function DataProvider({ children, currentUser }) {
     if (needsGame) subscribeCollection('studentGameData', setStudentGameData, 'studentGameData')
     else skipCollection('studentGameData')
 
-    // Audit log — huge collection, only for owner/admin (the audit page).
-    // Cap at the last 500 entries: the page paginates client-side within
-    // that window. Without the cap older records would pull thousands of
-    // docs per session and burn through Firestore read quota.
-    // useFallback: composite index (tenantId, timestamp desc) missing →
-    // unordered where + limit; клиент отсортирует сам.
-    function subscribeAuditLog(attempt = 0, useFallback = false) {
-      if (cancelled) return
-      if (attempt === 0 && !useFallback) trackAwaitingServer('auditLogs')
-      const q = useFallback
-        ? query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), limit(500))
-        : query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), orderBy('timestamp', 'desc'), limit(500))
-      const unsub = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
-        attempt = 0
-        if (!snap.metadata.fromCache) markServerSynced('auditLogs')
-        setAuditLogs(snap.docs.map(d => ({ ...d.data(), id: d.id })))
-        markLoaded('auditLogs')
-      }, (err) => {
-        console.error('Collection auditLog error:', err)
-        markLoaded('auditLogs')
-        activeUnsubs.delete('auditLogs')
-        if (!useFallback && err?.code === 'failed-precondition') {
-          console.warn('auditLog composite index missing; falling back to unordered query')
-          subscribeAuditLog(0, true)
-          return
-        }
-        setTimeout(() => subscribeAuditLog(attempt + 1, useFallback), retryDelay(attempt))
-      })
-      activeUnsubs.set('auditLogs', unsub)
-    }
-    if (needsAudit) subscribeAuditLog()
-    else skipCollection('auditLogs')
+    // Audit log is subscribed LAZILY in its own effect below — only when
+    // the Audit page actually asks for it (enableAuditLogs). Loading up to
+    // 500 docs globally for every admin session was one of the biggest
+    // read-quota consumers. Never block the loading gate on it:
+    skipCollection('auditLogs')
 
     // Student ↔ teacher chat — only for LMS-participating roles
     if (needsMessages) subscribeCollection('messages', setMessages, 'messages')
@@ -277,7 +260,40 @@ export function DataProvider({ children, currentUser }) {
       activeUnsubs.forEach(unsub => unsub())
       activeUnsubs.clear()
     }
-  }, [tenantId, role, needsLms, needsMessages, needsAudit, needsGame, needsSchedule])
+  }, [tenantId, role, needsLms, needsMessages, needsGame, needsSchedule])
+
+  // ─── Lazy audit log subscription ──────────────────────────────────
+  // Starts only after the Audit page mounts and calls enableAuditLogs().
+  // Cap at the last 500 entries; falls back to an unordered query if the
+  // (tenantId, timestamp desc) composite index isn't provisioned.
+  useEffect(() => {
+    if (!needsAudit || !auditWanted) return
+    let cancelled = false
+    let unsub = null
+    const delay = (attempt, err) =>
+      err?.code === 'resource-exhausted' ? 5 * 60 * 1000 : Math.min(15000, 1000 * 2 ** attempt)
+
+    const subscribe = (attempt = 0, useFallback = false) => {
+      if (cancelled) return
+      const q = useFallback
+        ? query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), limit(500))
+        : query(collection(db, 'auditLog'), where('tenantId', '==', tenantId), orderBy('timestamp', 'desc'), limit(500))
+      unsub = onSnapshot(q, (snap) => {
+        attempt = 0
+        setAuditLogs(snap.docs.map(d => ({ ...d.data(), id: d.id })))
+      }, (err) => {
+        console.error('Collection auditLog error:', err)
+        if (!useFallback && err?.code === 'failed-precondition') {
+          console.warn('auditLog composite index missing; falling back to unordered query')
+          subscribe(0, true)
+          return
+        }
+        setTimeout(() => { if (!cancelled) subscribe(attempt + 1, useFallback) }, delay(attempt, err))
+      })
+    }
+    subscribe()
+    return () => { cancelled = true; unsub?.() }
+  }, [tenantId, needsAudit, auditWanted])
 
   // Helper: get user info for audit
   const auditUser = () => currentUser ? { id: currentUser.id || currentUser._docId, name: currentUser.name, role: currentUser.role } : {}
@@ -896,6 +912,7 @@ export function DataProvider({ children, currentUser }) {
       studentGameData, updateStudentGameData,
       schedule, addScheduleEntry, updateScheduleEntry, deleteScheduleEntry,
       auditLogs,
+      enableAuditLogs: () => setAuditWanted(true),
       tenantId,
       loading,
       // true while any subscribed collection is still cache-only (no
