@@ -65,7 +65,9 @@ export default function Finance() {
 
   // ─── State ──────────────────────────────────────────────────────────────
   const [paymentModal, setPaymentModal] = useState(false)
-  const [showDoplataList, setShowDoplataList] = useState(false)
+  // Page tabs: 'overview' (ежедневная работа) | 'debts' (вся дебиторка) |
+  // 'analytics' (бизнес-сводка руководителя)
+  const [pageTab, setPageTab] = useState('overview')
   const [paymentType, setPaymentType] = useState('new') // 'new' | 'doplata'
   const [branchFilter, setBranchFilter] = useState(user?.branch !== 'all' ? user.branch : 'all')
   const [editingPayment, setEditingPayment] = useState(null)
@@ -908,8 +910,26 @@ export default function Finance() {
         )}
       </div>
 
+      {/* ─── Page tabs ──────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 glass-card rounded-xl p-1 w-fit">
+        {[
+          ['overview', 'Обзор'],
+          ['debts', 'Доплаты и долги'],
+          ...(isAdmin ? [['analytics', 'Аналитика']] : []),
+        ].map(([key, label]) => (
+          <button key={key} onClick={() => setPageTab(key)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              pageTab === key
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* ─── Team Summary KPIs ──────────────────────────────────────────── */}
-      {!isSales && (
+      {pageTab === 'overview' && !isSales && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
           <div className="glass-card rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -944,7 +964,7 @@ export default function Finance() {
             </div>
             <p className="text-lg font-bold text-slate-900">{realRevenueData.salesCount} <span className="text-sm text-slate-400">/ {teamTotals.planSales}</span></p>
           </div>
-          <div className="glass-card rounded-2xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all" onClick={() => setShowDoplataList(true)}>
+          <div className="glass-card rounded-2xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all" onClick={() => setPageTab('debts')}>
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-amber-50 rounded-lg"><CreditCard size={16} className="text-amber-600" /></div>
               <span className="text-xs text-slate-500">{isSales ? 'Мои ожидаемые доплаты' : t('finance.expected_doplata')}</span>
@@ -968,11 +988,11 @@ export default function Finance() {
       )}
 
       {/* ─── Role-aware sales insights (manager / ROP / owner) ──────────── */}
-      <SalesInsights />
+      {pageTab === 'overview' && <SalesInsights show={['my', 'team']} />}
 
       {/* ─── Manager KPI Cards ──────────────────────────────────────────── */}
       {/* ─── Revenue forecast (expected doplata cash-in) ─────────────────── */}
-      {(isAdmin || isRop || isBranchDirector) && (() => {
+      {pageTab === 'debts' && (isAdmin || isRop || isBranchDirector) && (() => {
         const today = new Date()
         const horizon = (days) => {
           const d = new Date(today)
@@ -1037,7 +1057,7 @@ export default function Finance() {
         )
       })()}
 
-      {canSeeSalesList && (
+      {pageTab === 'overview' && canSeeSalesList && (
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           <BarChart3 size={20} className="text-blue-600" />
@@ -1245,7 +1265,7 @@ export default function Finance() {
       )}
 
       {/* ─── Recent Transactions ─────────────────────────────────────────── */}
-      {canSeeSalesList && (
+      {pageTab === 'overview' && canSeeSalesList && (
       <div className="glass-card rounded-2xl p-4 md:p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <ArrowUpRight size={20} className="text-emerald-600" />
@@ -1822,15 +1842,23 @@ export default function Finance() {
         )}
       </Modal>
 
-      {/* ─── Pending Doplata Modal ────────────────────────────────────── */}
-      <Modal isOpen={showDoplataList} onClose={() => setShowDoplataList(false)} title={isSales ? 'Мои ожидаемые доплаты' : 'Ожидаемые доплаты'} size="xl">
+      {/* ─── Debts tab: full expected-installments list ────────────────── */}
+      {pageTab === 'debts' && (
+      <div className="glass-card rounded-2xl p-4 md:p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <CreditCard size={20} className="text-amber-600" />
+          {isSales ? 'Мои ожидаемые доплаты' : 'Ожидаемые доплаты'}
+          <span className="ml-auto text-sm font-bold text-amber-600">
+            {formatRevenue(pendingDoplataList.reduce((s, d) => s + d.debt, 0))} сум · {pendingDoplataList.length} учеников
+          </span>
+        </h3>
         {pendingDoplataList.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <CheckCircle size={32} className="mx-auto mb-2 opacity-50" />
             <p>Нет ожидаемых доплат</p>
           </div>
         ) : (
-          <div className="space-y-2 max-h-[70vh] overflow-auto">
+          <div className="space-y-2">
             <div className="grid grid-cols-6 gap-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-3 py-1 sticky top-0 bg-white z-10 border-b border-slate-100">
               <span className="col-span-2">Студент</span>
               <span>Долг</span>
@@ -1884,7 +1912,14 @@ export default function Finance() {
             </div>
           </div>
         )}
-      </Modal>
+      </div>
+      )}
+
+      {/* ─── Debts tab: top overdue debtors ────────────────────────────── */}
+      {pageTab === 'debts' && <SalesInsights show={['debtors']} />}
+
+      {/* ─── Analytics tab: owner business summary ─────────────────────── */}
+      {pageTab === 'analytics' && isAdmin && <SalesInsights show={['business']} />}
     </div>
   )
 }
