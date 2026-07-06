@@ -65,7 +65,10 @@ function StatCard({ icon: Icon, tone = 'blue', label, value, sub }) {
   )
 }
 
-export default function SalesInsights() {
+// show — which sections to render (lets the Finance page distribute the
+// blocks across its tabs): 'my' | 'team' | 'debtors' | 'business'
+export default function SalesInsights({ show = ['my', 'team', 'debtors', 'business'] }) {
+  const has = (k) => show.includes(k)
   const { user, employees } = useAuth()
   const { payments, students, branches, getSalesPlan, tenantId } = useData()
 
@@ -326,7 +329,7 @@ export default function SalesInsights() {
   return (
     <div className="space-y-4">
       {/* ═══ Manager personal panel ═══ */}
-      {managerPanel && (
+      {has('my') && managerPanel && (
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <Target size={20} className="text-violet-600" />
@@ -367,7 +370,7 @@ export default function SalesInsights() {
       )}
 
       {/* ═══ ROP / Owner team panel ═══ */}
-      {teamPanel && (
+      {has('team') && teamPanel && (
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <Filter size={20} className="text-blue-600" />
@@ -419,35 +422,40 @@ export default function SalesInsights() {
             </div>
           </div>
 
-          {/* Top overdue debtors */}
-          {teamPanel.topDebtors.length > 0 && (
-            <div className="mt-5">
-              <p className="text-sm font-medium text-slate-600 mb-2">Топ просроченных должников</p>
-              <div className="space-y-1.5">
-                {teamPanel.topDebtors.map(d => (
-                  <div key={d.id} className="flex items-center justify-between py-2 px-3 bg-red-50/60 border border-red-100 rounded-xl text-sm">
-                    <div className="min-w-0 flex items-center gap-2">
-                      <span className="font-medium text-slate-800 truncate">{d.name}</span>
-                      {d.phone && (
-                        <a href={`tel:${d.phone}`} className="text-xs text-blue-600 flex items-center gap-1 flex-shrink-0">
-                          <Phone size={11} /> {d.phone}
-                        </a>
-                      )}
-                    </div>
-                    <div className="text-right flex-shrink-0 ml-3">
-                      <span className="font-bold text-red-600">{fmtFull(d.debt)} сум</span>
-                      {d.nextPaymentDate && <span className="text-xs text-slate-400 ml-2">срок {d.nextPaymentDate}</span>}
-                    </div>
-                  </div>
-                ))}
+        </div>
+      )}
+
+      {/* ═══ Top overdue debtors (Доплаты tab) ═══ */}
+      {has('debtors') && teamPanel && teamPanel.topDebtors.length > 0 && (
+        <div className="glass-card rounded-2xl p-4 md:p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <AlertTriangle size={20} className="text-red-500" />
+            Топ просроченных должников
+            <span className="ml-auto text-sm font-bold text-red-600">{fmtMoney(teamPanel.overdueTotal)} сум просрочено</span>
+          </h3>
+          <div className="space-y-1.5">
+            {teamPanel.topDebtors.map(d => (
+              <div key={d.id} className="flex items-center justify-between py-2 px-3 bg-red-50/60 border border-red-100 rounded-xl text-sm">
+                <div className="min-w-0 flex items-center gap-2">
+                  <span className="font-medium text-slate-800 truncate">{d.name}</span>
+                  {d.phone && (
+                    <a href={`tel:${d.phone}`} className="text-xs text-blue-600 flex items-center gap-1 flex-shrink-0">
+                      <Phone size={11} /> {d.phone}
+                    </a>
+                  )}
+                </div>
+                <div className="text-right flex-shrink-0 ml-3">
+                  <span className="font-bold text-red-600">{fmtFull(d.debt)} сум</span>
+                  {d.nextPaymentDate && <span className="text-xs text-slate-400 ml-2">срок {d.nextPaymentDate}</span>}
+                </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
 
       {/* ═══ Owner extras ═══ */}
-      {ownerPanel && (
+      {has('business') && ownerPanel && (
         <div className="glass-card rounded-2xl p-4 md:p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
             <Building2 size={20} className="text-emerald-600" />
