@@ -291,58 +291,89 @@ export default function Finance() {
     }
   }
 
+  // Retry/backoff for the report listeners below. A Firestore onSnapshot
+  // that errors (quota throttle, transient unavailable) DIES PERMANENTLY —
+  // the SDK never reconnects it on its own. Without a retry these numbers
+  // just vanish until a full page refresh ("цифры перестали выходить"). We
+  // mirror DataContext: fast backoff for transient errors, a long 5-min
+  // wait for resource-exhausted so we don't feed a quota death-spiral.
+  const reportRetryDelay = (attempt, err) =>
+    err?.code === 'resource-exhausted'
+      ? 5 * 60 * 1000
+      : Math.min(15000, 1000 * 2 ** attempt)
+
   // ─── Firestore: Load reportPlans for this month ─────────────────────────
   useEffect(() => {
-    const q = query(collection(db, 'reportPlans'), where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
-    const unsub = onSnapshot(q, (snap) => {
-      const p = {}
-      snap.docs.forEach(d => {
-        const data = d.data()
-        p[data.manager] = data
+    let cancelled = false
+    let unsub = null
+    const subscribe = (attempt = 0) => {
+      if (cancelled) return
+      const q = query(collection(db, 'reportPlans'), where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
+      unsub = onSnapshot(q, (snap) => {
+        attempt = 0 // healthy again — next error restarts backoff from scratch
+        const p = {}
+        snap.docs.forEach(d => {
+          const data = d.data()
+          p[data.manager] = data
+        })
+        setReportPlans(p)
+      }, (err) => {
+        console.error(`reportPlans listener error (retry in ${reportRetryDelay(attempt, err)}ms):`, err)
+        setTimeout(() => subscribe(attempt + 1), reportRetryDelay(attempt, err))
       })
-      setReportPlans(p)
-    })
-    return unsub
+    }
+    subscribe()
+    return () => { cancelled = true; unsub?.() }
   }, [monthKey, tenantId])
 
   // ─── Firestore: Load reportDaily for this month ─────────────────────────
   // Supports per-manager "override" entries (day='override') that REPLACE
   // the aggregated daily totals for that manager.
   useEffect(() => {
-    const q = query(collection(db, 'reportDaily'), where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
-    const unsub = onSnapshot(q, (snap) => {
-      const daily = {}
-      const overrides = {}
-      snap.docs.forEach(docSnap => {
-        const data = docSnap.data()
-        const mgr = data.manager
-        if (data.day === 'override') {
-          overrides[mgr] = {
-            leads: data.leads || 0,
-            conversations: data.conversations || 0,
-            signups: data.signups || 0,
-            visited: data.visited || 0,
-            sales: data.sales || 0,
-            revenue: data.revenue || 0,
+    let cancelled = false
+    let unsub = null
+    const subscribe = (attempt = 0) => {
+      if (cancelled) return
+      const q = query(collection(db, 'reportDaily'), where('monthKey', '==', monthKey), where('tenantId', '==', tenantId))
+      unsub = onSnapshot(q, (snap) => {
+        attempt = 0 // healthy again — next error restarts backoff from scratch
+        const daily = {}
+        const overrides = {}
+        snap.docs.forEach(docSnap => {
+          const data = docSnap.data()
+          const mgr = data.manager
+          if (data.day === 'override') {
+            overrides[mgr] = {
+              leads: data.leads || 0,
+              conversations: data.conversations || 0,
+              signups: data.signups || 0,
+              visited: data.visited || 0,
+              sales: data.sales || 0,
+              revenue: data.revenue || 0,
+            }
+            return
           }
-          return
-        }
-        if (!daily[mgr]) daily[mgr] = { leads: 0, conversations: 0, signups: 0, visited: 0, sales: 0, revenue: 0 }
-        daily[mgr].leads += data.leads || 0
-        daily[mgr].conversations += data.conversations || 0
-        daily[mgr].signups += data.signups || 0
-        daily[mgr].visited += data.visited || 0
-        daily[mgr].sales += data.sales || 0
-        daily[mgr].revenue += data.revenue || 0
+          if (!daily[mgr]) daily[mgr] = { leads: 0, conversations: 0, signups: 0, visited: 0, sales: 0, revenue: 0 }
+          daily[mgr].leads += data.leads || 0
+          daily[mgr].conversations += data.conversations || 0
+          daily[mgr].signups += data.signups || 0
+          daily[mgr].visited += data.visited || 0
+          daily[mgr].sales += data.sales || 0
+          daily[mgr].revenue += data.revenue || 0
+        })
+        // Apply overrides: replace aggregated values for managers with override entry
+        const merged = { ...daily }
+        Object.keys(overrides).forEach(mgr => {
+          merged[mgr] = overrides[mgr]
+        })
+        setReportDaily(merged)
+      }, (err) => {
+        console.error(`reportDaily listener error (retry in ${reportRetryDelay(attempt, err)}ms):`, err)
+        setTimeout(() => subscribe(attempt + 1), reportRetryDelay(attempt, err))
       })
-      // Apply overrides: replace aggregated values for managers with override entry
-      const merged = { ...daily }
-      Object.keys(overrides).forEach(mgr => {
-        merged[mgr] = overrides[mgr]
-      })
-      setReportDaily(merged)
-    })
-    return unsub
+    }
+    subscribe()
+    return () => { cancelled = true; unsub?.() }
   }, [monthKey, tenantId])
 
   // ─── Sales staff for current view ────────────────────────────────────────
