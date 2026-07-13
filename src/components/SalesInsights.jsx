@@ -8,6 +8,7 @@ import {
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
+import { sameBranch } from '../utils/branchMatch'
 
 // ─── Role-aware sales analytics for the Finance page ────────────────────
 // Always computed for the CURRENT month (run-rate metrics don't make sense
@@ -146,9 +147,9 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
       e.role === 'sales' && e.status !== 'pending' && e.status !== 'rejected' && !e.deleted &&
       (e.tenantId || 'default') === (user?.tenantId || 'default')
     )
-    if (scopeBranch) staff = staff.filter(e => e.branch === scopeBranch)
+    if (scopeBranch) staff = staff.filter(e => sameBranch(e.branch, scopeBranch, branches))
     return staff
-  }, [employees, scopeBranch, user])
+  }, [employees, scopeBranch, user, branches])
 
   // ─── Current-month income payments in scope ───
   const monthPays = useMemo(() => {
@@ -220,7 +221,7 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
 
     // Rank among branch colleagues
     const colleagues = (employees || []).filter(e =>
-      e.role === 'sales' && !e.deleted && e.branch === user.branch && e.managerId
+      e.role === 'sales' && !e.deleted && sameBranch(e.branch, user.branch, branches) && e.managerId
     )
     const ranked = colleagues.map(e => ({
       id: e.managerId,

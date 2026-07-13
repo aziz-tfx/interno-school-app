@@ -64,6 +64,11 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     e.status !== 'rejected' &&
     (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
   )
+  // Effective managerId: some accounts (created before managerId existed, or
+  // whose backfill write was blocked during a quota outage) have no managerId
+  // yet. Fall back to the SAME deterministic id the AuthContext backfill
+  // assigns (`mgr_<id>`) so the split stays correct once the backfill runs.
+  const effManagerId = (e) => e.managerId || `mgr_${e.id ?? e._docId}`
 
   const canExpenses = hasPermission('finance', 'expenses')
   const fileInputRef = useRef(null)
@@ -1691,18 +1696,21 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                       <select value={sp.managerId}
                         onChange={(e) => {
                           const id = e.target.value
-                          const mgr = splitCandidates.find(m => m.managerId === id)
+                          const mgr = splitCandidates.find(m => effManagerId(m) === id)
                           updateSplit(i, { managerId: id, name: mgr?.name || '' })
                         }}
                         className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">— менеджер —</option>
                         {splitCandidates
-                          .filter(m => m.managerId && (m.managerId === sp.managerId || !splits.some(s2 => s2.managerId === m.managerId)))
-                          .map(m => (
-                            <option key={m.id} value={m.managerId}>
-                              {m.name} · {m.role === 'rop' ? 'РОП' : m.role === 'branch_director' ? 'Рук. филиала' : 'Менеджер'}
-                            </option>
-                          ))}
+                          .filter(m => { const mid = effManagerId(m); return mid === sp.managerId || !splits.some(s2 => s2.managerId === mid) })
+                          .map(m => {
+                            const mid = effManagerId(m)
+                            return (
+                              <option key={m.id ?? m._docId} value={mid}>
+                                {m.name} · {m.role === 'rop' ? 'РОП' : m.role === 'branch_director' ? 'Рук. филиала' : 'Менеджер'}
+                              </option>
+                            )
+                          })}
                       </select>
                       <input type="number" min="0" value={sp.amount || ''}
                         onChange={(e) => updateSplit(i, { amount: Number(e.target.value) || 0 })}
