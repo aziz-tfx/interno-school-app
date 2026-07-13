@@ -19,6 +19,7 @@ import PaymentForm from '../components/PaymentForm'
 import SalesInsights from '../components/SalesInsights'
 import { toast } from '../components/Toaster'
 import { fetchAmoPerformance, fetchAmoPerformanceV2, fetchAmoCalls } from '../utils/amocrm'
+import { sameBranch } from '../utils/branchMatch'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 // formatRevenue is defined inside the component to access t()
@@ -354,7 +355,7 @@ export default function Finance() {
       !e.deleted
     )
     if (branchFilter !== 'all') {
-      staff = staff.filter(e => e.branch === branchFilter)
+      staff = staff.filter(e => sameBranch(e.branch, branchFilter, branches))
     }
     // If user is sales, only show their own data
     if (isSales) {
@@ -362,10 +363,10 @@ export default function Finance() {
     }
     // If user is ROP or branch_director, show only their branch
     if ((isRop || isBranchDirector) && user.branch !== 'all') {
-      staff = staff.filter(e => e.branch === user.branch)
+      staff = staff.filter(e => sameBranch(e.branch, user.branch, branches))
     }
     return staff
-  }, [employees, branchFilter, isSales, isRop, isBranchDirector, user])
+  }, [employees, branchFilter, isSales, isRop, isBranchDirector, user, branches])
 
   // Resolve which sales-capable employee owns a given payment. Each payment
   // gets exactly one owner so per-card totals can never double-count, but a
