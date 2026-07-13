@@ -172,7 +172,7 @@ export default function CourseLanding() {
         tenantId,
       })
       try {
-        await fetch('/api/amo/push-sale', {
+        const amoRes = await fetch('/api/amo/push-sale', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId },
           body: JSON.stringify({
@@ -185,6 +185,12 @@ export default function CourseLanding() {
             managerName: 'Landing (avto)',
           }),
         })
+        // Don't block enrollment on CRM, but surface failures so they aren't
+        // silently lost (fetch doesn't throw on 4xx/5xx — must check res.ok).
+        if (!amoRes.ok) {
+          const detail = await amoRes.text().catch(() => '')
+          console.warn('amo push-sale failed:', amoRes.status, detail)
+        }
       } catch (e) { console.warn('amo push failed:', e) }
 
       const creds = { login: finalLogin, password: finalPassword }

@@ -1,7 +1,8 @@
 // Vercel Serverless Function — push sale data to amoCRM
 // POST /api/amo/push-sale
 
-import { resolveAmo } from '../_lib/tenantConfig.js'
+import { resolveAmo, getTenantId } from '../_lib/tenantConfig.js'
+import { ensureAmoToken } from '../_lib/amoClient.js'
 
 export default async function handler(req, res) {
   // CORS
@@ -13,16 +14,20 @@ export default async function handler(req, res) {
 
   const amo = await resolveAmo(req)
   const AMO_SUBDOMAIN = amo.subdomain
-  const AMO_ACCESS_TOKEN = amo.accessToken
   const AMO_PIPELINE_ID = amo.pipelineId
   const AMO_STATUS_ID = amo.statusId
 
   if (!amo.enabled) {
     return res.status(400).json({ error: 'amoCRM integration is disabled for this tenant' })
   }
-  if (!AMO_SUBDOMAIN || !AMO_ACCESS_TOKEN) {
+  if (!AMO_SUBDOMAIN || !amo.accessToken) {
     return res.status(500).json({ error: 'amoCRM not configured for this tenant. Add credentials on the Integrations page.' })
   }
+
+  // amoCRM access tokens expire (~24h) and nothing refreshes them on a schedule.
+  // Verify the token and refresh it once if it's expired, so a landing lead is
+  // never silently lost just because the token aged out.
+  const AMO_ACCESS_TOKEN = await ensureAmoToken(amo, getTenantId(req))
 
   const BASE = `https://${AMO_SUBDOMAIN}.amocrm.ru/api/v4`
   const headers = {
