@@ -507,13 +507,23 @@ export function DataProvider({ children, currentUser }) {
           priceUpdate.totalCoursePrice = payment.totalCoursePrice
         }
 
-        await updateDoc(doc(db, 'students', payment.studentId), {
-          balance: newBalance,
-          status: newStatus,
-          nextPaymentDate: payment.nextPaymentDate || student.nextPaymentDate || null,
-          ...lmsUpdate,
-          ...priceUpdate,
-        })
+        // Balance/status are DERIVED from payments — the payment doc above
+        // is the source of truth. If this secondary update is rejected (e.g.
+        // the student doc is bloated past the 1 MB rule limit, or any other
+        // rule edge case), the sale must still succeed. Never let it throw
+        // up to the caller and make the manager think the sale failed (and
+        // re-enter it → duplicate). Swallow with a warning.
+        try {
+          await updateDoc(doc(db, 'students', payment.studentId), {
+            balance: newBalance,
+            status: newStatus,
+            nextPaymentDate: payment.nextPaymentDate || student.nextPaymentDate || null,
+            ...lmsUpdate,
+            ...priceUpdate,
+          })
+        } catch (err) {
+          console.warn('Student balance update skipped (payment still saved):', err?.code || err?.message)
+        }
 
         // Auto-create student LMS account if not exists yet
         const studentPhone = student.phone || payment.phone
@@ -525,11 +535,14 @@ export function DataProvider({ children, currentUser }) {
             const allEmps = empSnap.docs.map(d => d.data())
             // Check if account already exists (by phone) within this tenant
             const existing = allEmps.find(e => e.phone === studentPhone && e.role === 'student')
-            if (!existing) {
+            // Login = phone (cleaned: digits only). The Firestore rule
+            // requires login.size() >= 3, so a too-short/garbled phone would
+            // be rejected with permission-denied — skip account creation
+            // rather than trip the rule (the sale is what matters).
+            const login = studentPhone.replace(/[^0-9]/g, '')
+            if (!existing && login.length >= 3) {
               // Generate 6-digit password
               const password = String(100000 + Math.floor(Math.random() * 900000))
-              // Login = phone (cleaned: digits only)
-              const login = studentPhone.replace(/[^0-9]/g, '')
               const newId = Date.now()
               const studentAccount = {
                 id: newId,
@@ -552,10 +565,11 @@ export function DataProvider({ children, currentUser }) {
                 lmsAccessGrantedAt: new Date().toISOString(),
               })
               return { ...newPayment, id: docRef.id, lmsCredentials: { login, password } }
-            } else {
+            } else if (existing) {
               // Account exists — return existing credentials
               return { ...newPayment, id: docRef.id, lmsCredentials: { login: existing.login, password: existing.password } }
             }
+            // else: login too short to create an account — skip silently
           } catch (err) {
             console.error('Failed to create student LMS account:', err)
           }
