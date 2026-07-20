@@ -594,19 +594,19 @@ export default function Finance() {
       if (Array.isArray(p.splits) && p.splits.length >= 2) {
         return p.splits.some(s => {
           const e = employees.find(x => x.managerId === s.managerId)
-          return e?.branch === branchId
+          return sameBranch(e?.branch, branchId, branches)
         })
       }
       const owner = resolveOwner(p)
-      if (owner?.branch && owner.branch !== 'all') return owner.branch === branchId
-      return p.branch === branchId
+      if (owner?.branch && owner.branch !== 'all') return sameBranch(owner.branch, branchId, branches)
+      return sameBranch(p.branch, branchId, branches)
     }
     // Per-branch share of a payment — splits are credited per their share.
     const amountForBranch = (p, branchId) => {
       if (Array.isArray(p.splits) && p.splits.length >= 2) {
         return p.splits.reduce((s, sp) => {
           const e = employees.find(x => x.managerId === sp.managerId)
-          return e?.branch === branchId ? s + (Number(sp.amount) || 0) : s
+          return sameBranch(e?.branch, branchId, branches) ? s + (Number(sp.amount) || 0) : s
         }, 0)
       }
       return Number(p.amount) || 0
@@ -633,15 +633,15 @@ export default function Finance() {
     const offlineCount = filtered.filter(p => p.learningFormat === 'Оффлайн').length
     const onlineCount = filtered.filter(p => p.learningFormat === 'Онлайн').length
     return { revenue, salesCount, doplata, offlineCount, onlineCount }
-  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, employees])
+  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, employees, branches])
 
   // ─── Pending doplata list (students with remaining debt + next payment date) ─
   const pendingDoplataList = useMemo(() => {
     return students
       .filter(s => {
-        if (branchFilter !== 'all' && s.branch !== branchFilter) return false
+        if (branchFilter !== 'all' && !sameBranch(s.branch, branchFilter, branches)) return false
         // ROP / branch director: only their own branch
-        if ((isRop || isBranchDirector) && user?.branch !== 'all' && s.branch !== user?.branch) return false
+        if ((isRop || isBranchDirector) && user?.branch !== 'all' && !sameBranch(s.branch, user?.branch, branches)) return false
         const price = s.totalCoursePrice || 0
         if (price <= 0) return false
         const paid = payments.filter(p => p.type === 'income' && String(p.studentId) === String(s.id))
@@ -670,7 +670,7 @@ export default function Finance() {
                (user?.id && s.responsibleCreatorId === user.id)
       })
       .sort((a, b) => a.daysUntil - b.daysUntil)
-  }, [students, payments, branchFilter, isSales, isRop, isBranchDirector, user])
+  }, [students, payments, branchFilter, isSales, isRop, isBranchDirector, user, branches])
 
   // ─── Month navigation ──────────────────────────────────────────────────
   const prevMonth = () => {
@@ -692,13 +692,13 @@ export default function Finance() {
   const filteredTransactions = useMemo(() => {
     if (!canSeeSalesList) return []
     let filtered = payments.filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey))
-    if (branchFilter !== 'all') filtered = filtered.filter(p => p.branch === branchFilter)
+    if (branchFilter !== 'all') filtered = filtered.filter(p => sameBranch(p.branch, branchFilter, branches))
     if (isSales && user?.managerId) filtered = filtered.filter(p => p.managerId === user.managerId)
     if ((isRop || isBranchDirector) && user.branch !== 'all') {
-      filtered = filtered.filter(p => p.branch === user.branch)
+      filtered = filtered.filter(p => sameBranch(p.branch, user.branch, branches))
     }
     return filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, canSeeSalesList])
+  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, canSeeSalesList, branches])
 
   const recentTransactions = useMemo(
     () => (isSales ? filteredTransactions.slice(0, 10) : filteredTransactions),
@@ -761,7 +761,7 @@ export default function Finance() {
     let list = payments.filter(p => p.type === 'income')
     if (exportFrom) list = list.filter(p => (p.date || '') >= exportFrom)
     if (exportTo) list = list.filter(p => (p.date || '') <= exportTo)
-    if (branchFilter !== 'all') list = list.filter(p => p.branch === branchFilter)
+    if (branchFilter !== 'all') list = list.filter(p => sameBranch(p.branch, branchFilter, branches))
     if (isSales && user?.managerId) {
       list = list.filter(p =>
         p.managerId === user.managerId ||
@@ -769,7 +769,7 @@ export default function Finance() {
       )
     }
     if ((isRop || isBranchDirector) && user.branch !== 'all') {
-      list = list.filter(p => p.branch === user.branch)
+      list = list.filter(p => sameBranch(p.branch, user.branch, branches))
     }
     return list.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   }
@@ -1708,7 +1708,7 @@ export default function Finance() {
                 Продажи ({(() => {
                   const mgrPayments = payments.filter(p =>
                     p.type === 'income' && (p.date || '').startsWith(monthKey) &&
-                    (branchFilter === 'all' || p.branch === branchFilter) &&
+                    (branchFilter === 'all' || sameBranch(p.branch, branchFilter, branches)) &&
                     matchesManager(p, editingKpi)
                   )
                   return mgrPayments.length
@@ -1733,7 +1733,7 @@ export default function Finance() {
             {mgrTab === 'sales' && (() => {
               const mgrPayments = payments
                 .filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey) &&
-                  (branchFilter === 'all' || p.branch === branchFilter) &&
+                  (branchFilter === 'all' || sameBranch(p.branch, branchFilter, branches)) &&
                   matchesManager(p, editingKpi))
                 .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
               const totalRevenue = mgrPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0)

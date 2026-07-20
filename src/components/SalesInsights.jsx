@@ -154,14 +154,14 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
   // ─── Current-month income payments in scope ───
   const monthPays = useMemo(() => {
     let list = payments.filter(p => p.type === 'income' && !p.cancelled && (p.date || '').startsWith(curKey))
-    if (scopeBranch) list = list.filter(p => p.branch === scopeBranch)
+    if (scopeBranch) list = list.filter(p => sameBranch(p.branch, scopeBranch, branches))
     return list
-  }, [payments, curKey, scopeBranch])
+  }, [payments, curKey, scopeBranch, branches])
 
   // ─── Debtors in scope (debt + overdue) ───
   const debtors = useMemo(() => {
     let list = students.filter(s => s.status !== 'archived' && s.status !== 'frozen')
-    if (scopeBranch) list = list.filter(s => s.branch === scopeBranch)
+    if (scopeBranch) list = list.filter(s => sameBranch(s.branch, scopeBranch, branches))
     return list.map(s => {
       const price = Number(s.totalCoursePrice) || 0
       if (price <= 0) return null
@@ -173,7 +173,7 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
       const overdue = s.nextPaymentDate && s.nextPaymentDate < today
       return { ...s, debt, overdue }
     }).filter(Boolean)
-  }, [students, payments, scopeBranch, today])
+  }, [students, payments, scopeBranch, today, branches])
 
   // ═══════════════ MANAGER PANEL ═══════════════
   const managerPanel = useMemo(() => {
