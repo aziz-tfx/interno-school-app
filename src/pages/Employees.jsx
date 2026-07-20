@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, Filter, Plus, Pencil, Trash2, Shield, Users, ShieldCheck, CheckSquare, Square, X, Clock, CheckCircle, XCircle, UserPlus } from 'lucide-react'
+import { Search, Filter, Plus, Pencil, Trash2, Shield, Users, ShieldCheck, CheckSquare, Square, X, Clock, CheckCircle, XCircle, UserPlus, UserX } from 'lucide-react'
 import { useAuth, ROLE_LABELS, ROLE_COLORS } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -9,7 +9,7 @@ import AccessControl from './AccessControl'
 
 export default function Employees() {
   const { t } = useLanguage()
-  const { user, employees, hasPermission, deleteEmployee, updateEmployee } = useAuth()
+  const { user, employees, hasPermission, deleteEmployee, updateEmployee, fireEmployee, restoreEmployee } = useAuth()
   const { getBranchNames, teachers, deleteTeacher } = useData()
   const BRANCH_LABELS = { all: 'Центральный', ...getBranchNames() }
   const [search, setSearch] = useState('')
@@ -38,7 +38,11 @@ export default function Employees() {
 
   // Pending registration requests
   const pendingEmployees = visibleEmployees.filter(e => e.status === 'pending')
-  const approvedEmployees = visibleEmployees.filter(e => e.status !== 'pending' && e.status !== 'rejected')
+  // Active staff exclude pending/rejected AND fired (fired go in their own section)
+  const approvedEmployees = visibleEmployees.filter(e => e.status !== 'pending' && e.status !== 'rejected' && e.status !== 'fired')
+  const firedEmployees = visibleEmployees.filter(e => e.status === 'fired')
+
+  const [confirmFire, setConfirmFire] = useState(null)
 
   const handleApprove = async (emp) => {
     await updateEmployee(emp.id, { status: 'approved' })
@@ -376,6 +380,12 @@ export default function Employees() {
                             </button>
                           )}
                           {canDelete && emp.id !== user.id && emp.role !== 'owner' && (
+                            <button onClick={() => setConfirmFire(emp.id)}
+                              className="p-1.5 hover:bg-amber-50 rounded-lg transition-colors" title="Уволить (закрыть доступ)">
+                              <UserX size={15} className="text-amber-600" />
+                            </button>
+                          )}
+                          {canDelete && emp.id !== user.id && emp.role !== 'owner' && (
                             <button onClick={() => setConfirmDelete(emp.id)}
                               className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title={t('employees.tooltip_delete')}>
                               <Trash2 size={15} className="text-red-500" />
@@ -392,6 +402,46 @@ export default function Employees() {
               <div className="text-center py-12 text-slate-400">{t('employees.empty')}</div>
             )}
           </div>
+
+          {/* Fired employees — access revoked, data kept */}
+          {firedEmployees.length > 0 && (
+            <div className="glass-card rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 bg-amber-50/60 border-b border-amber-100 flex items-center gap-2">
+                <UserX size={16} className="text-amber-600" />
+                <h3 className="text-sm font-semibold text-slate-700">Уволенные сотрудники</h3>
+                <span className="text-xs text-slate-400">доступ закрыт · данные сохранены</span>
+                <span className="ml-auto text-xs font-medium text-amber-600">{firedEmployees.length}</span>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {firedEmployees.map(emp => (
+                  <div key={emp.id} className="flex items-center gap-3 px-4 py-3 opacity-75">
+                    <div className={`w-8 h-8 ${ROLE_COLORS[emp.role] || 'bg-slate-500'} rounded-full flex items-center justify-center text-white text-xs font-bold grayscale`}>
+                      {emp.avatar || '?'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-slate-700 truncate">{emp.name}</p>
+                      <p className="text-xs text-slate-400">
+                        {ROLE_LABELS[emp.role] || emp.role} · {BRANCH_LABELS[emp.branch] || emp.branch}
+                        {emp.firedAt ? ` · уволен ${emp.firedAt.slice(0, 10)}` : ''}
+                      </p>
+                    </div>
+                    {canDelete && (
+                      <button onClick={() => restoreEmployee(emp.id)}
+                        className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors">
+                        Восстановить доступ
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button onClick={() => setConfirmDelete(emp.id)}
+                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="Удалить полностью">
+                        <Trash2 size={14} className="text-red-400" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -423,6 +473,26 @@ export default function Employees() {
         <div className="flex justify-end gap-3">
           <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('employees.btn_cancel')}</button>
           <button onClick={() => handleDelete(confirmDelete)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">{t('employees.btn_delete')}</button>
+        </div>
+      </Modal>
+
+      {/* Confirm Fire */}
+      <Modal isOpen={!!confirmFire} onClose={() => setConfirmFire(null)} title="Уволить сотрудника" size="sm">
+        <div className="space-y-3 mb-4">
+          <p className="text-sm text-slate-600">
+            Сотрудник <b>{employees.find(e => e.id === confirmFire)?.name || ''}</b> потеряет доступ к системе — войти больше не сможет.
+          </p>
+          <div className="flex items-start gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg p-3">
+            <CheckCircle size={14} className="mt-0.5 flex-shrink-0" />
+            <span>Все внесённые им данные (продажи, ученики, платежи) <b>сохраняются</b> и остаются привязанными к нему. Доступ можно вернуть в любой момент.</span>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3">
+          <button onClick={() => setConfirmFire(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('employees.btn_cancel')}</button>
+          <button onClick={() => { fireEmployee(confirmFire); setConfirmFire(null) }}
+            className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 flex items-center gap-2">
+            <UserX size={14} /> Уволить
+          </button>
         </div>
       </Modal>
     </div>

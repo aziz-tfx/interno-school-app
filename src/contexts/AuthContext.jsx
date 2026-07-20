@@ -448,6 +448,10 @@ export function AuthProvider({ children }) {
         setError('Ваша заявка на регистрацию была отклонена.')
         return false
       }
+      if (found.status === 'fired') {
+        setError('Доступ к системе закрыт. Обратитесь к администратору.')
+        return false
+      }
       const { password: _, ...safe } = found
       safe.tenantId = safe.tenantId || DEFAULT_TENANT_ID
       setUser(safe)
@@ -522,6 +526,32 @@ export function AuthProvider({ children }) {
     await updateDoc(doc(employeesRef, docId), { deleted: true })
   }
 
+  // Fire an employee: revoke system access (blocked at login) but KEEP the
+  // record so all their historical data (sales attributed by managerId /
+  // createdBy, students they created, etc.) stays intact and correctly
+  // attributed. The record is not deleted — just marked terminated.
+  const fireEmployee = async (id) => {
+    const emp = employees.find(e => e.id === id)
+    const docId = emp?._docId || String(id)
+    await updateDoc(doc(employeesRef, docId), {
+      status: 'fired',
+      firedAt: new Date().toISOString(),
+    })
+    // If somehow firing the currently logged-in account, drop the session
+    if (user?.id === id) setUser(null)
+  }
+
+  // Reinstate a previously fired employee.
+  const restoreEmployee = async (id) => {
+    const emp = employees.find(e => e.id === id)
+    const docId = emp?._docId || String(id)
+    await updateDoc(doc(employeesRef, docId), {
+      status: 'approved',
+      firedAt: null,
+      reinstatedAt: new Date().toISOString(),
+    })
+  }
+
   const resetEmployees = async () => {
     // Delete all existing employees
     const batch = writeBatch(db)
@@ -540,7 +570,7 @@ export function AuthProvider({ children }) {
 
   // Helper: get sales-related staff (for plan tracking)
   const getSalesStaff = (branchId) => {
-    const list = tenantEmployees.filter(e => e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
+    const list = tenantEmployees.filter(e => (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director') && e.status !== 'fired')
     if (!branchId || branchId === 'all') return list
     return list.filter(e => e.branch === branchId)
   }
@@ -564,7 +594,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, login, logout, error, setError,
       hasPermission, getRoleLabel,
-      employees: tenantEmployees, addEmployee, updateEmployee, deleteEmployee, resetEmployees,
+      employees: tenantEmployees, addEmployee, updateEmployee, deleteEmployee, fireEmployee, restoreEmployee, resetEmployees,
       getSalesStaff, loading,
       getPermissions, updatePermissions, resetPermissions,
     }}>

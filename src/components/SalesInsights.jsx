@@ -144,7 +144,7 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
   // ─── Sales staff in scope ───
   const salesStaff = useMemo(() => {
     let staff = (employees || []).filter(e =>
-      e.role === 'sales' && e.status !== 'pending' && e.status !== 'rejected' && !e.deleted &&
+      e.role === 'sales' && e.status !== 'pending' && e.status !== 'rejected' && e.status !== 'fired' && !e.deleted &&
       (e.tenantId || 'default') === (user?.tenantId || 'default')
     )
     if (scopeBranch) staff = staff.filter(e => sameBranch(e.branch, scopeBranch, branches))
@@ -221,7 +221,7 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
 
     // Rank among branch colleagues
     const colleagues = (employees || []).filter(e =>
-      e.role === 'sales' && !e.deleted && sameBranch(e.branch, user.branch, branches) && e.managerId
+      e.role === 'sales' && !e.deleted && e.status !== 'fired' && sameBranch(e.branch, user.branch, branches) && e.managerId
     )
     const ranked = colleagues.map(e => ({
       id: e.managerId,
