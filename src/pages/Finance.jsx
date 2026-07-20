@@ -66,6 +66,7 @@ export default function Finance() {
 
   // ─── State ──────────────────────────────────────────────────────────────
   const [paymentModal, setPaymentModal] = useState(false)
+  const [showRevenueDetail, setShowRevenueDetail] = useState(false)
   // Page tabs: 'overview' (ежедневная работа) | 'debts' (вся дебиторка) |
   // 'analytics' (бизнес-сводка руководителя)
   const [pageTab, setPageTab] = useState('overview')
@@ -971,7 +972,8 @@ export default function Finance() {
             <p className="text-lg font-bold text-slate-900">{formatRevenue(teamTotals.planRevenue)}</p>
             <p className="text-xs text-slate-400">{t('finance.sum')}</p>
           </div>
-          <div className="glass-card rounded-2xl p-4 ring-2 ring-emerald-200 bg-gradient-to-br from-emerald-50/60 to-transparent relative overflow-hidden">
+          <div onClick={() => setShowRevenueDetail(true)}
+            className="glass-card rounded-2xl p-4 ring-2 ring-emerald-200 bg-gradient-to-br from-emerald-50/60 to-transparent relative overflow-hidden cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-emerald-100 rounded-lg"><TrendingUp size={16} className="text-emerald-600" /></div>
               <span className="text-xs font-medium text-emerald-700">{t('finance.fact_revenue')}</span>
@@ -988,13 +990,16 @@ export default function Finance() {
                 {teamTotals.planRevenue > 0 ? `${Math.round(realRevenueData.revenue / teamTotals.planRevenue * 100)}%` : '—'}
               </span>
             </div>
+            <p className="text-[10px] text-emerald-500/70 mt-1">нажмите для деталей</p>
           </div>
-          <div className="glass-card rounded-2xl p-4">
+          <div onClick={() => setShowRevenueDetail(true)}
+            className="glass-card rounded-2xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all">
             <div className="flex items-center gap-2 mb-2">
               <div className="p-1.5 bg-purple-50 rounded-lg"><ShoppingCart size={16} className="text-purple-600" /></div>
               <span className="text-xs text-slate-500">{t('finance.sales_label')}</span>
             </div>
             <p className="text-lg font-bold text-slate-900">{realRevenueData.salesCount} <span className="text-sm text-slate-400">/ {teamTotals.planSales}</span></p>
+            <p className="text-[10px] text-slate-400 mt-0.5">нажмите для деталей</p>
           </div>
           <div className="glass-card rounded-2xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all" onClick={() => setPageTab('debts')}>
             <div className="flex items-center gap-2 mb-2">
@@ -1361,6 +1366,108 @@ export default function Finance() {
         )}
       </div>
       )}
+
+      {/* ─── Revenue detail modal (click «Факт выручки» / «Продажи») ──────── */}
+      <Modal isOpen={showRevenueDetail} onClose={() => setShowRevenueDetail(false)}
+        title={`Факт выручки — ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`} size="xl">
+        {(() => {
+          const list = filteredTransactions
+          const isNew = (p) => (p.trancheNumber || 1) <= 1
+          const newSales = list.filter(isNew)
+          const doplatas = list.filter(p => !isNew(p))
+          const sum = (arr) => arr.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+          const total = sum(list)
+          const newSum = sum(newSales)
+          const dopSum = sum(doplatas)
+          const avgCheck = list.length ? total / list.length : 0
+          // By payment method
+          const byMethod = {}
+          list.forEach(p => {
+            const m = p.method || 'Не указан'
+            if (!byMethod[m]) byMethod[m] = { count: 0, sum: 0 }
+            byMethod[m].count++
+            byMethod[m].sum += Number(p.amount) || 0
+          })
+          const methodRows = Object.entries(byMethod).sort(([, a], [, b]) => b.sum - a.sum)
+          const maxMethod = Math.max(1, ...methodRows.map(([, v]) => v.sum))
+          return (
+            <div className="space-y-5">
+              {/* Summary tiles */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                  <p className="text-xs text-slate-500">Всего выручка</p>
+                  <p className="text-lg font-bold text-emerald-600">{formatRevenue(total)}</p>
+                  <p className="text-[11px] text-slate-400">{list.length} платежей</p>
+                </div>
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                  <p className="text-xs text-slate-500">Новые продажи</p>
+                  <p className="text-lg font-bold text-blue-600">{formatRevenue(newSum)}</p>
+                  <p className="text-[11px] text-slate-400">{newSales.length} шт.</p>
+                </div>
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                  <p className="text-xs text-slate-500">Доплаты</p>
+                  <p className="text-lg font-bold text-amber-600">{formatRevenue(dopSum)}</p>
+                  <p className="text-[11px] text-slate-400">{doplatas.length} шт.</p>
+                </div>
+                <div className="bg-violet-50 border border-violet-100 rounded-xl p-3">
+                  <p className="text-xs text-slate-500">Средний чек</p>
+                  <p className="text-lg font-bold text-violet-600">{formatRevenue(avgCheck)}</p>
+                  <p className="text-[11px] text-slate-400">
+                    {realRevenueData.offlineCount} офл · {realRevenueData.onlineCount} онл
+                  </p>
+                </div>
+              </div>
+
+              {/* By method */}
+              {methodRows.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-slate-600 mb-2">По способам оплаты</p>
+                  <div className="space-y-1.5">
+                    {methodRows.map(([method, v]) => (
+                      <div key={method} className="flex items-center gap-3">
+                        <span className="w-32 text-xs text-slate-600 text-right flex-shrink-0 truncate">{method}</span>
+                        <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-lg"
+                            style={{ width: `${Math.max(4, (v.sum / maxMethod) * 100)}%` }} />
+                        </div>
+                        <span className="w-24 text-xs font-semibold text-slate-700 tabular-nums flex-shrink-0">{formatRevenue(v.sum)}</span>
+                        <span className="w-8 text-xs text-slate-400 flex-shrink-0">{v.count}×</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Full payment list */}
+              <div>
+                <p className="text-sm font-medium text-slate-600 mb-2">Все платежи ({list.length})</p>
+                {list.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-6">Нет платежей за период</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-[40vh] overflow-auto pr-1">
+                    {list.map(p => (
+                      <div key={p.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl text-sm">
+                        <div className="min-w-0 flex items-center gap-2">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isNew(p) ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {isNew(p) ? 'НОВАЯ' : `ДОПЛ №${p.trancheNumber}`}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-medium text-slate-800 truncate">{p.student || '—'}</p>
+                            <p className="text-[11px] text-slate-400">
+                              {p.date} · {p.method || '—'}{p.createdByName ? ` · ${p.createdByName}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="font-bold text-emerald-600 flex-shrink-0 ml-2">+{formatRevenue(p.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+      </Modal>
 
       {/* ─── Payment Modal ──────────────────────────────────────────────── */}
       <Modal isOpen={paymentModal} onClose={() => setPaymentModal(false)}
