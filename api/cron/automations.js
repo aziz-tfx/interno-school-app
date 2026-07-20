@@ -304,7 +304,7 @@ export default async function handler(req, res) {
               String(e.id) === String(mgrId) ||
               String(e._docId) === String(mgrId)
             )
-            if (!mgr) continue
+            if (!mgr || mgr.status === 'fired') continue
             const mgrChatId = mgr.telegramChatId
             if (!mgrChatId || !tgConfig.botToken) continue
 

@@ -382,6 +382,7 @@ export default function Finance() {
       (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director') &&
       e.status !== 'pending' &&
       e.status !== 'rejected' &&
+      e.status !== 'fired' &&
       !e.deleted
     )
     if (branchFilter !== 'all') {
@@ -1585,7 +1586,7 @@ export default function Finance() {
                 <option value="">— не указан —</option>
                 {employees
                   .filter(e => e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
-                  .filter(e => e.status !== 'pending' && e.status !== 'rejected' && !e.deleted)
+                  .filter(e => e.status !== 'pending' && e.status !== 'rejected' && e.status !== 'fired' && !e.deleted)
                   .filter(e => editForm.branch === 'all' || !editForm.branch || !e.branch || e.branch === editForm.branch || e.branch === 'all')
                   .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
                   .map(e => (

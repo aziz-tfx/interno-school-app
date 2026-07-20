@@ -62,6 +62,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     !e.deleted &&
     e.status !== 'pending' &&
     e.status !== 'rejected' &&
+    e.status !== 'fired' &&
     (e.role === 'sales' || e.role === 'rop' || e.role === 'branch_director')
   )
   // Effective managerId: some accounts (created before managerId existed, or
