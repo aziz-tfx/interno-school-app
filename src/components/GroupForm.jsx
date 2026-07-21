@@ -52,6 +52,7 @@ export default function GroupForm({ group, onClose }) {
   const [selectedDays, setSelectedDays] = useState([])
   const [timeFrom, setTimeFrom] = useState('14:00')
   const [timeTo, setTimeTo] = useState('16:00')
+  const [errors, setErrors] = useState({})
 
   useEffect(() => {
     if (group) {
@@ -148,6 +149,17 @@ export default function GroupForm({ group, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    // ─── Required: start date always; room for offline/hybrid groups ───
+    const nextErrors = {}
+    if (!form.startDate) nextErrors.startDate = 'Укажите дату старта'
+    // Online groups have no physical room; everything else needs one.
+    if (form.format !== 'online' && !form.room) nextErrors.room = 'Выберите кабинет'
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors)
+      return
+    }
+    setErrors({})
+
     const data = {
       ...form,
       teacherId: form.teacherId ? Number(form.teacherId) : null,
@@ -223,15 +235,16 @@ export default function GroupForm({ group, onClose }) {
 
         {form.format !== 'online' && (
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_room')}</label>
-            <select value={form.room} onChange={e => set('room', e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_room')} <span className="text-red-500">*</span></label>
+            <select value={form.room} onChange={e => { set('room', e.target.value); if (errors.room) setErrors(p => ({ ...p, room: null })) }}
+              className={`w-full px-3 py-2 bg-slate-50 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.room ? 'border-red-400' : 'border-slate-200'}`}>
               <option value="">{t('groupForm.no_room')}</option>
               {branchRooms.map(r => (
                 <option key={r.id} value={r.id}>{r.name} ({t('groupForm.capacity')}: {r.capacity})</option>
               ))}
             </select>
-            {branchRooms.length === 0 && (
+            {errors.room && <p className="text-[11px] text-red-500 mt-1">{errors.room}</p>}
+            {!errors.room && branchRooms.length === 0 && (
               <p className="text-[10px] text-amber-500 mt-1">{t('groupForm.no_rooms_hint')}</p>
             )}
           </div>
@@ -250,9 +263,10 @@ export default function GroupForm({ group, onClose }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Дата старта</label>
-          <input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <label className="block text-sm font-medium text-slate-700 mb-1">Дата старта <span className="text-red-500">*</span></label>
+          <input type="date" value={form.startDate} onChange={e => { set('startDate', e.target.value); if (errors.startDate) setErrors(p => ({ ...p, startDate: null })) }}
+            className={`w-full px-3 py-2 bg-slate-50 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.startDate ? 'border-red-400' : 'border-slate-200'}`} />
+          {errors.startDate && <p className="text-[11px] text-red-500 mt-1">{errors.startDate}</p>}
         </div>
 
         <div>
