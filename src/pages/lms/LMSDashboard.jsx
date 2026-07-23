@@ -11,6 +11,7 @@ import {
   Play, BarChart3, Video, Link2, File, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { resolveStudentGroups } from '../../utils/lessonAccess'
+import LMSAnalytics from './LMSAnalytics'
 
 // ─── Lesson Form Modal ─────────────────────────────────────────────
 function LessonFormModal({ courseId, lesson, modules, onSave, onClose }) {
@@ -566,6 +567,7 @@ export default function LMSDashboard() {
   const [deleteLessonConfirm, setDeleteLessonConfirm] = useState(null)
   const [showModuleModal, setShowModuleModal] = useState(null) // { courseId, module? }
   const [deleteModuleConfirm, setDeleteModuleConfirm] = useState(null)
+  const [lmsTab, setLmsTab] = useState('overview') // 'overview' | 'analytics'
 
   const myStudent = useMemo(() => {
     if (!isStudent) return null
@@ -616,6 +618,15 @@ export default function LMSDashboard() {
   }, [groups, courses, user, isTeacher, isStudent, myStudent, hasLmsAccess])
 
   const myGroupIds = myGroups.map(g => g.id)
+
+  // Students in a teacher's own groups (used to scope LMS analytics)
+  const myStudentIds = useMemo(() => {
+    if (!isTeacher) return null
+    const names = new Set(myGroups.map(g => g.name))
+    return students
+      .filter(s => myGroupIds.includes(s.groupId) || names.has(s.group))
+      .map(s => s.id)
+  }, [isTeacher, students, myGroups, myGroupIds])
 
   // Map group → course for lookups
   const myCourseIds = useMemo(() => {
@@ -1030,6 +1041,25 @@ export default function LMSDashboard() {
         )}
       </div>
 
+      {/* LMS section tabs */}
+      <div className="flex items-center gap-1 glass-card rounded-xl p-1 w-fit">
+        {[['overview', 'Обзор'], ['analytics', 'Аналитика']].map(([key, label]) => (
+          <button key={key} onClick={() => setLmsTab(key)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              lmsTab === key ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ─── Analytics tab ─── */}
+      {lmsTab === 'analytics' && (
+        <LMSAnalytics scopeStudentIds={isTeacher ? myStudentIds : null} />
+      )}
+
+      {/* ─── Overview tab (existing dashboard) ─── */}
+      {lmsTab === 'overview' && (<>
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="glass-card rounded-xl p-4">
@@ -1563,6 +1593,7 @@ export default function LMSDashboard() {
           </div>
         </div>
       )}
+      </>)}
 
       {showCourseForm && (
         <LMSCourseForm
