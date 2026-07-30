@@ -9,6 +9,7 @@ import Teachers from './pages/Teachers'
 import Courses from './pages/Courses'
 import Finance from './pages/Finance'
 import Attendance from './pages/Attendance'
+import BranchOps from './pages/BranchOps'
 import Employees from './pages/Employees'
 import Profile from './pages/Profile'
 import Reports from './pages/Reports'
@@ -85,6 +86,9 @@ export default function App() {
         } />
         <Route path="employees" element={
           <ProtectedRoute permission="employees"><Employees /></ProtectedRoute>
+        } />
+        <Route path="branch-ops" element={
+          <ProtectedRoute permission="attendance"><BranchOps /></ProtectedRoute>
         } />
         <Route path="attendance" element={
           <ProtectedRoute permission="attendance"><Attendance /></ProtectedRoute>
