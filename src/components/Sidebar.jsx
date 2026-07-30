@@ -77,6 +77,10 @@ export default function Sidebar({ open, onClose }) {
   const allNavItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard'), permission: 'dashboard' },
     { to: '/branches', icon: Building2, label: t('sidebar.branches'), permission: 'branches' },
+    // Операционный экран филиала — только для операционных ролей
+    ...(['owner', 'admin', 'branch_director', 'branch_admin', 'rop'].includes(user?.role)
+      ? [{ to: '/branch-ops', icon: ClipboardCheck, label: 'Операционка', permission: 'attendance' }]
+      : []),
     {
       group: 'learning',
       icon: BookOpen,
