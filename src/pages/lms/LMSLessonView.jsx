@@ -213,11 +213,17 @@ export default function LMSLessonView() {
   }, [lmsModules, course])
 
   const lessonAccess = useMemo(() => {
-    if (!isStudent || !lesson || !myStudent || !myGroup) return { accessible: true }
+    if (!isStudent || !lesson || !myStudent) return { accessible: true }
+    // Promo bonus course (VIP/Premium gift) → full access regardless of the
+    // main course's debt/schedule gates
+    if (course && Array.isArray(myStudent.bonusCourses) && myStudent.bonusCourses.includes(course.name)) {
+      return { accessible: true, reason: null }
+    }
+    if (!myGroup) return { accessible: true }
     return isLessonAccessible({
       lesson, student: myStudent, group: myGroup, modules: courseModules, debt: studentDebt
     })
-  }, [isStudent, lesson, myStudent, myGroup, courseModules, studentDebt])
+  }, [isStudent, lesson, myStudent, myGroup, course, courseModules, studentDebt])
 
   // All lessons in the same course, sorted
   const allLessons = useMemo(() => {

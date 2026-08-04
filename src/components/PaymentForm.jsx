@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
@@ -109,6 +109,27 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   // Optional split between multiple sales-capable managers.
   // [] means no split (legacy single-manager attribution applies).
   const [splits, setSplits] = useState([])
+
+  // ─── Promo: VIP/Premium tariff grants free bonus courses ────────────
+  // Manager sees a gift block with pre-selected Финансы + Граф.дизайн
+  // (matched by name so renames don't break it); confirmed courses are
+  // written to the student's bonusCourses on save and open in their LMS.
+  const isPromoTariff = ['vip', 'premium'].includes(form?.tariff)
+  const [bonusCourses, setBonusCourses] = useState([])
+  const promoDefaults = useMemo(() => (
+    courses
+      .filter(c => /финанс|moliya|граф/i.test(c.name || ''))
+      .map(c => c.name)
+  ), [courses])
+  useEffect(() => {
+    if (isDoplata) return
+    if (isPromoTariff) {
+      setBonusCourses(prev => prev.length ? prev : promoDefaults.filter(n => n !== form.course))
+    } else {
+      setBonusCourses([])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPromoTariff, form.course])
   const splitsTotal = splits.reduce((s, sp) => s + (Number(sp.amount) || 0), 0)
   const splitsValid = splits.length === 0 || (splits.length >= 2
     && splits.every(s => s.managerId && Number(s.amount) > 0)
@@ -563,12 +584,25 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         name: s.name,
         amount: Number(s.amount) || 0,
       })) : null,
+      // 🎁 Promo bonus courses granted with this sale (VIP/Premium)
+      bonusCourses: (!isDoplata && isPromoTariff && bonusCourses.length > 0) ? bonusCourses : null,
     }
 
     const saved = await addPayment(paymentData)
 
     // LMS credentials returned directly from addPayment if account was created
     const lmsCredentials = saved?.lmsCredentials || null
+
+    // 🎁 Grant promo bonus courses to the student (additive, non-fatal)
+    if (!isDoplata && isPromoTariff && bonusCourses.length > 0 && studentId) {
+      try {
+        const existing = students.find(st => String(st.id) === String(studentId))
+        const merged = [...new Set([...(existing?.bonusCourses || []), ...bonusCourses])]
+        await updateStudent(String(studentId), { bonusCourses: merged })
+      } catch (err) {
+        console.warn('Bonus courses grant failed (sale still saved):', err)
+      }
+    }
 
     // ─── Show the receipt IMMEDIATELY — the sale is saved ───
     // Everything below (report stats, file uploads, notifications, contract)
@@ -895,6 +929,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
             <div className="text-slate-500">{t('paymentForm.receipt_amount')}</div>
             <div className="font-bold text-emerald-600">{formatCurrency(savedPayment.amount)}</div>
+
+            {Array.isArray(savedPayment.bonusCourses) && savedPayment.bonusCourses.length > 0 && (
+              <>
+                <div className="text-slate-500">🎁 Бонусные курсы</div>
+                <div className="font-medium text-violet-600">{savedPayment.bonusCourses.join(' + ')}</div>
+              </>
+            )}
 
             {totalCoursePrice > 0 && (
               <>
@@ -1379,6 +1420,41 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                       {availableDiscounts.map(d => <option key={d.value} value={d.value}>{d.tKey ? t(d.tKey) : d.label}</option>)}
                     </select>
                   </div>
+
+                  {/* 🎁 Promo: bonus courses for VIP/Premium */}
+                  {isPromoTariff && !isDoplata && (
+                    <div className="col-span-2 bg-gradient-to-r from-violet-50 to-fuchsia-50 border border-violet-200 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-violet-700 mb-1">
+                        🎁 Акция: бесплатные курсы к тарифу {form.tariff === 'vip' ? 'VIP' : 'Premium'}
+                      </p>
+                      <p className="text-xs text-slate-500 mb-3">
+                        Отмеченные курсы откроются у студента в личном кабинете полностью и бесплатно.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {courses
+                          .filter(c => c.name !== form.course)
+                          .map(c => {
+                            const on = bonusCourses.includes(c.name)
+                            return (
+                              <button key={c.id} type="button"
+                                onClick={() => setBonusCourses(prev => on ? prev.filter(n => n !== c.name) : [...prev, c.name])}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                  on
+                                    ? 'bg-violet-600 border-violet-600 text-white'
+                                    : 'bg-white border-slate-200 text-slate-600 hover:bg-violet-50'
+                                }`}>
+                                {on ? '✓ ' : ''}{c.icon ? `${c.icon} ` : ''}{c.name}
+                              </button>
+                            )
+                          })}
+                      </div>
+                      {bonusCourses.length > 0 && (
+                        <p className="text-[11px] text-violet-600 mt-2 font-medium">
+                          Будет открыто: {bonusCourses.join(' + ')}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Auto-calculated price display */}
                   <div>
