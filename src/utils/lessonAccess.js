@@ -7,6 +7,38 @@
 // list a student's course; this lets us "show" the course without polluting
 // Firestore with a placeholder group document.
 export const FREE_GROUP_PREFIX = 'free-'
+// Synthetic group prefix for promo BONUS courses (student.bonusCourses).
+// Unlike free-access landing groups (module 1 only), bonus courses are a
+// paid-tariff gift and grant FULL access to the course.
+export const BONUS_GROUP_PREFIX = 'bonus-'
+
+/**
+ * Build synthetic groups for every promo bonus course granted to the
+ * student (student.bonusCourses = ['Курс', ...]). Skips course names
+ * already covered by the student's real group.
+ */
+export function buildBonusGroups(student, courses, excludeCourseNames = []) {
+  const names = Array.isArray(student?.bonusCourses) ? student.bonusCourses : []
+  if (names.length === 0) return []
+  const exclude = new Set(excludeCourseNames)
+  return names
+    .filter(n => !exclude.has(n))
+    .map(n => (courses || []).find(c => c.name === n))
+    .filter(Boolean)
+    .map(course => ({
+      id: `${BONUS_GROUP_PREFIX}${course.id}`,
+      name: '🎁 Бонус (акция)',
+      course: course.name,
+      courseId: course.id,
+      branch: student.branch || 'online',
+      status: 'active',
+      teacherId: null,
+      startDate: student.startDate || new Date().toISOString().split('T')[0],
+      schedule: '',
+      synthetic: true,
+      bonus: true,
+    }))
+}
 
 /**
  * Build a synthetic group for a landing student so the cabinet/LMS can show
@@ -41,9 +73,12 @@ export function resolveStudentGroups(student, groups, courses) {
     g => (student.groupId && g.id === student.groupId) ||
          (student.group && g.name === student.group)
   )
-  if (real.length > 0) return real
-  const synth = buildFreeAccessGroup(student, courses)
-  return synth ? [synth] : []
+  const base = real.length > 0
+    ? real
+    : (() => { const synth = buildFreeAccessGroup(student, courses); return synth ? [synth] : [] })()
+  // Promo bonus courses are ADDITIVE — they appear alongside the main course
+  const bonus = buildBonusGroups(student, courses, base.map(g => g.course))
+  return [...base, ...bonus]
 }
 
 /**
@@ -54,6 +89,24 @@ export function resolveGroupById(groupId, groups, courses, student) {
   if (!groupId) return null
   const real = (groups || []).find(g => g.id === groupId)
   if (real) return real
+  if (groupId.startsWith(BONUS_GROUP_PREFIX)) {
+    const courseId = groupId.slice(BONUS_GROUP_PREFIX.length)
+    const course = (courses || []).find(c => c.id === courseId)
+    if (!course) return null
+    return {
+      id: groupId,
+      name: '🎁 Бонус (акция)',
+      course: course.name,
+      courseId: course.id,
+      branch: student?.branch || 'online',
+      status: 'active',
+      teacherId: null,
+      startDate: student?.startDate || new Date().toISOString().split('T')[0],
+      schedule: '',
+      synthetic: true,
+      bonus: true,
+    }
+  }
   if (groupId.startsWith(FREE_GROUP_PREFIX)) {
     const courseId = groupId.slice(FREE_GROUP_PREFIX.length)
     const course = (courses || []).find(c => c.id === courseId)
@@ -170,6 +223,13 @@ export function getUnlockedModuleCount(startDate) {
 export function isLessonAccessible({ lesson, student, group, modules, debt }) {
   if (!lesson || !student || !group) {
     return { accessible: false, reason: 'no_data' }
+  }
+
+  // ─── Promo bonus course: full access, no payment/schedule gates ───
+  // Granted with a VIP/Premium purchase; the student's debt applies to
+  // their MAIN course, not the gift.
+  if (group.bonus) {
+    return { accessible: true, reason: null }
   }
 
   // ─── Free/landing students: only the FIRST module is accessible ───
