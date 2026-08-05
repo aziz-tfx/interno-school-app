@@ -12,6 +12,14 @@ export const FREE_GROUP_PREFIX = 'free-'
 // paid-tariff gift and grant FULL access to the course.
 export const BONUS_GROUP_PREFIX = 'bonus-'
 
+// Курсы, участвующие в акции «бесплатно к VIP/Premium». Матчинг по имени,
+// чтобы переименование курса в админке не ломало список.
+// Сейчас: Финансы + Графический дизайн.
+const PROMO_COURSE_PATTERNS = [/финанс|moliya/i, /граф.*диз|graf.*diz/i]
+export function getPromoCourses(courses) {
+  return (courses || []).filter(c => PROMO_COURSE_PATTERNS.some(rx => rx.test(c.name || '')))
+}
+
 /**
  * Build synthetic groups for every promo bonus course granted to the
  * student (student.bonusCourses = ['Курс', ...]). Skips course names

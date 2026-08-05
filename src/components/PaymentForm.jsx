@@ -9,6 +9,7 @@ import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { pushSaleToAmo } from '../utils/amocrm'
 import { pushSaleToTelegram } from '../utils/telegram'
 import { branchToSlug } from '../utils/branchSlug'
+import { getPromoCourses } from '../utils/lessonAccess'
 import { db, storage } from '../firebase'
 import { doc, setDoc, getDoc, increment } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -116,11 +117,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   // written to the student's bonusCourses on save and open in their LMS.
   const isPromoTariff = ['vip', 'premium'].includes(form?.tariff)
   const [bonusCourses, setBonusCourses] = useState([])
-  const promoDefaults = useMemo(() => (
-    courses
-      .filter(c => /финанс|moliya|граф/i.test(c.name || ''))
-      .map(c => c.name)
-  ), [courses])
+  const promoDefaults = useMemo(() => getPromoCourses(courses).map(c => c.name), [courses])
   useEffect(() => {
     if (isDoplata) return
     if (isPromoTariff) {
@@ -1431,7 +1428,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                         Отмеченные курсы откроются у студента в личном кабинете полностью и бесплатно.
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {courses
+                        {getPromoCourses(courses)
                           .filter(c => c.name !== form.course)
                           .map(c => {
                             const on = bonusCourses.includes(c.name)

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useData } from '../contexts/DataContext'
+import { getPromoCourses } from '../utils/lessonAccess'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
 import {
@@ -241,7 +242,7 @@ export default function StudentProfile({ student, onClose }) {
             Полный бесплатный доступ в кабинете студента, независимо от долга по основному курсу.
           </p>
           <div className="flex flex-wrap gap-2">
-            {courses
+            {getPromoCourses(courses)
               .filter(c => c.name !== student.course)
               .map(c => {
                 const granted = (student.bonusCourses || []).includes(c.name)
