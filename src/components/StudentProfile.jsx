@@ -15,7 +15,7 @@ import { generateContract } from '../utils/generateContract'
 import { toast } from './Toaster'
 
 export default function StudentProfile({ student, onClose }) {
-  const { payments, branches, updateStudent } = useData()
+  const { payments, branches, courses, updateStudent } = useData()
   const { hasPermission, employees, updateEmployee, addEmployee, user } = useAuth()
   const { t } = useLanguage()
   const canPayments = hasPermission('finance', 'payments')
@@ -224,6 +224,50 @@ export default function StudentProfile({ student, onClose }) {
             className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
             <KeyRound size={12} /> Создать доступ
           </button>
+        </div>
+      )}
+
+      {/* 🎁 Gift (bonus) courses — full free LMS access, additive to the main course */}
+      {(canEditStudents || (student.bonusCourses || []).length > 0) && (
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-base">🎁</span>
+            <p className="text-sm font-semibold text-violet-800">Подарочные курсы</p>
+            {(student.bonusCourses || []).length > 0 && (
+              <span className="text-xs text-violet-500">открыто: {(student.bonusCourses || []).length}</span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 mb-3">
+            Полный бесплатный доступ в кабинете студента, независимо от долга по основному курсу.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {courses
+              .filter(c => c.name !== student.course)
+              .map(c => {
+                const granted = (student.bonusCourses || []).includes(c.name)
+                return (
+                  <button key={c.id} type="button" disabled={!canEditStudents}
+                    onClick={async () => {
+                      if (!canEditStudents) return
+                      const cur = student.bonusCourses || []
+                      const next = granted ? cur.filter(n => n !== c.name) : [...cur, c.name]
+                      try {
+                        await updateStudent(student.id, { bonusCourses: next })
+                        toast.success(granted ? `Курс «${c.name}» отозван` : `🎁 Курс «${c.name}» открыт студенту`)
+                      } catch (err) {
+                        toast.error('Не удалось сохранить: ' + (err?.message || ''))
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      granted
+                        ? 'bg-violet-600 border-violet-600 text-white'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-violet-100'
+                    } ${!canEditStudents ? 'opacity-60 cursor-default' : ''}`}>
+                    {granted ? '✓ ' : ''}{c.icon ? `${c.icon} ` : ''}{c.name}
+                  </button>
+                )
+              })}
+          </div>
         </div>
       )}
 
