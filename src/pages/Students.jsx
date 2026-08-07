@@ -4,6 +4,7 @@ import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, 
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { sameBranch } from '../utils/branchMatch'
 import { formatCurrency } from '../data/mockData'
 import Modal from '../components/Modal'
 import StudentForm from '../components/StudentForm'
@@ -74,11 +75,11 @@ export default function Students() {
   // ── Scoped data ──
   // Show students from user's branch + students created by this user (cross-branch sales)
   const allStudents = user.branch !== 'all'
-    ? students.filter(s => s.branch === user.branch || String(s.createdBy) === String(user.id))
+    ? students.filter(s => sameBranch(s.branch, user.branch, branches) || String(s.createdBy) === String(user.id))
     : students
 
   const allGroups = user.branch !== 'all'
-    ? groups.filter(g => g.branch === user.branch || allStudents.some(s => s.groupId === g.id || s.group === g.name))
+    ? groups.filter(g => sameBranch(g.branch, user.branch, branches) || allStudents.some(s => s.groupId === g.id || s.group === g.name))
     : groups
 
   // ── Student filters ──
@@ -86,7 +87,7 @@ export default function Students() {
     const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
       (s.course || '').toLowerCase().includes(search.toLowerCase()) ||
       (s.group || '').toLowerCase().includes(search.toLowerCase())
-    const matchBranch = branchFilter === 'all' || s.branch === branchFilter
+    const matchBranch = branchFilter === 'all' || sameBranch(s.branch, branchFilter, branches)
     const matchStatus = statusFilter === 'all' || s.status === statusFilter
     const matchGroup = groupFilter === 'all' || s.group === groupFilter
     return matchSearch && matchBranch && matchStatus && matchGroup

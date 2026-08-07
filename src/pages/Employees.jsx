@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Search, Filter, Plus, Pencil, Trash2, Shield, Users, ShieldCheck, CheckSquare, Square, X, Clock, CheckCircle, XCircle, UserPlus, UserX } from 'lucide-react'
 import { useAuth, ROLE_LABELS, ROLE_COLORS } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
+import { sameBranch } from '../utils/branchMatch'
 import { useLanguage } from '../contexts/LanguageContext'
 import Modal from '../components/Modal'
 import EmployeeForm from '../components/EmployeeForm'
@@ -10,7 +11,7 @@ import AccessControl from './AccessControl'
 export default function Employees() {
   const { t } = useLanguage()
   const { user, employees, hasPermission, deleteEmployee, updateEmployee, fireEmployee, restoreEmployee } = useAuth()
-  const { getBranchNames, teachers, deleteTeacher } = useData()
+  const { getBranchNames, branches, teachers, deleteTeacher } = useData()
   const BRANCH_LABELS = { all: 'Центральный', ...getBranchNames() }
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
@@ -33,7 +34,7 @@ export default function Employees() {
 
   // Branch directors only see their branch
   const visibleEmployees = user.branch !== 'all'
-    ? employees.filter(e => e.branch === user.branch || e.branch === 'all')
+    ? employees.filter(e => sameBranch(e.branch, user.branch, branches) || e.branch === 'all')
     : employees
 
   // Pending registration requests
@@ -56,7 +57,7 @@ export default function Employees() {
     const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) ||
       e.login.toLowerCase().includes(search.toLowerCase())
     const matchRole = roleFilter === 'all' || e.role === roleFilter
-    const matchBranch = branchFilter === 'all' || e.branch === branchFilter
+    const matchBranch = branchFilter === 'all' || sameBranch(e.branch, branchFilter, branches)
     return matchSearch && matchRole && matchBranch
   })
 

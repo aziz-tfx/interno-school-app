@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Check, X, Clock, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
+import { sameBranch } from '../utils/branchMatch'
 import { useLanguage } from '../contexts/LanguageContext'
 
 export default function Attendance() {
@@ -18,9 +19,9 @@ export default function Attendance() {
     let relevantStudents
     if (user.role === 'teacher') {
       // Teacher sees only their branch students
-      relevantStudents = students.filter(s => s.branch === user.branch)
+      relevantStudents = students.filter(s => sameBranch(s.branch, user.branch, branches))
     } else {
-      relevantStudents = user.branch === 'all' ? students : students.filter(s => s.branch === user.branch)
+      relevantStudents = user.branch === 'all' ? students : students.filter(s => sameBranch(s.branch, user.branch, branches))
     }
     const groups = [...new Set(relevantStudents.map(s => s.group))].sort()
     return groups

@@ -9,6 +9,7 @@ import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { pushSaleToAmo } from '../utils/amocrm'
 import { pushSaleToTelegram } from '../utils/telegram'
 import { branchToSlug } from '../utils/branchSlug'
+import { sameBranch } from '../utils/branchMatch'
 import { getPromoCourses } from '../utils/lessonAccess'
 import { db, storage } from '../firebase'
 import { doc, setDoc, getDoc, increment } from 'firebase/firestore'
@@ -208,8 +209,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
   const branchStudents = students.filter(s =>
     user?.branch !== 'all'
-      ? (s.branch === user.branch || String(s.createdBy) === String(user?.id))
-      : s.branch === form.branch
+      ? (sameBranch(s.branch, user.branch, branches) || String(s.createdBy) === String(user?.id))
+      : sameBranch(s.branch, form.branch, branches)
   )
 
   // Calculate student's previous payments and remaining debt
@@ -477,7 +478,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         const sPhone = (s.phone || '').replace(/\D/g, '')
         const sName = (s.name || '').trim().toLowerCase()
         if (phoneClean && sPhone && sPhone === phoneClean) return true
-        if (nameClean && sName && sName === nameClean && (s.branch === form.branch || !s.branch)) return true
+        if (nameClean && sName && sName === nameClean && (sameBranch(s.branch, form.branch, branches) || !s.branch)) return true
         return false
       })
       if (existingStudent) {
