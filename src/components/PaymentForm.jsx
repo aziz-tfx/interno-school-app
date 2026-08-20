@@ -6,7 +6,6 @@ import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor, Sea
 import { generateContract, buildContractBlob } from '../utils/generateContract'
 import { listTemplates, renderTemplateBlob, renderTemplateAndDownload } from '../utils/contractTemplates'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
-import { pushSaleToAmo } from '../utils/amocrm'
 import { pushSaleToTelegram } from '../utils/telegram'
 import { branchToSlug } from '../utils/branchSlug'
 import { sameBranch } from '../utils/branchMatch'
@@ -669,31 +668,6 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     // The contract URL is enriched in a follow-up edit once the upload
     // finishes (best-effort; the manager already has the notification).
     if (form.type === 'income') {
-      // Push to amoCRM (non-blocking)
-      try {
-        pushSaleToAmo({
-          clientName: form.clientName,
-          phone: form.phone,
-          course: form.course,
-          group: selectedGroup?.name || '',
-          amount: Number(form.amount),
-          method: form.method,
-          date: form.paymentDate,
-          branch: form.branch,
-          tariff: form.tariff,
-          contractNumber: form.contractNumber,
-          debt: autoDebt,
-          trancheNumber: studentPayments.length + 1,
-          managerName: user?.name || '',
-          comment: form.comment,
-        }).then(result => {
-          if (result.success) console.log('Sale pushed to amoCRM:', result.leadId)
-          else console.warn('amoCRM sync skipped:', result.error)
-        }).catch(e => console.error('amoCRM push threw:', e))
-      } catch (e) {
-        console.error('amoCRM push sync error:', e)
-      }
-
       // Build manager sales fact for this month
       const now = new Date()
       const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
