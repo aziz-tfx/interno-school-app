@@ -11,7 +11,15 @@
 body {
   font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #333333;
-  background: #f5f6f8;
+  /* Cloud canvas with soft pastel ambience — gives the frosted glass
+     surfaces something to refract. Fixed so it doesn't scroll-shift. */
+  background:
+    radial-gradient(640px 640px at 8% -5%, rgba(188, 254, 144, 0.4), transparent 60%),
+    radial-gradient(720px 720px at 100% 0%, rgba(171, 240, 255, 0.45), transparent 60%),
+    radial-gradient(640px 640px at 85% 100%, rgba(237, 223, 247, 0.7), transparent 60%),
+    radial-gradient(560px 560px at 0% 90%, rgba(231, 236, 255, 0.8), transparent 60%),
+    #f5f6f8;
+  background-attachment: fixed;
   min-height: 100vh;
   letter-spacing: -0.01em;
 }
@@ -23,51 +31,74 @@ html.dark body {
 }
 
 /* Surface utility classes.
-   Light theme = monday.com-style white workshop: flat white cards, mist
-   borders, one soft lavender-tinted shadow. The old glassmorphism names are
-   kept so the ~40 pages using them don't need edits; dark theme re-skins
-   them further down. */
+   Light theme = monday.com palette + true glassmorphism: frosted
+   translucent surfaces (backdrop blur + saturation), a 1px light edge and
+   an inset top highlight simulating refraction, lifted by the single soft
+   lavender shadow. Dark theme re-skins these names further down. */
 @layer utilities {
   .glass {
-    background: #ffffff;
-    border: 1px solid #e6e7ea;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      rgba(205, 208, 223, 0.35) 0px 2px 32px 0px;
   }
 
   .glass-strong {
-    background: #ffffff;
-    border: 1px solid #e6e7ea;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      rgba(205, 208, 223, 0.4) 0px 2px 40px 0px;
   }
 
   .glass-card {
-    background: #ffffff;
-    border: 1px solid #eceef4;
-    box-shadow: rgba(205, 208, 223, 0.4) 0px 2px 48px 0px;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+      rgba(205, 208, 223, 0.4) 0px 2px 48px 0px;
   }
 
   .glass-dark {
-    background: #ffffff;
-    border: 1px solid #e6e7ea;
+    background: rgba(255, 255, 255, 0.62);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.7);
   }
 
   .glass-input {
-    background: #ffffff;
-    border: 1px solid #dddfeb;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(221, 223, 235, 0.9);
   }
 
   .glass-hover:hover {
-    background: #ffffff;
-    box-shadow: rgba(0, 0, 0, 0.15) 0px 4px 40px 0px;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      rgba(0, 0, 0, 0.12) 0px 4px 40px 0px;
   }
 
   .glass-btn {
-    background: #ffffff;
-    border: 1px solid #dddfeb;
-    box-shadow: none;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   }
 
   .glass-btn:hover {
-    background: #f5f6f8;
-    box-shadow: none;
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
   }
 }
 
@@ -240,11 +271,14 @@ html:not(.dark) .glass-dark [class*="-600"][class*="bg-"] {
   color: #ffffff;
 }
 
-/* Hover flyout panel (rendered into body, dark navy by default) */
+/* Hover flyout panel (rendered into body, dark navy by default) —
+   frosted glass; the element already carries backdrop-blur-xl */
 html:not(.dark) .bg-slate-900\/95 {
-  background-color: #ffffff;
-  border-color: #e6e7ea;
-  box-shadow: rgba(205, 208, 223, 0.7) 0px 8px 48px 0px;
+  background-color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    rgba(205, 208, 223, 0.7) 0px 8px 48px 0px;
 }
 html:not(.dark) .bg-slate-900\/95 :where(.text-slate-300) { color: #535768; }
 html:not(.dark) .bg-slate-900\/95 [class*="hover:bg-white/10"]:hover {

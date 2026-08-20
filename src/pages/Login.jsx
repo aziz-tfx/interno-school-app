@@ -40,7 +40,7 @@ export default function Login() {
           <Logo size="xl" variant="dark" />
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white border border-[#d0d4e4] rounded-[24px] shadow-[0_2px_48px_rgba(205,208,223,0.6)] p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="glass-strong rounded-[24px] p-8 space-y-6">
           <div>
             <h2 className="text-2xl font-semibold text-[#333333] tracking-tight">{t('login.heading')}</h2>
             <p className="text-sm text-[#535768] mt-1">{t('login.subtitle')}</p>
