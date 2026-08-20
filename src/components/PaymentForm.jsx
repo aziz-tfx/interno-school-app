@@ -171,6 +171,22 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     document.addEventListener('mousedown', onClickAway)
     return () => document.removeEventListener('mousedown', onClickAway)
   }, [groupOpen])
+
+  // Searchable student picker (doplata mode — the list can be huge)
+  const [studentSearch, setStudentSearch] = useState('')
+  const [studentOpen, setStudentOpen] = useState(false)
+  const studentDropdownRef = useRef(null)
+  useEffect(() => {
+    if (!studentOpen) return
+    const onClickAway = (e) => {
+      if (studentDropdownRef.current && !studentDropdownRef.current.contains(e.target)) {
+        setStudentOpen(false)
+        setStudentSearch('')
+      }
+    }
+    document.addEventListener('mousedown', onClickAway)
+    return () => document.removeEventListener('mousedown', onClickAway)
+  }, [studentOpen])
   const [duplicateWarning, setDuplicateWarning] = useState(null) // { matches: [] }
   const bypassDuplicateRef = useRef(false)
   const [submitting, setSubmitting] = useState(false)
@@ -445,6 +461,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       }
     }
     bypassDuplicateRef.current = false
+
+    // Student is required for doplata (the picker is a custom combobox,
+    // so the native select `required` no longer covers it)
+    if (form.type === 'income' && isDoplata && !form.studentId) {
+      toast.error('Выберите ученика для доплаты')
+      return
+    }
 
     // Group is required for new sales (not doplata)
     if (form.type === 'income' && !isDoplata && !form.groupId) {
@@ -1203,13 +1226,85 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               {/* Student selector — required */}
               <div className="bg-blue-50 rounded-lg p-4 space-y-3">
                 <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wide">{t('paymentForm.select_student_doplata')}</h4>
-                <select value={form.studentId} onChange={(e) => set('studentId', e.target.value)} required
-                  className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">{t('paymentForm.select_student')}</option>
-                  {branchStudents.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} — {s.course} ({s.group})</option>
-                  ))}
-                </select>
+                {(() => {
+                  const q = studentSearch.trim().toLowerCase()
+                  const visible = !q ? branchStudents : branchStudents.filter(s => {
+                    const hay = [s.name, s.course, s.group, s.phone].filter(Boolean).join(' ').toLowerCase()
+                    return hay.includes(q)
+                  })
+                  return (
+                    <div className="relative" ref={studentDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => { setStudentOpen(o => !o); if (!studentOpen) setStudentSearch('') }}
+                        className={`w-full px-3 py-2 bg-white border rounded-lg text-sm flex items-center justify-between gap-2 transition-colors
+                          ${studentOpen ? 'border-blue-400 ring-2 ring-blue-100' : 'border-blue-200 hover:border-blue-300'}`}>
+                        <span className={`truncate text-left ${selectedStudent ? 'text-slate-900' : 'text-slate-400'}`}>
+                          {selectedStudent
+                            ? `${selectedStudent.name} — ${selectedStudent.course}${selectedStudent.group ? ` (${selectedStudent.group})` : ''}`
+                            : t('paymentForm.select_student')}
+                        </span>
+                        <ChevronDown size={14} className={`text-slate-400 transition-transform flex-shrink-0 ${studentOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {studentOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-20 overflow-hidden">
+                          <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50">
+                            <Search size={14} className="text-slate-400 flex-shrink-0" />
+                            <input
+                              type="text"
+                              autoFocus
+                              value={studentSearch}
+                              onChange={e => setStudentSearch(e.target.value)}
+                              placeholder="Поиск по имени, курсу, группе, телефону…"
+                              className="flex-1 bg-transparent outline-none text-sm placeholder:text-slate-400"
+                            />
+                            {studentSearch && (
+                              <button type="button" onClick={() => setStudentSearch('')}
+                                className="text-slate-400 hover:text-slate-600">
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="max-h-72 overflow-y-auto">
+                            {visible.length === 0 ? (
+                              <div className="px-3 py-6 text-center text-sm text-slate-400">
+                                Ничего не найдено
+                              </div>
+                            ) : visible.map(s => {
+                              const isSelected = String(form.studentId) === String(s.id)
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() => {
+                                    set('studentId', String(s.id))
+                                    setStudentOpen(false)
+                                    setStudentSearch('')
+                                  }}
+                                  className={`w-full text-left px-3 py-2 hover:bg-blue-50 flex items-start gap-2 border-b border-slate-50 last:border-b-0 transition-colors
+                                    ${isSelected ? 'bg-blue-50' : ''}`}>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-slate-900 truncate">{s.name}</div>
+                                    <div className="text-xs text-slate-500 truncate">
+                                      {s.course}
+                                      {s.group ? ` · ${s.group}` : ''}
+                                      {s.phone ? ` · ${s.phone}` : ''}
+                                    </div>
+                                  </div>
+                                  {isSelected && <Check size={14} className="text-blue-600 flex-shrink-0 mt-1" />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <div className="px-3 py-1.5 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 text-center">
+                            {visible.length} {visible.length === 1 ? 'ученик' : visible.length >= 2 && visible.length <= 4 ? 'ученика' : 'учеников'}
+                            {q && ` · фильтр: "${studentSearch}"`}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Student info card */}
                 {selectedStudent && (
