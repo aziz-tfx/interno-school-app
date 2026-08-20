@@ -9,11 +9,11 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
-  color: #1e293b;
-  background: linear-gradient(135deg, #e0e7ff 0%, #f0f4ff 25%, #faf5ff 50%, #fdf2f8 75%, #ecfeff 100%);
-  background-attachment: fixed;
+  font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #333333;
+  background: #f5f6f8;
   min-height: 100vh;
+  letter-spacing: -0.01em;
 }
 
 html.dark body {
@@ -22,60 +22,52 @@ html.dark body {
   background-attachment: fixed;
 }
 
-/* Glass utility classes */
+/* Surface utility classes.
+   Light theme = monday.com-style white workshop: flat white cards, mist
+   borders, one soft lavender-tinted shadow. The old glassmorphism names are
+   kept so the ~40 pages using them don't need edits; dark theme re-skins
+   them further down. */
 @layer utilities {
   .glass {
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.45);
+    background: #ffffff;
+    border: 1px solid #e6e7ea;
   }
 
   .glass-strong {
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: #ffffff;
+    border: 1px solid #e6e7ea;
   }
 
   .glass-card {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
+    background: #ffffff;
+    border: 1px solid #eceef4;
+    box-shadow: rgba(205, 208, 223, 0.4) 0px 2px 48px 0px;
   }
 
   .glass-dark {
-    background: rgba(15, 23, 42, 0.78);
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #ffffff;
+    border: 1px solid #e6e7ea;
   }
 
   .glass-input {
-    background: rgba(255, 255, 255, 0.5);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
+    background: #ffffff;
+    border: 1px solid #dddfeb;
   }
 
   .glass-hover:hover {
-    background: rgba(255, 255, 255, 0.85);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+    background: #ffffff;
+    box-shadow: rgba(0, 0, 0, 0.15) 0px 4px 40px 0px;
   }
 
   .glass-btn {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    background: #ffffff;
+    border: 1px solid #dddfeb;
+    box-shadow: none;
   }
 
   .glass-btn:hover {
-    background: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    background: #f5f6f8;
+    box-shadow: none;
   }
 }
 
@@ -141,6 +133,142 @@ button, a, input, select {
   transform: translateY(-2px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+   Light theme — monday.com-style re-skin
+   Same technique as the dark-mode block below: instead of editing thousands
+   of utility call sites, the most-used neutral/brand utilities are remapped
+   globally. Violet #6161ff is the single action color; neutrals move to the
+   ink/slate/cloud family; buttons become pills, cards get 24px radii and a
+   single soft lavender shadow.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* ─── Brand: blue actions → monday violet ─────────────────────────────── */
+html:not(.dark) :where(.bg-blue-600) { background-color: #6161ff; }
+html:not(.dark) :where(.hover\:bg-blue-700:hover) { background-color: #4f4fe6; }
+html:not(.dark) :where(.bg-blue-500) { background-color: #6161ff; }
+html:not(.dark) :where(.text-blue-600) { color: #5a5af5; }
+html:not(.dark) :where(.text-blue-700, .hover\:text-blue-700:hover) { color: #4747d1; }
+html:not(.dark) :where(.text-blue-500) { color: #6161ff; }
+html:not(.dark) :where(.bg-blue-50) { background-color: #e7ecff; }
+html:not(.dark) :where(.bg-blue-100) { background-color: #dbdbff; }
+html:not(.dark) :where(.border-blue-200) { border-color: #c9c9ff; }
+html:not(.dark) :where(.border-blue-500, .border-blue-600) { border-color: #6161ff; }
+html:not(.dark) :where(.bg-blue-500\/10) { background-color: rgba(97, 97, 255, 0.1); }
+html:not(.dark) :where(.shadow-blue-500\/25, .shadow-blue-500\/30) { --tw-shadow-color: rgba(97, 97, 255, 0.3); }
+
+/* Indigo/violet utilities collapse into the same violet family */
+html:not(.dark) :where(.bg-indigo-600, .bg-violet-600) { background-color: #6161ff; }
+html:not(.dark) :where(.hover\:bg-indigo-700:hover, .hover\:bg-violet-700:hover) { background-color: #4f4fe6; }
+
+/* ─── Neutrals: slate → ink/slate/iron warm-gray family ───────────────── */
+html:not(.dark) :where(.text-slate-900, .text-slate-800) { color: #333333; }
+html:not(.dark) :where(.text-slate-700) { color: #43465a; }
+html:not(.dark) :where(.text-slate-600, .text-slate-500) { color: #535768; }
+html:not(.dark) :where(.text-slate-400) { color: #808080; }
+html:not(.dark) :where(.bg-slate-50) { background-color: #f5f6f8; }
+html:not(.dark) :where(.bg-slate-100) { background-color: #eef0f5; }
+html:not(.dark) :where(.bg-slate-200) { background-color: #e3e5ee; }
+html:not(.dark) :where(.border-slate-100) { border-color: #eceef4; }
+html:not(.dark) :where(.border-slate-200) { border-color: #dddfeb; }
+html:not(.dark) :where(.border-slate-300) { border-color: #d0d4e4; }
+
+/* ─── Shape: cards 24px, buttons pill, inputs 6px ─────────────────────── */
+html:not(.dark) :where(.rounded-2xl) { border-radius: 20px; }
+html:not(.dark) :where(.rounded-3xl) { border-radius: 24px; }
+html:not(.dark) .glass-card { border-radius: 20px; }
+
+/* Pill buttons — the monday signature. Element+class beats the utility. */
+html:not(.dark) button:where(.rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl) {
+  border-radius: 9999px;
+}
+
+/* Inputs stay compact and squared-off (6px) per the reference */
+html:not(.dark) input:where(.rounded-xl, .rounded-lg, .rounded-2xl),
+html:not(.dark) select:where(.rounded-xl, .rounded-lg, .rounded-2xl),
+html:not(.dark) textarea:where(.rounded-xl, .rounded-lg, .rounded-2xl) {
+  border-radius: 6px;
+}
+
+/* Focus — violet ring on form controls */
+html:not(.dark) :where(input:focus, select:focus, textarea:focus) {
+  border-color: #8181ff;
+  box-shadow: 0 0 0 3px rgba(97, 97, 255, 0.15);
+  outline: none;
+}
+
+/* ─── Shadows: single soft lavender-tinted lift ───────────────────────── */
+/* No :where here — the rules must out-rank the Tailwind utilities that set
+   the same custom properties. */
+html:not(.dark) .shadow-sm, html:not(.dark) .shadow, html:not(.dark) .shadow-md {
+  --tw-shadow: rgba(205, 208, 223, 0.4) 0px 2px 24px 0px;
+  --tw-shadow-colored: rgba(205, 208, 223, 0.4) 0px 2px 24px 0px;
+}
+html:not(.dark) .shadow-lg, html:not(.dark) .shadow-xl, html:not(.dark) .shadow-2xl {
+  --tw-shadow: rgba(205, 208, 223, 0.5) 0px 2px 48px 0px;
+  --tw-shadow-colored: rgba(205, 208, 223, 0.5) 0px 2px 48px 0px;
+}
+html:not(.dark) .hover-lift:hover {
+  box-shadow: rgba(0, 0, 0, 0.15) 0px 5px 45px 0px;
+}
+
+/* ─── Sidebar: dark navy panel → white workshop rail ──────────────────── */
+/* Sidebar markup uses on-dark classes (text-white, bg-white/15). Re-skin
+   them inside .glass-dark so the JSX (shared with dark mode) stays intact. */
+html:not(.dark) .glass-dark {
+  color: #333333;
+  border-right: 1px solid #e6e7ea;
+}
+html:not(.dark) .glass-dark :where(.text-white) { color: #333333; }
+html:not(.dark) .glass-dark :where(.text-slate-300, .text-slate-400) { color: #535768; }
+html:not(.dark) .glass-dark :where(.text-slate-500) { color: #9095a5; }
+html:not(.dark) .glass-dark :where(.border-white\/10) { border-color: #eceef4; }
+html:not(.dark) .glass-dark [class*="hover:bg-white/8"]:hover,
+html:not(.dark) .glass-dark [class*="hover:bg-white/10"]:hover {
+  background-color: #f5f6f8;
+  color: #333333;
+}
+/* Active nav item — violet wash + violet label */
+html:not(.dark) .glass-dark .bg-white\/15,
+html:not(.dark) .glass-dark .bg-white\/10 {
+  background-color: rgba(97, 97, 255, 0.1);
+  color: #5151f0;
+  box-shadow: none;
+}
+/* Keep the avatar tile's white initial readable on its colored chip */
+html:not(.dark) .glass-dark [class*="-600"][class*="bg-"] {
+  color: #ffffff;
+}
+
+/* Hover flyout panel (rendered into body, dark navy by default) */
+html:not(.dark) .bg-slate-900\/95 {
+  background-color: #ffffff;
+  border-color: #e6e7ea;
+  box-shadow: rgba(205, 208, 223, 0.7) 0px 8px 48px 0px;
+}
+html:not(.dark) .bg-slate-900\/95 :where(.text-slate-300) { color: #535768; }
+html:not(.dark) .bg-slate-900\/95 [class*="hover:bg-white/10"]:hover {
+  background-color: #f5f6f8;
+  color: #333333;
+}
+html:not(.dark) .bg-slate-900\/95 [class*="hover:text-white"]:hover { color: #333333; }
+html:not(.dark) .bg-slate-900\/95 .bg-white\/15 {
+  background-color: rgba(97, 97, 255, 0.1);
+  color: #5151f0;
+}
+
+/* Theme-aware logo: the source SVG is white — invert it to ink on light */
+html:not(.dark) .logo-auto { filter: invert(1) brightness(0.75); }
+
+/* ─── Misc ────────────────────────────────────────────────────────────── */
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: rgba(97, 97, 255, 0.25);
+}
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(97, 97, 255, 0.4);
+}
+/* Pressed feedback on all buttons */
+html:not(.dark) button:active { transform: scale(0.98); }
 
 /* ────────────────────────────────────────────────────────────────────────
    Dark mode overrides

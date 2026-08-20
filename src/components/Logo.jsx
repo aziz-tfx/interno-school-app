@@ -17,12 +17,20 @@ export default function Logo({ size = 'md', variant = 'dark', className = '' }) 
 
   const s = sizes[size] || sizes.md
 
+  // The source SVG is white. 'dark' inverts it to ink for light surfaces,
+  // 'light' keeps it white, 'auto' follows the app theme (see index.css).
+  const variantClass = {
+    dark: '[filter:invert(1)_brightness(0.75)]',
+    light: '',
+    auto: 'logo-auto',
+  }[variant] ?? ''
+
   return (
     <div className={`flex items-center justify-center ${className}`}>
       <img
         src="/logo.svg"
         alt="INTERNO"
-        className={`${s.width} h-auto object-contain`}
+        className={`${s.width} h-auto object-contain ${variantClass}`}
       />
     </div>
   )

@@ -11,7 +11,7 @@ export default function StatCard({ title, value, change, changeType, icon: Icon,
   }
 
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between mb-4">
         <div className={`p-3 rounded-lg ${colorClasses[color] || colorClasses.blue}`}>
           <Icon size={22} />
