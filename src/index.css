@@ -354,6 +354,34 @@ html.dark {
   color-scheme: dark;
 }
 
+/* ─── Blueprint grid backdrop (from the interno-architecture landing) ───
+   Фиксированная «миллиметровка» на весь вьюпорт: мелкая сетка 24px +
+   крупные деления 120px, затухает радиально сверху, чтобы не спорить с
+   контентом. Линии затонированы фиолетовым акцентом тёмной темы. */
+html.dark body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  --bp-line: rgba(139, 92, 246, 0.05);
+  --bp-line-strong: rgba(139, 92, 246, 0.1);
+  background-image:
+    linear-gradient(var(--bp-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-line) 1px, transparent 1px),
+    linear-gradient(var(--bp-line-strong) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bp-line-strong) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+  mask-image: radial-gradient(120% 90% at 50% 0%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 0%, #000 30%, transparent 100%);
+}
+
+/* Контент приложения — над сеткой (как header/section z-1 на лендинге) */
+html.dark #root {
+  position: relative;
+  z-index: 1;
+}
+
 /* Glass surfaces — neo-bank purple-tinted */
 html.dark :where(.glass) {
   background: rgba(15, 10, 30, 0.7);
