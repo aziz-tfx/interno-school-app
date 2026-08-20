@@ -34,9 +34,8 @@ html.dark body {
    Liquid glass — the exact recipe from the interno-architecture landing:
    translucent luminosity-blended surface + backdrop blur, an inset top
    highlight, and a gradient edge drawn by ::before (bright at top/bottom,
-   fading mid) via mask-composite. A cursor-following glint (::after,
-   --mx/--my set by a delegated listener in main.jsx) lights cards up on
-   hover. Light theme = monday palette; dark theme re-tints further down. */
+   fading mid) via mask-composite.
+   Light theme = monday palette; dark theme re-tints further down. */
 :root {
   --glass-bg: rgba(255, 255, 255, 0.55);
   --glass-blur: 16px;
@@ -44,7 +43,6 @@ html.dark body {
   --glass-border-bright: rgba(255, 255, 255, 0.95);
   --glass-border-dim: rgba(255, 255, 255, 0.4);
   --glass-border-width: 1.4px;
-  --glass-glint: rgba(97, 97, 255, 0.12);
 }
 html.dark {
   --glass-bg: rgba(255, 255, 255, 0.04);
@@ -52,7 +50,6 @@ html.dark {
   --glass-shadow-inset: rgba(255, 255, 255, 0.1);
   --glass-border-bright: rgba(255, 255, 255, 0.45);
   --glass-border-dim: rgba(255, 255, 255, 0.14);
-  --glass-glint: rgba(139, 92, 246, 0.16);
 }
 
 @layer utilities {
@@ -86,23 +83,6 @@ html.dark {
     mask-composite: exclude;
     pointer-events: none;
     z-index: 1;
-  }
-
-  /* Cursor-reactive glint */
-  .glass-card::after, .glass-strong::after, .glass-btn::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-    background: radial-gradient(circle 320px at var(--mx, 50%) var(--my, 50%),
-      var(--glass-glint), rgba(255, 255, 255, 0.05) 45%, transparent 72%);
-    opacity: 0;
-    transition: opacity 0.35s;
-  }
-  .glass-card:hover::after, .glass-strong:hover::after, .glass-btn:hover::after {
-    opacity: 1;
   }
 
   /* Per-surface tuning on top of the shared recipe */
