@@ -31,47 +31,94 @@ html.dark body {
 }
 
 /* Surface utility classes.
-   Light theme = monday.com palette + true glassmorphism: frosted
-   translucent surfaces (backdrop blur + saturation), a 1px light edge and
-   an inset top highlight simulating refraction, lifted by the single soft
-   lavender shadow. Dark theme re-skins these names further down. */
+   Liquid glass — the exact recipe from the interno-architecture landing:
+   translucent luminosity-blended surface + backdrop blur, an inset top
+   highlight, and a gradient edge drawn by ::before (bright at top/bottom,
+   fading mid) via mask-composite. A cursor-following glint (::after,
+   --mx/--my set by a delegated listener in main.jsx) lights cards up on
+   hover. Light theme = monday palette; dark theme re-tints further down. */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-blur: 16px;
+  --glass-shadow-inset: rgba(255, 255, 255, 0.95);
+  --glass-border-bright: rgba(255, 255, 255, 0.95);
+  --glass-border-dim: rgba(255, 255, 255, 0.4);
+  --glass-border-width: 1.4px;
+  --glass-glint: rgba(97, 97, 255, 0.12);
+}
+html.dark {
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-blur: 14px;
+  --glass-shadow-inset: rgba(255, 255, 255, 0.1);
+  --glass-border-bright: rgba(255, 255, 255, 0.45);
+  --glass-border-dim: rgba(255, 255, 255, 0.14);
+  --glass-glint: rgba(139, 92, 246, 0.16);
+}
+
 @layer utilities {
-  .glass {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.75);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      rgba(205, 208, 223, 0.35) 0px 2px 32px 0px;
+  .glass, .glass-strong, .glass-card, .glass-btn, .glass-dark {
+    background: var(--glass-bg);
+    background-blend-mode: luminosity;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: none;
+    box-shadow: inset 0 1px 1px var(--glass-shadow-inset);
+    position: relative;
   }
 
+  /* Gradient edge — bright at the top/bottom rims, dissolving mid-way */
+  .glass::before, .glass-strong::before, .glass-card::before,
+  .glass-btn::before, .glass-dark::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: var(--glass-border-width);
+    background: linear-gradient(180deg,
+      var(--glass-border-bright) 0%,
+      var(--glass-border-dim) 20%,
+      transparent 40%,
+      transparent 60%,
+      var(--glass-border-dim) 80%,
+      var(--glass-border-bright) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Cursor-reactive glint */
+  .glass-card::after, .glass-strong::after, .glass-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+    background: radial-gradient(circle 320px at var(--mx, 50%) var(--my, 50%),
+      var(--glass-glint), rgba(255, 255, 255, 0.05) 45%, transparent 72%);
+    opacity: 0;
+    transition: opacity 0.35s;
+  }
+  .glass-card:hover::after, .glass-strong:hover::after, .glass-btn:hover::after {
+    opacity: 1;
+  }
+
+  /* Per-surface tuning on top of the shared recipe */
   .glass-strong {
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(24px) saturate(200%);
-    -webkit-backdrop-filter: blur(24px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.72);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      inset 0 1px 1px var(--glass-shadow-inset),
       rgba(205, 208, 223, 0.4) 0px 2px 40px 0px;
   }
-
   .glass-card {
-    background: rgba(255, 255, 255, 0.55);
-    backdrop-filter: blur(18px) saturate(180%);
-    -webkit-backdrop-filter: blur(18px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.75);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+      inset 0 1px 1px var(--glass-shadow-inset),
       rgba(205, 208, 223, 0.4) 0px 2px 48px 0px;
   }
-
   .glass-dark {
-    background: rgba(255, 255, 255, 0.62);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.6);
   }
 
   .glass-input {
@@ -82,23 +129,14 @@ html.dark body {
   }
 
   .glass-hover:hover {
-    background: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.8);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      inset 0 1px 1px var(--glass-shadow-inset),
       rgba(0, 0, 0, 0.12) 0px 4px 40px 0px;
-  }
-
-  .glass-btn {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   }
 
   .glass-btn:hover {
     background: rgba(255, 255, 255, 0.85);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
   }
 }
 
@@ -248,7 +286,6 @@ html:not(.dark) .hover-lift:hover {
    them inside .glass-dark so the JSX (shared with dark mode) stays intact. */
 html:not(.dark) .glass-dark {
   color: #333333;
-  border-right: 1px solid #e6e7ea;
 }
 html:not(.dark) .glass-dark :where(.text-white) { color: #333333; }
 html:not(.dark) .glass-dark :where(.text-slate-300, .text-slate-400) { color: #535768; }
