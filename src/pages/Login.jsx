@@ -29,50 +29,50 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-blue-900 to-violet-950 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Decorative blurred circles */}
-      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-3xl" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-violet-500/20 rounded-full blur-3xl" />
-      <div className="absolute top-[30%] right-[20%] w-[300px] h-[300px] bg-cyan-500/10 rounded-full blur-3xl" />
+    <div className="min-h-[100dvh] bg-[#f5f6f8] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Pastel accent shapes — soft crayon-box washes on the white canvas */}
+      <div className="absolute top-[-15%] left-[-8%] w-[440px] h-[440px] bg-[#bcfe90]/50 rounded-full blur-3xl" />
+      <div className="absolute bottom-[-18%] right-[-8%] w-[480px] h-[480px] bg-[#abf0ff]/60 rounded-full blur-3xl" />
+      <div className="absolute top-[25%] right-[15%] w-[300px] h-[300px] bg-[#eddff7]/80 rounded-full blur-3xl" />
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
-          <Logo size="xl" variant="light" />
+          <Logo size="xl" variant="dark" />
         </div>
 
-        <form onSubmit={handleSubmit} className="glass-strong rounded-3xl shadow-2xl shadow-black/20 p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="bg-white border border-[#d0d4e4] rounded-[24px] shadow-[0_2px_48px_rgba(205,208,223,0.6)] p-8 space-y-6">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">{t('login.heading')}</h2>
-            <p className="text-sm text-slate-500 mt-1">{t('login.subtitle')}</p>
+            <h2 className="text-2xl font-semibold text-[#333333] tracking-tight">{t('login.heading')}</h2>
+            <p className="text-sm text-[#535768] mt-1">{t('login.subtitle')}</p>
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-200/50 text-red-700 px-4 py-3 rounded-xl text-sm backdrop-blur-sm">
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
               {error}
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('login.label_login')}</label>
+              <label className="block text-sm font-medium text-[#43465a] mb-1.5">{t('login.label_login')}</label>
               <input
                 type="text"
                 value={form.login}
                 onChange={(e) => { setForm({ ...form, login: e.target.value }); setError('') }}
                 placeholder={t('login.placeholder_login')}
-                className="w-full px-4 py-3 glass-input rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 placeholder:text-slate-400"
+                className="w-full px-4 py-3 bg-white border border-[#dddfeb] rounded-md text-sm placeholder:text-[#808080]"
                 autoFocus
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('login.label_password')}</label>
+              <label className="block text-sm font-medium text-[#43465a] mb-1.5">{t('login.label_password')}</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={(e) => { setForm({ ...form, password: e.target.value }); setError('') }}
                   placeholder={t('login.placeholder_password')}
-                  className="w-full px-4 py-3 glass-input rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 pr-12 placeholder:text-slate-400"
+                  className="w-full px-4 py-3 bg-white border border-[#dddfeb] rounded-md text-sm pr-12 placeholder:text-[#808080]"
                 />
                 <button
                   type="button"
@@ -87,22 +87,22 @@ export default function Login() {
 
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3 rounded-xl font-medium hover:from-blue-700 hover:to-violet-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
+            className="w-full bg-[#6161ff] text-white py-3 rounded-full font-medium hover:bg-[#4f4fe6] transition-all flex items-center justify-center gap-2"
           >
             <LogIn size={18} />
             {t('login.btn_submit')}
           </button>
 
-          <div className="text-center mt-4 pt-4 border-t border-slate-200/40 space-y-2">
-            <p className="text-sm text-slate-500">
+          <div className="text-center mt-4 pt-4 border-t border-[#eceef4] space-y-2">
+            <p className="text-sm text-[#535768]">
               Нет аккаунта?{' '}
-              <button type="button" onClick={() => navigate('/register')} className="text-blue-600 font-medium hover:text-blue-700">
+              <button type="button" onClick={() => navigate('/register')} className="text-[#5a5af5] font-medium hover:text-[#4747d1]">
                 Зарегистрироваться
               </button>
             </p>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[#535768]">
               Хотите подключить свою школу?{' '}
-              <button type="button" onClick={() => navigate('/register-school')} className="text-emerald-600 font-medium hover:text-emerald-700">
+              <button type="button" onClick={() => navigate('/register-school')} className="text-[#2a5c4e] font-medium hover:text-[#1e4a3d]">
                 Создать школу
               </button>
             </p>

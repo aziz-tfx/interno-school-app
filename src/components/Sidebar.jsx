@@ -253,7 +253,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         <div className="p-6 border-b border-white/10">
-          <Logo size="md" variant="light" />
+          <Logo size="md" variant="auto" />
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item, idx) => {
