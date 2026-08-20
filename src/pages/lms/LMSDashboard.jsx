@@ -519,7 +519,7 @@ function CatalogCourseCard({ courseName, courseIcon, course, group, lessonsCount
             ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
             : isStarted
               ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-500/25'
-              : 'bg-slate-900 text-white hover:bg-slate-800'
+              : 'bg-[#6161ff] text-white hover:bg-[#4f4fe6]'
         }`}>
           {isCompleted ? <><Eye size={15} /> {t('lms.show_details')}</> :
            isStarted ? <><Play size={15} /> {t('lms.continue_learning')}</> :

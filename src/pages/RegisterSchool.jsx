@@ -143,11 +143,11 @@ export default function RegisterSchool() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-blue-900 to-violet-950 flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-emerald-500/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-green-500/20 rounded-full blur-3xl" />
+      <div className="min-h-[100dvh] bg-[#f5f6f8] flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-[#bcfe90]/50 rounded-full blur-3xl" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-[#abf0ff]/50 rounded-full blur-3xl" />
         <div className="w-full max-w-md relative z-10">
-          <div className="text-center mb-8"><Logo size="xl" variant="light" /></div>
+          <div className="text-center mb-8"><Logo size="xl" variant="dark" /></div>
           <div className="glass-strong rounded-3xl shadow-2xl shadow-black/20 p-8 text-center space-y-6">
             <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-green-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/30">
               <CheckCircle2 size={40} className="text-white" />
@@ -173,7 +173,7 @@ export default function RegisterSchool() {
               </div>
             </div>
             <button onClick={() => navigate('/login')}
-              className="w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3 rounded-xl font-medium hover:from-blue-700 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25">
+              className="w-full bg-[#6161ff] text-white py-3 rounded-full font-medium hover:bg-[#4f4fe6] transition-all">
               Войти
             </button>
           </div>
@@ -188,14 +188,14 @@ export default function RegisterSchool() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-blue-900 to-violet-950 flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-3xl" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-violet-500/20 rounded-full blur-3xl" />
-      <div className="absolute top-[30%] right-[20%] w-[300px] h-[300px] bg-cyan-500/10 rounded-full blur-3xl" />
+    <div className="min-h-[100dvh] bg-[#f5f6f8] flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-[#abf0ff]/60 rounded-full blur-3xl" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-[#eddff7]/80 rounded-full blur-3xl" />
+      <div className="absolute top-[30%] right-[20%] w-[300px] h-[300px] bg-[#d1faff]/70 rounded-full blur-3xl" />
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-6">
-          <Logo size="xl" variant="light" />
+          <Logo size="xl" variant="dark" />
         </div>
 
         <div className="glass-strong rounded-3xl shadow-2xl shadow-black/20 p-8">
@@ -216,7 +216,7 @@ export default function RegisterSchool() {
               <h2 className="text-lg font-bold text-slate-900">Регистрация школы</h2>
               <p className="text-xs text-slate-500">Шаг {step} из 2 · {steps[step - 1].label}</p>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-[#6161ff] flex items-center justify-center">
               <GraduationCap size={20} className="text-white" />
             </div>
           </div>
@@ -224,7 +224,7 @@ export default function RegisterSchool() {
           {/* Progress */}
           <div className="flex gap-2 mb-6">
             {steps.map(s => (
-              <div key={s.num} className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${s.num <= step ? 'bg-gradient-to-r from-blue-500 to-violet-500' : 'bg-slate-200'}`} />
+              <div key={s.num} className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${s.num <= step ? 'bg-[#6161ff]' : 'bg-slate-200'}`} />
             ))}
           </div>
 
@@ -281,7 +281,7 @@ export default function RegisterSchool() {
                 </div>
 
                 <button type="button" onClick={handleNext}
-                  className="w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3 rounded-xl font-medium hover:from-blue-700 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25 mt-2">
+                  className="w-full bg-[#6161ff] text-white py-3 rounded-full font-medium hover:bg-[#4f4fe6] transition-all mt-2">
                   Далее
                 </button>
               </div>
@@ -347,7 +347,7 @@ export default function RegisterSchool() {
                 </div>
 
                 <button type="submit" disabled={saving}
-                  className="w-full bg-gradient-to-r from-emerald-600 to-green-600 text-white py-3 rounded-xl font-medium hover:from-emerald-700 hover:to-green-700 transition-all shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 disabled:opacity-50 mt-2">
+                  className="w-full bg-[#2a5c4e] text-white py-3 rounded-full font-medium hover:bg-[#1e4a3d] transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2">
                   {saving ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (

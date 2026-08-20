@@ -196,7 +196,7 @@ export default function ContractSign() {
   const isThreeParty = !!payment.isCompanyPayer
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-[#f5f6f8] p-4 md:p-8">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-6">

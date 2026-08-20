@@ -335,7 +335,7 @@ export default function TelegramApp() {
       <div className="tg-app min-h-screen flex items-center justify-center p-5">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-violet-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
+            <div className="w-16 h-16 bg-[#6161ff] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
               <GraduationCap size={32} className="text-white" />
             </div>
             <h1 className="text-xl font-bold text-slate-900">INTERNO LMS</h1>
@@ -384,7 +384,7 @@ export default function TelegramApp() {
     return (
       <div className="tg-app min-h-screen bg-slate-50">
         {/* Header */}
-        <div className="bg-gradient-to-br from-blue-600 to-violet-700 px-5 pt-6 pb-8 text-white">
+        <div className="bg-[#6161ff] px-5 pt-6 pb-8 text-white">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-lg font-bold backdrop-blur-sm">
               {student?.name?.charAt(0) || '?'}
