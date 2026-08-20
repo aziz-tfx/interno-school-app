@@ -11,6 +11,17 @@ import SyncBanner from './components/SyncBanner'
 import App from './App'
 import './index.css'
 
+// Liquid-glass cursor glint (same mechanic as the interno-architecture
+// landing): keep --mx/--my in sync with the pointer so the ::after
+// radial highlight on glass surfaces follows the cursor.
+document.addEventListener('pointermove', (e) => {
+  const el = e.target?.closest?.('.glass-card, .glass-strong, .glass-btn')
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  el.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%')
+  el.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%')
+})
+
 function DataProviderWithUser({ children }) {
   const { user } = useAuth()
   return <DataProvider currentUser={user}>{children}</DataProvider>
