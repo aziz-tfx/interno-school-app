@@ -530,6 +530,175 @@ function CatalogCourseCard({ courseName, courseIcon, course, group, lessonsCount
   )
 }
 
+// ─── Course Groups Section (collapsible, searchable) ────────────────
+const GROUPS_PREVIEW_COUNT = 6
+
+function CourseGroupsSection({ courseGroups, courseModules, students, canManage, onToggleGroupModule }) {
+  const { t } = useLanguage()
+  const navigate = useNavigate()
+  const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [showAll, setShowAll] = useState(false)
+  const [accessGroupId, setAccessGroupId] = useState(null)
+
+  const groupStudentCounts = useMemo(() => {
+    const counts = new Map()
+    courseGroups.forEach(g => {
+      counts.set(g.id, students.filter(s => s.group === g.name || s.groupId === g.id).length)
+    })
+    return counts
+  }, [courseGroups, students])
+
+  const totalStudents = useMemo(() => {
+    let sum = 0
+    groupStudentCounts.forEach(n => { sum += n })
+    return sum
+  }, [groupStudentCounts])
+
+  const sortedGroups = useMemo(() => (
+    [...courseGroups].sort((a, b) => {
+      const aActive = a.status === 'active' ? 0 : 1
+      const bActive = b.status === 'active' ? 0 : 1
+      if (aActive !== bActive) return aActive - bActive
+      return (a.name || '').localeCompare(b.name || '', 'ru')
+    })
+  ), [courseGroups])
+
+  const filteredGroups = useMemo(() => {
+    if (!query.trim()) return sortedGroups
+    const q = query.toLowerCase()
+    return sortedGroups.filter(g => g.name?.toLowerCase().includes(q) || g.schedule?.toLowerCase().includes(q))
+  }, [sortedGroups, query])
+
+  const visibleGroups = (query.trim() || showAll) ? filteredGroups : filteredGroups.slice(0, GROUPS_PREVIEW_COUNT)
+  const hiddenCount = filteredGroups.length - visibleGroups.length
+
+  if (courseGroups.length === 0) return null
+
+  return (
+    <div className="border-t border-slate-100">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-5 py-3 bg-slate-50/60 hover:bg-slate-50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          {isOpen ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+          <span className="text-sm font-semibold text-slate-700">
+            {t('lms.tab_groups')} ({courseGroups.length})
+          </span>
+          <span className="flex items-center gap-1 text-xs text-slate-400">
+            <Users size={12} /> {totalStudents} {t('lms.students_count')}
+          </span>
+        </div>
+        {courseModules.length > 0 && (
+          <span className="text-xs text-slate-400">{t('lms.module_access')}</span>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="bg-white">
+          {courseGroups.length > GROUPS_PREVIEW_COUNT && (
+            <div className="px-5 py-2.5 border-b border-slate-100">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text" value={query} onChange={e => setQuery(e.target.value)}
+                  placeholder={t('lms.groups_search')}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm"
+                />
+              </div>
+            </div>
+          )}
+
+          {filteredGroups.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-slate-400 text-center">{t('lms.no_groups_found')}</p>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {visibleGroups.map(g => {
+                const openMods = g.openModules || []
+                const isAccessOpen = accessGroupId === g.id
+                return (
+                  <div key={g.id}>
+                    <div className="flex items-center justify-between px-5 py-2.5 hover:bg-blue-50/30 transition-colors">
+                      <button onClick={() => navigate(`/lms/group/${g.id}`)} className="flex-1 text-left min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{g.name}</p>
+                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                          <span>{g.schedule || t('lms.no_schedule')}</span>
+                          <span className="flex items-center gap-1"><Users size={11} /> {groupStudentCounts.get(g.id) || 0}</span>
+                          {courseModules.length > 0 && (
+                            <span className={openMods.length > 0 ? 'text-emerald-500' : 'text-slate-400'}>
+                              {openMods.length}/{courseModules.length} {t('lms.modules_open')}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {courseModules.length > 0 && canManage && (
+                          <button onClick={() => setAccessGroupId(isAccessOpen ? null : g.id)}
+                            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded transition-colors ${
+                              isAccessOpen ? 'text-white bg-purple-600' : 'text-purple-600 bg-purple-50 hover:bg-purple-100'
+                            }`}>
+                            <Lock size={10} /> {t('lms.manage_access')}
+                          </button>
+                        )}
+                        <button onClick={() => navigate(`/lms/group/${g.id}`)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400">
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    {/* Module access toggles */}
+                    {isAccessOpen && courseModules.length > 0 && (
+                      <div className="px-5 py-3 bg-purple-50/30 border-t border-purple-100/50">
+                        <p className="text-xs font-medium text-purple-700 mb-2">{t('lms.open_modules_for')} «{g.name}»:</p>
+                        <div className="space-y-1.5">
+                          {courseModules.map((mod, modIdx) => {
+                            const isModOpen = openMods.includes(mod.id)
+                            return (
+                              <label key={mod.id} className="flex items-center gap-3 cursor-pointer group/toggle">
+                                <button
+                                  onClick={() => onToggleGroupModule(g.id, mod.id)}
+                                  className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${isModOpen ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                >
+                                  <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all shadow-sm ${isModOpen ? 'left-[18px]' : 'left-0.5'}`} />
+                                </button>
+                                <span className={`text-sm ${isModOpen ? 'text-slate-900 font-medium' : 'text-slate-500'}`}>
+                                  {t('lms.module_label')} {modIdx + 1}: {mod.title}
+                                </span>
+                                {isModOpen ? (
+                                  <CheckCircle2 size={14} className="text-emerald-500" />
+                                ) : (
+                                  <Lock size={14} className="text-slate-300" />
+                                )}
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {hiddenCount > 0 && (
+            <button onClick={() => setShowAll(true)}
+              className="w-full py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50/50 transition-colors border-t border-slate-100 flex items-center justify-center gap-1">
+              <ChevronDown size={14} /> {t('lms.show_more_groups')} ({hiddenCount})
+            </button>
+          )}
+          {showAll && !query.trim() && filteredGroups.length > GROUPS_PREVIEW_COUNT && (
+            <button onClick={() => setShowAll(false)}
+              className="w-full py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors border-t border-slate-100 flex items-center justify-center gap-1">
+              <ChevronUp size={14} /> {t('lms.collapse_groups')}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Dashboard ─────────────────────────────────────────────────
 export default function LMSDashboard() {
   const { t } = useLanguage()
@@ -1328,77 +1497,14 @@ export default function LMSDashboard() {
                       )}
                     </div>
 
-                    {/* Groups with module access control */}
-                    {courseGroups.length > 0 && (
-                      <div className="border-t border-slate-100">
-                        <div className="px-5 py-2 bg-slate-50/50">
-                          <p className="text-xs font-semibold text-slate-400 uppercase">{t('lms.tab_groups')} ({courseGroups.length}) {courseModules.length > 0 ? `· ${t('lms.module_access')}` : ''}</p>
-                        </div>
-                        <div className="divide-y divide-slate-50">
-                          {courseGroups.map(g => {
-                            const groupStudents = students.filter(s => s.group === g.name || s.groupId === g.id)
-                            const openMods = g.openModules || []
-                            const isGroupOpen = expandedGroup === `grp_${g.id}`
-                            return (
-                              <div key={g.id}>
-                                <div className="flex items-center justify-between px-5 py-2.5 hover:bg-blue-50/30 transition-colors">
-                                  <button onClick={() => navigate(`/lms/group/${g.id}`)} className="flex-1 text-left">
-                                    <p className="text-sm font-medium text-slate-800">{g.name}</p>
-                                    <div className="flex items-center gap-3 text-xs text-slate-400">
-                                      <span>{g.schedule || t('lms.no_schedule')}</span>
-                                      <span className="flex items-center gap-1"><Users size={11} /> {groupStudents.length}</span>
-                                      {courseModules.length > 0 && (
-                                        <span className="text-emerald-500">{openMods.length}/{courseModules.length} {t('lms.modules_open')}</span>
-                                      )}
-                                    </div>
-                                  </button>
-                                  <div className="flex items-center gap-1.5">
-                                    {courseModules.length > 0 && canManage && (
-                                      <button onClick={() => setExpandedGroup(isGroupOpen ? null : `grp_${g.id}`)}
-                                        className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-purple-600 bg-purple-50 rounded hover:bg-purple-100">
-                                        <Lock size={10} /> {t('lms.manage_access')}
-                                      </button>
-                                    )}
-                                    <button onClick={() => navigate(`/lms/group/${g.id}`)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400">
-                                      <ChevronRight size={16} />
-                                    </button>
-                                  </div>
-                                </div>
-                                {/* Module access toggles */}
-                                {isGroupOpen && courseModules.length > 0 && (
-                                  <div className="px-5 py-3 bg-purple-50/30 border-t border-purple-100/50">
-                                    <p className="text-xs font-medium text-purple-700 mb-2">{t('lms.open_modules_for')} «{g.name}»:</p>
-                                    <div className="space-y-1.5">
-                                      {courseModules.map((mod, modIdx) => {
-                                        const isOpen = openMods.includes(mod.id)
-                                        return (
-                                          <label key={mod.id} className="flex items-center gap-3 cursor-pointer group/toggle">
-                                            <button
-                                              onClick={() => handleToggleGroupModule(g.id, mod.id)}
-                                              className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${isOpen ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                                            >
-                                              <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all shadow-sm ${isOpen ? 'left-[18px]' : 'left-0.5'}`} />
-                                            </button>
-                                            <span className={`text-sm ${isOpen ? 'text-slate-900 font-medium' : 'text-slate-500'}`}>
-                                              {t('lms.module_label')} {modIdx + 1}: {mod.title}
-                                            </span>
-                                            {isOpen ? (
-                                              <CheckCircle2 size={14} className="text-emerald-500" />
-                                            ) : (
-                                              <Lock size={14} className="text-slate-300" />
-                                            )}
-                                          </label>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    {/* Groups with module access control — collapsed by default */}
+                    <CourseGroupsSection
+                      courseGroups={courseGroups}
+                      courseModules={courseModules}
+                      students={students}
+                      canManage={canManage}
+                      onToggleGroupModule={handleToggleGroupModule}
+                    />
 
                     {/* Expanded details — pricing & program */}
                     {isExpanded && (
