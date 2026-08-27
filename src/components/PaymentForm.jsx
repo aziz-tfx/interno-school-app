@@ -10,6 +10,7 @@ import { pushSaleToTelegram } from '../utils/telegram'
 import { branchToSlug } from '../utils/branchSlug'
 import { sameBranch } from '../utils/branchMatch'
 import { getPromoCourses } from '../utils/lessonAccess'
+import { crossesThreshold, computeCountedSaleIds } from '../utils/countedSales'
 import { db, storage } from '../firebase'
 import { doc, setDoc, getDoc, increment } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -272,6 +273,15 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   // Use course price from selection, or fallback to student's saved totalCoursePrice
   const totalCoursePrice = courseFullPrice || selectedStudent?.totalCoursePrice || 0
   const autoDebt = totalCoursePrice > 0 ? Math.max(0, totalCoursePrice - totalPaid - currentAmount) : 0
+
+  // ─── Порог зачёта продажи: стоимость одного месяца курса ───
+  // Продажей считается платёж, с которым суммарная оплата ученика впервые
+  // достигает месячной цены; меньшая предоплата — бронь, а не продажа.
+  const monthlyCoursePrice = Number(coursePricing?.monthly) > 0
+    ? Number(coursePricing.monthly)
+    : (totalCoursePrice > 0 ? totalCoursePrice / (Number(form.durationMonths) || 3) : 0)
+  const countsAsSale = form.type === 'income' &&
+    crossesThreshold(totalPaid, currentAmount, monthlyCoursePrice)
 
   // Auto-fill from selected student
   useEffect(() => {
@@ -593,6 +603,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       templateId: selectedTemplateId || '',
       files: [], // placeholder — will be populated with Storage URLs after upload
       trancheNumber: studentPayments.length + 1,
+      // Порог зачёта и итог: продажа засчитана, только если суммарная оплата
+      // ученика этим платежом достигла месячной стоимости курса.
+      monthlyPrice: monthlyCoursePrice || 0,
+      countsAsSale,
       managerId: user?.managerId || null,
       createdBy: user?.id || null,
       createdByName: user?.name || '',
@@ -651,7 +665,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               tenantId,
               manager: managerName,
               day,
-              sales: increment(1),
+              // Бронь (до месячного порога) и доплата не увеличивают продажи,
+              // но деньги всегда попадают в выручку.
+              sales: increment(countsAsSale ? 1 : 0),
               revenue: increment(Number(form.amount) || 0),
             }, { merge: true })
           }
@@ -699,15 +715,22 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         (p.managerId === user?.managerId || p.createdBy === user?.id) &&
         p.date >= monthStart
       )
-      const thisMonthCount = managerSalesThisMonth.length + 1
+      // «N-я продажа» считает только зачтённые продажи (месячный порог),
+      // брони и доплаты дают деньги, но не номер продажи.
+      const countedIds = computeCountedSaleIds(payments)
+      const countedBefore = managerSalesThisMonth.filter(p => countedIds.has(p.id)).length
+      const thisMonthCount = countedBefore + (countsAsSale ? 1 : 0)
       const thisMonthRevenue = managerSalesThisMonth.reduce((s, p) => s + (Number(p.amount) || 0), 0) + Number(form.amount)
       const fmtRev = (n) => Number(n).toLocaleString('ru-RU').replace(/,/g, ' ')
-      const salesFact = `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
+      const salesFact = countsAsSale
+        ? `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
+        : `${isDoplata ? 'Доплата' : 'Предоплата (бронь), в продажи не зачтена'} | ${fmtRev(thisMonthRevenue)} сум за месяц`
 
       // 🎉 Victory moment: confetti + jackpot count-up + plan progress + sound
       setCelebration({
         amount: Number(form.amount) || 0,
-        salesCount: thisMonthCount,
+        salesCount: countsAsSale ? thisMonthCount : 0,
+        title: countsAsSale ? null : (isDoplata ? 'Доплата принята!' : 'Предоплата принята!'),
         planRevenue: user?.managerId ? getSalesPlan(user.managerId) : 0,
         prevRevenue: thisMonthRevenue - (Number(form.amount) || 0),
         newRevenue: thisMonthRevenue,
@@ -739,6 +762,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           debt: autoDebt,
           totalCoursePrice: courseFullPrice || 0,
           trancheNumber: studentPayments.length + 1,
+          countsAsSale,
           managerName: user?.name || '',
           salesFact,
           comment: form.comment,

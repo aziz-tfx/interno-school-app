@@ -20,6 +20,7 @@ import SalesInsights from '../components/SalesInsights'
 import { toast } from '../components/Toaster'
 import { fetchAmoPerformance, fetchAmoPerformanceV2, fetchAmoCalls } from '../utils/amocrm'
 import { sameBranch } from '../utils/branchMatch'
+import { computeCountedSaleIds } from '../utils/countedSales'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 // formatRevenue is defined inside the component to access t()
@@ -460,6 +461,11 @@ export default function Finance() {
     return matchesManager(p, emp) ? Number(p.amount) || 0 : 0
   }
 
+  // ─── Зачтённые продажи: платёж, которым оплата ученика впервые достигла
+  // месячной стоимости курса. Предоплата-бронь после открытого урока и
+  // последующие доплаты продажами не считаются (см. utils/countedSales).
+  const countedSaleIds = useMemo(() => computeCountedSaleIds(payments), [payments])
+
   // ─── Build manager KPI data from reports ─────────────────────────────────
   const managerKPIs = useMemo(() => {
     const list = salesStaff.map(emp => {
@@ -501,8 +507,10 @@ export default function Finance() {
         matchesManager(p, emp)
       )
       // Revenue is summed per share when the payment is split, else full amount.
+      // Продажи — только платежи, прошедшие месячный порог (countedSaleIds):
+      // брони и доплаты остаются в выручке, но не в счётчике продаж.
       const paymentsRevenue = managerPayments.reduce((s, p) => s + amountForManager(p, emp), 0)
-      const actualSales = managerPayments.length
+      const actualSales = managerPayments.filter(p => countedSaleIds.has(p.id)).length
       const actualRevenue = paymentsRevenue
 
       // Conversion «Назначено → Оплата»: how many trial-assigned leads ended
@@ -513,8 +521,8 @@ export default function Finance() {
         : (actualVisited > 0 ? Math.round((actualSales / actualVisited) * 100) : 0)
       const convSignupToVisit = actualSignups > 0 ? Math.round((actualVisited / actualSignups) * 100) : 0
 
-      // Separate first-time sales vs repeat payments (tranches > 1)
-      const doplataPayments = managerPayments.filter(p => (p.trancheNumber || 1) > 1)
+      // Деньги вне зачтённых продаж: брони (до порога) + доплаты (после)
+      const doplataPayments = managerPayments.filter(p => !countedSaleIds.has(p.id))
       const expectedDoplata = doplataPayments.reduce((s, p) => s + p.amount, 0)
 
       // Offline/Online counts from payments
@@ -564,7 +572,7 @@ export default function Finance() {
       // Both active: higher revenue first
       return b.actual.revenue - a.actual.revenue
     })
-  }, [salesStaff, reportPlans, reportDaily, payments, monthKey, branchFilter, amoStats, amoStatsV2, amoCalls])
+  }, [salesStaff, reportPlans, reportDaily, payments, monthKey, branchFilter, amoStats, amoStatsV2, amoCalls, countedSaleIds])
 
   // ─── Team totals ─────────────────────────────────────────────────────────
   const teamTotals = useMemo(() => {
@@ -629,12 +637,14 @@ export default function Finance() {
       if ((isRop || isBranchDirector) && user.branch !== 'all') return sum + amountForBranch(p, user.branch)
       return sum + (p.amount || 0)
     }, 0)
-    const salesCount = filtered.length
-    const doplata = filtered.filter(p => (p.trancheNumber || 1) > 1).reduce((s, p) => s + p.amount, 0)
+    // Продажи — только платежи, прошедшие месячный порог; брони и доплаты
+    // остаются в revenue и попадают в отдельную сумму doplata.
+    const salesCount = filtered.filter(p => countedSaleIds.has(p.id)).length
+    const doplata = filtered.filter(p => !countedSaleIds.has(p.id)).reduce((s, p) => s + p.amount, 0)
     const offlineCount = filtered.filter(p => p.learningFormat === 'Оффлайн').length
     const onlineCount = filtered.filter(p => p.learningFormat === 'Онлайн').length
     return { revenue, salesCount, doplata, offlineCount, onlineCount }
-  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, employees, branches])
+  }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, employees, branches, countedSaleIds])
 
   // ─── Pending doplata list (students with remaining debt + next payment date) ─
   const pendingDoplataList = useMemo(() => {
@@ -778,9 +788,14 @@ export default function Finance() {
   // Build the sheet rows (headers, data, totals) used by both formats.
   const buildExportTable = (list) => {
     const branchName = (id) => branches.find(b => b.id === id)?.name || id || ''
+    // Тип платежа: зачтённая продажа / бронь (первый транш до месячного
+    // порога) / доплата — чтобы выгрузка объясняла счётчик продаж.
+    const payKind = (p) => countedSaleIds.has(p.id)
+      ? 'Продажа'
+      : ((p.trancheNumber || 1) <= 1 ? 'Бронь' : 'Доплата')
     const headers = [
       'Дата', 'Клиент', 'Телефон', 'Курс', 'Группа', 'Филиал',
-      'Сумма', 'Метод', 'Транш', 'Долг', 'Стоимость курса',
+      'Сумма', 'Метод', 'Тип', 'Транш', 'Долг', 'Стоимость курса',
       'Менеджер', '№ договора', 'Формат',
     ]
     const rows = list.map(p => [
@@ -792,6 +807,7 @@ export default function Finance() {
       branchName(p.branch),
       Number(p.amount) || 0,
       p.method || '',
+      payKind(p),
       p.trancheNumber || 1,
       Number(p.debt) || 0,
       Number(p.totalCoursePrice) || 0,
@@ -803,7 +819,7 @@ export default function Finance() {
     const totalsLabel = t('finance.export_totals_label') || 'ИТОГО'
     const totalsRow = [
       `${totalsLabel} (${list.length})`,
-      '', '', '', '', '', totalAmount, '', '', '', '', '', '', '',
+      '', '', '', '', '', totalAmount, '', '', '', '', '', '', '', '',
     ]
     return { headers, rows, totalsRow, totalAmount }
   }
@@ -831,8 +847,8 @@ export default function Finance() {
       const ws = XLSX.utils.aoa_to_sheet(aoa)
       ws['!cols'] = [
         { wch: 11 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 14 },
-        { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 7 }, { wch: 12 },
-        { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 10 },
+        { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 9 }, { wch: 7 },
+        { wch: 12 }, { wch: 16 }, { wch: 20 }, { wch: 14 }, { wch: 10 },
       ]
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, 'Продажи')
@@ -1372,7 +1388,10 @@ export default function Finance() {
         title={`Факт выручки — ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`} size="xl">
         {(() => {
           const list = filteredTransactions
-          const isNew = (p) => (p.trancheNumber || 1) <= 1
+          // Зачтённая продажа = платёж, прошедший месячный порог оплаты.
+          // Остальное: бронь (первый транш до порога) или доплата.
+          const isNew = (p) => countedSaleIds.has(p.id)
+          const isBooking = (p) => !isNew(p) && (p.trancheNumber || 1) <= 1
           const newSales = list.filter(isNew)
           const doplatas = list.filter(p => !isNew(p))
           const sum = (arr) => arr.reduce((s, p) => s + (Number(p.amount) || 0), 0)
@@ -1400,12 +1419,12 @@ export default function Finance() {
                   <p className="text-[11px] text-slate-400">{list.length} платежей</p>
                 </div>
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-                  <p className="text-xs text-slate-500">Новые продажи</p>
+                  <p className="text-xs text-slate-500">Продажи (зачтённые)</p>
                   <p className="text-lg font-bold text-blue-600">{formatRevenue(newSum)}</p>
                   <p className="text-[11px] text-slate-400">{newSales.length} шт.</p>
                 </div>
                 <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
-                  <p className="text-xs text-slate-500">Доплаты</p>
+                  <p className="text-xs text-slate-500">Брони и доплаты</p>
                   <p className="text-lg font-bold text-amber-600">{formatRevenue(dopSum)}</p>
                   <p className="text-[11px] text-slate-400">{doplatas.length} шт.</p>
                 </div>
@@ -1448,8 +1467,8 @@ export default function Finance() {
                     {list.map(p => (
                       <div key={p.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl text-sm">
                         <div className="min-w-0 flex items-center gap-2">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isNew(p) ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {isNew(p) ? 'НОВАЯ' : `ДОПЛ №${p.trancheNumber}`}
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isNew(p) ? 'bg-blue-100 text-blue-700' : isBooking(p) ? 'bg-violet-100 text-violet-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {isNew(p) ? 'ПРОДАЖА' : isBooking(p) ? 'БРОНЬ' : `ДОПЛ №${p.trancheNumber}`}
                           </span>
                           <div className="min-w-0">
                             <p className="font-medium text-slate-800 truncate">{p.student || '—'}</p>

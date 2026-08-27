@@ -104,6 +104,7 @@ export default async function handler(req, res) {
     debt,
     totalCoursePrice,
     trancheNumber,
+    countsAsSale,
     managerName,
     salesFact,
     comment,
@@ -142,8 +143,14 @@ export default async function handler(req, res) {
   }
 
   // ─── Build message ───
+  // countsAsSale приходит от формы: продажа засчитана, только когда суммарная
+  // оплата ученика достигла месячной стоимости курса. Предоплата меньше
+  // месяца помечается как #Бронь. Старые клиенты поля не шлют — для них
+  // остаётся прежнее правило по номеру транша.
   const isNewSale = trancheNumber <= 1
-  const tag = isNewSale ? '#Оплата' : '#Доплата'
+  const tag = countsAsSale === undefined
+    ? (isNewSale ? '#Оплата' : '#Доплата')
+    : (countsAsSale ? '#Оплата' : (isNewSale ? '#Бронь' : '#Доплата'))
 
   let message = `${tag}\n`
   message += `📅 Дата оплаты: ${date || new Date().toISOString().split('T')[0]}\n`

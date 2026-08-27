@@ -17,12 +17,16 @@ function buildMessage(saleData) {
   const {
     clientName, phone, course, group, amount, method, date,
     courseStartDate, tariff, discount, contractNumber, debt,
-    totalCoursePrice, trancheNumber, managerName, salesFact, comment, learningFormat,
+    totalCoursePrice, trancheNumber, countsAsSale, managerName, salesFact, comment, learningFormat,
     contractUrl,
   } = saleData
 
+  // Зеркалит логику api/telegram/notify.js: зачтённая продажа → #Оплата,
+  // предоплата до месячного порога → #Бронь, остальное → #Доплата.
   const isNewSale = !trancheNumber || trancheNumber <= 1
-  const tag = isNewSale ? '#Оплата' : '#Доплата'
+  const tag = countsAsSale === undefined
+    ? (isNewSale ? '#Оплата' : '#Доплата')
+    : (countsAsSale ? '#Оплата' : (isNewSale ? '#Бронь' : '#Доплата'))
 
   let message = `${tag}\n`
   message += `📅 Дата оплаты: ${date || new Date().toISOString().split('T')[0]}\n`

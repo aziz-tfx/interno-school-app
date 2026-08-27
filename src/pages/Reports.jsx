@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { computeCountedSaleIds } from '../utils/countedSales'
 import { db } from '../firebase'
 import {
   collection, doc, addDoc, setDoc, getDocs, onSnapshot, query, where, deleteDoc,
@@ -321,12 +322,16 @@ export default function Reports() {
   // { manager_name: { day_of_month: { sales: count, revenue: sum } } }
   // Split payments credit each manager their share. A split sale counts as
   // one sale for each manager in the split, with its share added to revenue.
+  // Продажей считается только платёж, которым оплата ученика достигла
+  // месячной стоимости курса (см. utils/countedSales): предоплата-бронь и
+  // доплаты идут в выручку, но не в счётчик продаж.
+  const countedSaleIds = useMemo(() => computeCountedSaleIds(payments), [payments])
   const liveSalesByMgr = useMemo(() => {
     const map = {}
-    const credit = (name, day, amount) => {
+    const credit = (name, day, amount, isSale) => {
       if (!map[name]) map[name] = {}
       if (!map[name][day]) map[name][day] = { sales: 0, revenue: 0 }
-      map[name][day].sales += 1
+      if (isSale) map[name][day].sales += 1
       map[name][day].revenue += amount
     }
     for (const p of payments) {
@@ -334,20 +339,21 @@ export default function Reports() {
       if (!(p.date || '').startsWith(monthKey)) continue
       const day = Number((p.date || '').slice(8, 10))
       if (!day) continue
+      const isSale = countedSaleIds.has(p.id)
       if (Array.isArray(p.splits) && p.splits.length >= 2) {
         for (const sp of p.splits) {
           const e = employees.find(x => x.managerId === sp.managerId)
           if (!e) continue
-          credit(e.name, day, Number(sp.amount) || 0)
+          credit(e.name, day, Number(sp.amount) || 0, isSale)
         }
       } else {
         const owner = resolveOwner(p)
         if (!owner) continue
-        credit(owner.name, day, Number(p.amount) || 0)
+        credit(owner.name, day, Number(p.amount) || 0, isSale)
       }
     }
     return map
-  }, [payments, monthKey, resolveOwner, employees])
+  }, [payments, monthKey, resolveOwner, employees, countedSaleIds])
 
   // ─── Computed data ────────────────────────────────────────────────────────
 
