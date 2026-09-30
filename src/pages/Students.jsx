@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { sameBranch } from '../utils/branchMatch'
+import { isMyStudent, studentIdsWithMyPayments } from '../utils/studentAccess'
 import { formatCurrency } from '../data/mockData'
 import Modal from '../components/Modal'
 import StudentForm from '../components/StudentForm'
@@ -73,9 +74,11 @@ export default function Students() {
   const canDelete = hasPermission('students', 'delete')
 
   // ── Scoped data ──
-  // Show students from user's branch + students created by this user (cross-branch sales)
+  // Show students from user's branch + students this user created or took
+  // payments for (cross-branch sales, e.g. a Tashkent manager's Samarkand client)
+  const myPaidStudentIds = studentIdsWithMyPayments(payments, user)
   const allStudents = user.branch !== 'all'
-    ? students.filter(s => sameBranch(s.branch, user.branch, branches) || String(s.createdBy) === String(user.id))
+    ? students.filter(s => isMyStudent(s, user, branches, myPaidStudentIds))
     : students
 
   const allGroups = user.branch !== 'all'
