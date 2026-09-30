@@ -9,6 +9,7 @@ import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { pushSaleToTelegram } from '../utils/telegram'
 import { branchToSlug } from '../utils/branchSlug'
 import { sameBranch, branchKey } from '../utils/branchMatch'
+import { isMyStudent, studentIdsWithMyPayments } from '../utils/studentAccess'
 import { getPromoCourses } from '../utils/lessonAccess'
 import { crossesThreshold, computeCountedSaleIds } from '../utils/countedSales'
 import { db, storage } from '../firebase'
@@ -227,14 +228,15 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const canvasRef = useRef(null)
   const isDrawingRef = useRef(false)
 
-  // A manager sees their own branch's students, students they created, and
-  // — when they pick another branch in the form (cross-branch sale, e.g. a
-  // Tashkent manager selling to Samarkand) — that branch's students too.
+  // A manager sees their own branch's students, students they created or
+  // already took payments for (cross-branch sales — e.g. a Tashkent manager
+  // adding a доплата for their Samarkand client), and — when they pick
+  // another branch in the form — that branch's students too.
+  const myPaidStudentIds = useMemo(() => studentIdsWithMyPayments(payments, user), [payments, user])
   const branchStudents = students.filter(s =>
     user?.branch !== 'all'
-      ? (sameBranch(s.branch, user.branch, branches)
-        || sameBranch(s.branch, form.branch, branches)
-        || String(s.createdBy) === String(user?.id))
+      ? (isMyStudent(s, user, branches, myPaidStudentIds)
+        || sameBranch(s.branch, form.branch, branches))
       : sameBranch(s.branch, form.branch, branches)
   )
 
