@@ -17,6 +17,7 @@ import { collection, doc, setDoc, query, where, onSnapshot } from 'firebase/fire
 import Modal from '../components/Modal'
 import PaymentForm from '../components/PaymentForm'
 import SalesInsights from '../components/SalesInsights'
+import RevenueByCourse from '../components/RevenueByCourse'
 import { toast } from '../components/Toaster'
 import { fetchAmoPerformance, fetchAmoPerformanceV2, fetchAmoCalls } from '../utils/amocrm'
 import { sameBranch } from '../utils/branchMatch'
@@ -598,29 +599,29 @@ export default function Finance() {
   // branch total the sale rolls up into. So a Tashkent manager closing a
   // Samarkand client still counts toward Tashkent's revenue, matching what
   // the per-manager cards show on screen.
-  const realRevenueData = useMemo(() => {
-    const matchesManagerBranch = (p, branchId) => {
-      if (Array.isArray(p.splits) && p.splits.length >= 2) {
-        return p.splits.some(s => {
-          const e = employees.find(x => x.managerId === s.managerId)
-          return sameBranch(e?.branch, branchId, branches)
-        })
-      }
-      const owner = resolveOwner(p)
-      if (owner?.branch && owner.branch !== 'all') return sameBranch(owner.branch, branchId, branches)
-      return sameBranch(p.branch, branchId, branches)
+  const matchesManagerBranch = (p, branchId) => {
+    if (Array.isArray(p.splits) && p.splits.length >= 2) {
+      return p.splits.some(s => {
+        const e = employees.find(x => x.managerId === s.managerId)
+        return sameBranch(e?.branch, branchId, branches)
+      })
     }
-    // Per-branch share of a payment — splits are credited per their share.
-    const amountForBranch = (p, branchId) => {
-      if (Array.isArray(p.splits) && p.splits.length >= 2) {
-        return p.splits.reduce((s, sp) => {
-          const e = employees.find(x => x.managerId === sp.managerId)
-          return sameBranch(e?.branch, branchId, branches) ? s + (Number(sp.amount) || 0) : s
-        }, 0)
-      }
-      return Number(p.amount) || 0
+    const owner = resolveOwner(p)
+    if (owner?.branch && owner.branch !== 'all') return sameBranch(owner.branch, branchId, branches)
+    return sameBranch(p.branch, branchId, branches)
+  }
+  // Per-branch share of a payment — splits are credited per their share.
+  const amountForBranch = (p, branchId) => {
+    if (Array.isArray(p.splits) && p.splits.length >= 2) {
+      return p.splits.reduce((s, sp) => {
+        const e = employees.find(x => x.managerId === sp.managerId)
+        return sameBranch(e?.branch, branchId, branches) ? s + (Number(sp.amount) || 0) : s
+      }, 0)
     }
+    return Number(p.amount) || 0
+  }
 
+  const realRevenueData = useMemo(() => {
     let filtered = payments.filter(p => p.type === 'income' && (p.date || '').startsWith(monthKey))
     if (branchFilter !== 'all') filtered = filtered.filter(p => matchesManagerBranch(p, branchFilter))
     if (isSales && user?.managerId) {
@@ -2077,6 +2078,20 @@ export default function Finance() {
       {pageTab === 'debts' && <SalesInsights show={['debtors']} />}
 
       {/* ─── Analytics tab: owner business summary ─────────────────────── */}
+      {pageTab === 'analytics' && isAdmin && (
+        <RevenueByCourse
+          payments={payments}
+          courses={courses}
+          branches={branches}
+          year={selectedYear}
+          month={selectedMonth}
+          monthNames={MONTH_NAMES}
+          countedSaleIds={countedSaleIds}
+          branchFilter={branchFilter}
+          matchesBranch={matchesManagerBranch}
+          amountForBranch={amountForBranch}
+        />
+      )}
       {pageTab === 'analytics' && isAdmin && <SalesInsights show={['business']} />}
     </div>
   )
