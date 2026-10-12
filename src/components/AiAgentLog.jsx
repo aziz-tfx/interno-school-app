@@ -3,6 +3,7 @@ import {
   MessagesSquare, RefreshCw, XCircle, ExternalLink, PauseCircle, PlayCircle,
   UserCheck, Phone, Wrench, ArrowLeft,
 } from 'lucide-react'
+import { toast } from './Toaster'
 
 const API = '/api/ai/amo-agent'
 
@@ -70,7 +71,7 @@ export default function AiAgentLog({ tenantId, amoSubdomain }) {
       setDetail(d => ({ ...d, paused: json.paused, handoffReason: json.paused ? d.handoffReason : null }))
       load()
     } catch (err) {
-      alert('Не удалось изменить статус: ' + err.message)
+      toast.error('Не удалось изменить статус: ' + err.message)
     }
     setToggling(false)
   }
