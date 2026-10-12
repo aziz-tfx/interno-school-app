@@ -96,7 +96,7 @@ async function loadErpContext(tenantId) {
 }
 
 async function buildSystemPrompt(cfg) {
-  const erp = cfg.includeCourses ? await loadErpContext(cfg.tenantId) : { schoolName: '' }
+  const erp = cfg.includeCourses ? await loadErpContext(cfg.tenantId || 'default') : { schoolName: '' }
   const school = erp.schoolName || 'нашей школы'
   return [
     `Ты — консультант ${school} и отвечаешь клиентам в Instagram Direct.`,
@@ -337,7 +337,8 @@ export async function processWidgetRequest({ cfg, amoCfg, body }) {
     const conv = (await loadConversation(ref)) || { messages: [], replies: 0 }
 
     // Stop conditions: handed off, manual pause tag, reply cap
-    let paused = conv.paused || conv.replies >= cfg.maxRepliesPerLead
+    // The reply cap counts from the last manual resume in the ERP log
+    let paused = conv.paused || (conv.replies || 0) - (conv.resumedAtReplies || 0) >= cfg.maxRepliesPerLead
     if (!paused && leadId) {
       const lead = await amo.get(`/api/v4/leads/${leadId}`)
       const tags = (lead?._embedded?.tags || []).map(t => t.name)
@@ -361,7 +362,7 @@ export async function processWidgetRequest({ cfg, amoCfg, body }) {
         ...(result.reply ? [{ role: 'assistant', text: result.reply, at: new Date().toISOString(), actions: result.actions }] : []),
       ].slice(-HISTORY_LIMIT)
       await ref.set({
-        tenantId: cfg.tenantId,
+        tenantId: cfg.tenantId || 'default',
         leadId: leadId || null,
         contactId: contactId || null,
         contactName: clean(data.contact_name) || conv.contactName || null,
@@ -369,6 +370,7 @@ export async function processWidgetRequest({ cfg, amoCfg, body }) {
         replies: (conv.replies || 0) + (result.reply ? 1 : 0),
         paused: !!(paused || result.handoff),
         handoffReason: result.handoff || conv.handoffReason || null,
+        resumedAtReplies: conv.resumedAtReplies || 0,
         promptTokens: (conv.promptTokens || 0) + result.usage.prompt,
         completionTokens: (conv.completionTokens || 0) + result.usage.completion,
         createdAt: conv.createdAt || now,
@@ -384,6 +386,7 @@ export async function processWidgetRequest({ cfg, amoCfg, body }) {
 
 /** POST /api/ai/amo-agent?tenantId=… — called by amoCRM Salesbot widget_request. */
 export async function handleAmoAgent(req, res) {
+  if (req.query?.mode === 'log') return handleAgentLog(req, res)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   // Test chat from the Integrations page: no amo, no persistence
@@ -429,6 +432,123 @@ async function handleAgentTest(req, res) {
     return res.status(200).json({ ok: true, ...result })
   } catch (e) {
     console.error('AI agent test error:', e)
+    return res.status(500).json({ ok: false, error: e.message })
+  }
+}
+
+// ─── Conversation log for the ERP ───────────────────────────────────────
+// GET  ?mode=log&tenantId=…&days=7      → summaries + stats
+// GET  ?mode=log&tenantId=…&id=…        → one conversation with messages
+// POST ?mode=log { tenantId, id, paused } → pause / resume the bot for a lead
+
+// USD per 1M tokens (input, output) — approximate, for the cost estimate only
+const MODEL_PRICES = {
+  'gpt-4o-mini': [0.15, 0.6],
+  'gpt-4o': [2.5, 10],
+  'gpt-4.1-mini': [0.4, 1.6],
+  'gpt-4.1-nano': [0.1, 0.4],
+  'gpt-4.1': [2, 8],
+}
+
+function estimateCost(model, prompt, completion) {
+  const price = MODEL_PRICES[model]
+  if (!price) return null
+  return (prompt * price[0] + completion * price[1]) / 1e6
+}
+
+const capturedPhone = (messages) => (messages || []).some(m =>
+  (m.actions || []).some(a => a.tool === 'save_contact' && a.args?.phone))
+
+async function handleAgentLog(req, res) {
+  const tenantId = getTenantId(req) || 'default'
+  const db = getDb()
+  if (!db) return res.status(500).json({ ok: false, error: 'Firestore недоступен на сервере' })
+  const col = db.collection('aiAgentConversations')
+  const id = String(req.query?.id || req.body?.id || '')
+  if (id && !id.startsWith(`${tenantId}__`)) return res.status(403).json({ ok: false, error: 'Forbidden' })
+
+  try {
+    if (req.method === 'POST') {
+      if (!id) return res.status(400).json({ ok: false, error: 'id is required' })
+      const paused = !!req.body?.paused
+      const ref = col.doc(id)
+      const snap = await ref.get()
+      if (!snap.exists) return res.status(404).json({ ok: false, error: 'Not found' })
+      await ref.set({
+        paused,
+        ...(paused ? {} : { handoffReason: null, resumedAtReplies: snap.data().replies || 0 }),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true })
+      // On resume also drop the handoff/pause tags, otherwise the bot keeps skipping the lead
+      const leadId = snap.data().leadId
+      if (!paused && leadId) {
+        try {
+          const [cfg, amoCfg] = await Promise.all([resolveAiAgent(req), resolveAmo(req)])
+          if (amoCfg.subdomain && amoCfg.accessToken) {
+            await createAmoClient(amoCfg).patch(`/api/v4/leads/${leadId}`, {
+              tags_to_delete: [{ name: cfg.handoffTag }, { name: cfg.pauseTag }],
+            })
+          }
+        } catch (e) {
+          console.warn('AI agent resume: failed to remove amo tags:', e.message)
+        }
+      }
+      return res.status(200).json({ ok: true, paused })
+    }
+
+    if (id) {
+      const snap = await col.doc(id).get()
+      if (!snap.exists) return res.status(404).json({ ok: false, error: 'Not found' })
+      return res.status(200).json({ ok: true, conversation: { id, ...snap.data() } })
+    }
+
+    const cfg = await resolveAiAgent(req)
+    const days = Math.min(Math.max(Number(req.query?.days) || 7, 1), 365)
+    const since = new Date(Date.now() - days * 86400_000).toISOString()
+    // Filter by tenant only (no composite index needed), date-filter in memory
+    const snap = await col.where('tenantId', '==', tenantId).get()
+    const items = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => (c.updatedAt || '') >= since)
+      .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+
+    let promptTokens = 0, completionTokens = 0
+    const conversations = items.map(c => {
+      promptTokens += c.promptTokens || 0
+      completionTokens += c.completionTokens || 0
+      const last = (c.messages || []).at(-1)
+      return {
+        id: c.id,
+        leadId: c.leadId,
+        contactName: c.contactName,
+        replies: c.replies || 0,
+        messagesCount: (c.messages || []).length,
+        lastText: last ? String(last.text || '').slice(0, 140) : '',
+        lastRole: last?.role || null,
+        paused: !!c.paused,
+        handoffReason: c.handoffReason || null,
+        phoneCaptured: capturedPhone(c.messages),
+        cost: estimateCost(cfg.model, c.promptTokens || 0, c.completionTokens || 0),
+        updatedAt: c.updatedAt,
+      }
+    }).slice(0, 200)
+
+    return res.status(200).json({
+      ok: true,
+      model: cfg.model,
+      stats: {
+        conversations: items.length,
+        replies: items.reduce((s, c) => s + (c.replies || 0), 0),
+        handoffs: items.filter(c => c.handoffReason).length,
+        phones: items.filter(c => capturedPhone(c.messages)).length,
+        cost: estimateCost(cfg.model, promptTokens, completionTokens),
+        promptTokens,
+        completionTokens,
+      },
+      conversations,
+    })
+  } catch (e) {
+    console.error('AI agent log error:', e)
     return res.status(500).json({ ok: false, error: e.message })
   }
 }

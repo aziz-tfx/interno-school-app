@@ -14,6 +14,7 @@ import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { branchToSlug } from '../utils/branchSlug'
 import { toast } from '../components/Toaster'
 import AiAgentSettings from '../components/AiAgentSettings'
+import AiAgentLog from '../components/AiAgentLog'
 
 const BRANCH_LABELS = {
   tashkent: 'Ташкент',
@@ -595,6 +596,7 @@ export default function Integrations() {
         persist={() => saveIntegrationSection(tenantId, 'aiAgent', cfg.aiAgent)}
         saveButton={saveBtn('aiAgent', 'fuchsia')}
       />
+      <AiAgentLog tenantId={tenantId} amoSubdomain={cfg.amocrm.subdomain} />
 
       {/* ═══════ OnlinePBX ═══════ */}
       <div className="glass rounded-2xl overflow-hidden">
