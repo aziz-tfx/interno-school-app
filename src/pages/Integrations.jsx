@@ -13,6 +13,7 @@ import { loadIntegrations, saveIntegrationSection } from '../utils/tenantIntegra
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { branchToSlug } from '../utils/branchSlug'
 import { toast } from '../components/Toaster'
+import AiAgentSettings from '../components/AiAgentSettings'
 
 const BRANCH_LABELS = {
   tashkent: 'Ташкент',
@@ -263,6 +264,7 @@ export default function Integrations() {
     blue: 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/25',
     indigo: 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/25',
     emerald: 'bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/25',
+    fuchsia: 'bg-fuchsia-600 hover:bg-fuchsia-700 shadow-lg shadow-fuchsia-500/25',
   }
   const saveBtn = (section, color = 'blue') => (
     <button onClick={() => save(section)} disabled={savingSection === section}
@@ -584,6 +586,15 @@ export default function Integrations() {
           </div>
         </div>
       </div>
+
+      {/* ═══════ AI agent (Instagram via amoCRM Salesbot) ═══════ */}
+      <AiAgentSettings
+        tenantId={tenantId}
+        value={cfg.aiAgent}
+        onChange={(patch) => updateSection('aiAgent', patch)}
+        persist={() => saveIntegrationSection(tenantId, 'aiAgent', cfg.aiAgent)}
+        saveButton={saveBtn('aiAgent', 'fuchsia')}
+      />
 
       {/* ═══════ OnlinePBX ═══════ */}
       <div className="glass rounded-2xl overflow-hidden">

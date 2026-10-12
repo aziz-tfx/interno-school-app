@@ -1,6 +1,6 @@
 // Client-side CRUD for per-tenant integration credentials.
 // Stored in Firestore at: tenantIntegrations/{tenantId}
-// Shape: { telegram: {...}, amocrm: {...}, onpbx: {...}, updatedAt }
+// Shape: { telegram: {...}, amocrm: {...}, onpbx: {...}, aiAgent: {...}, updatedAt }
 
 import { db } from '../firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
@@ -33,6 +33,18 @@ const EMPTY = {
   onpbx: {
     domain: '',
     apiKey: '',
+    enabled: false,
+  },
+  aiAgent: {
+    openaiKey: '',
+    model: 'gpt-4o-mini',
+    systemPrompt: '',
+    knowledge: '',
+    includeCourses: true,
+    handoffStatusId: '',
+    handoffTag: 'ИИ: нужен менеджер',
+    pauseTag: 'бот-стоп',
+    maxRepliesPerLead: 30,
     enabled: false,
   },
 }
