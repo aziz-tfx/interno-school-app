@@ -132,6 +132,8 @@ export default function Integrations() {
   const [amoStatus, setAmoStatus] = useState(null)
   const [amoShowToken, setAmoShowToken] = useState(false)
   const [amoRefreshing, setAmoRefreshing] = useState(false)
+  const [amoAuthCode, setAmoAuthCode] = useState('')
+  const [amoExchanging, setAmoExchanging] = useState(false)
 
   const [pbxStatus, setPbxStatus] = useState(null)
   const [pbxShowKey, setPbxShowKey] = useState(false)
@@ -228,6 +230,31 @@ export default function Integrations() {
       toast.success('Токены обновлены' + (result.persisted ? ' и сохранены.' : ', но не сохранены автоматически.'))
     } else {
       toast.error('Не удалось обновить токен: ' + (result.error || result.details || 'Unknown'))
+    }
+  }
+
+  // First connection of a new external integration: authorization code → tokens
+  const doAmoExchange = async () => {
+    const code = amoAuthCode.trim()
+    const { subdomain, clientId, clientSecret, redirectUri } = cfg.amocrm
+    if (!subdomain || !clientId || !clientSecret || !redirectUri) {
+      toast.error('Сначала заполните субдомен, Client ID, Client Secret и Redirect URI новой интеграции')
+      return
+    }
+    setAmoExchanging(true)
+    try { await saveIntegrationSection(tenantId, 'amocrm', cfg.amocrm) } catch {}
+    const result = await refreshAmoToken(code)
+    setAmoExchanging(false)
+    if (result.success) {
+      setAmoAuthCode('')
+      setCfg(await loadIntegrations(tenantId))
+      setAmoStatus(null)
+      toast.success('Интеграция подключена, токены сохранены.')
+    } else {
+      const details = String(result.details || '')
+      toast.error(details.includes('expired') || details.includes('revoked')
+        ? 'Код авторизации истёк или уже использован. Обновите его в amoCRM и попробуйте снова.'
+        : 'Не удалось получить токены: ' + (result.error || 'Unknown') + (details ? ` (${details.slice(0, 200)})` : ''))
     }
   }
 
@@ -566,6 +593,25 @@ export default function Integrations() {
                 onChange={(e) => updateSection('amocrm', { statusId: e.target.value })}
                 placeholder="123456789"
                 className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-4">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Подключение новой внешней интеграции</label>
+            <p className="text-xs text-slate-500 mb-3">
+              Заполните выше субдомен, Client ID (ID интеграции), Client Secret (Секретный ключ) и Redirect URI —
+              точно как в настройках интеграции в amoCRM. Затем вставьте код авторизации со вкладки «Ключи и доступы»
+              (он действует 20 минут и одноразовый) — токены заполнятся автоматически.
+            </p>
+            <div className="flex gap-2">
+              <input type="password" value={amoAuthCode}
+                onChange={(e) => setAmoAuthCode(e.target.value)}
+                placeholder="Код авторизации: def50200..."
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <button onClick={doAmoExchange} disabled={amoExchanging || !amoAuthCode.trim()}
+                className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5 shrink-0">
+                <RefreshCw size={14} className={amoExchanging ? 'animate-spin' : ''} /> Получить токены
+              </button>
             </div>
           </div>
 
