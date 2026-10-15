@@ -22,7 +22,14 @@ export default function AiAgent() {
     let cancelled = false
     setLoading(true)
     loadIntegrations(tenantId)
-      .then(data => { if (!cancelled) setCfg(data) })
+      .then(async (data) => {
+        // Secret for the amo webhook URL — generated once per school
+        if (!data.aiAgent.webhookKey) {
+          data.aiAgent.webhookKey = crypto.randomUUID().replace(/-/g, '')
+          await saveIntegrationSection(tenantId, 'aiAgent', data.aiAgent)
+        }
+        if (!cancelled) setCfg(data)
+      })
       .catch(err => console.error('Failed to load integrations:', err))
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }

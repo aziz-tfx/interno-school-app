@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
-  Bot, Eye, EyeOff, Copy, CheckCircle, Download, Send, RefreshCw,
-  RotateCcw, ChevronDown, ChevronUp, Wrench, XCircle,
+  Bot, Eye, EyeOff, Copy, CheckCircle, Send, RefreshCw,
+  RotateCcw, ChevronDown, ChevronUp, Wrench, XCircle, Plus,
 } from 'lucide-react'
 
 const MODEL_SUGGESTIONS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
@@ -15,6 +15,8 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
   const [showKey, setShowKey] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showSetup, setShowSetup] = useState(false)
+  const [creatingField, setCreatingField] = useState(false)
+  const [setupError, setSetupError] = useState(null)
 
   const [chat, setChat] = useState([]) // { role, text, actions? }
   const [draft, setDraft] = useState('')
@@ -24,7 +26,28 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ block: 'nearest' }) }, [chat, sending])
 
-  const endpoint = `${window.location.origin}/api/ai/amo-agent?tenantId=${encodeURIComponent(tenantId)}`
+  const endpoint = value.webhookKey
+    ? `${window.location.origin}/api/ai/amo-agent?mode=webhook&tenantId=${encodeURIComponent(tenantId)}&key=${value.webhookKey}`
+    : ''
+
+  const createReplyField = async () => {
+    setCreatingField(true)
+    setSetupError(null)
+    try {
+      await persist()
+      const res = await fetch('/api/ai/amo-agent?mode=setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, action: 'create-field' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      onChange({ replyFieldId: data.replyFieldId })
+    } catch (err) {
+      setSetupError(err.message)
+    }
+    setCreatingField(false)
+  }
 
   const copyEndpoint = async () => {
     try {
@@ -106,34 +129,69 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">Адрес агента для виджета amoCRM</label>
-          <div className="flex gap-2">
-            <input readOnly value={endpoint}
-              className={`${inputCls} font-mono text-xs bg-slate-50`} />
-            <button onClick={copyEndpoint}
-              className="px-4 py-2.5 bg-fuchsia-50 text-fuchsia-600 border border-fuchsia-200 rounded-xl text-sm font-medium hover:bg-fuchsia-100 flex items-center gap-1.5 shrink-0">
-              {copied ? <CheckCircle size={14} /> : <Copy size={14} />} {copied ? 'Скопировано' : 'Копировать'}
-            </button>
-            <a href="/amo-widget.zip" download
-              className="px-4 py-2.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl text-sm font-medium hover:bg-slate-100 flex items-center gap-1.5 shrink-0">
-              <Download size={14} /> Виджет
-            </a>
+        {/* amoCRM wiring: webhook in, field + Salesbot out */}
+        <div className="bg-slate-50 rounded-xl p-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Адрес вебхука для amoCRM</label>
+            <div className="flex gap-2">
+              <input readOnly value={endpoint || 'Сохраните настройки, чтобы получить адрес'}
+                className={`${inputCls} font-mono text-xs`} />
+              <button onClick={copyEndpoint} disabled={!endpoint}
+                className="px-4 py-2.5 bg-fuchsia-50 text-fuchsia-600 border border-fuchsia-200 rounded-xl text-sm font-medium hover:bg-fuchsia-100 disabled:opacity-50 flex items-center gap-1.5 shrink-0">
+                {copied ? <CheckCircle size={14} /> : <Copy size={14} />} {copied ? 'Скопировано' : 'Копировать'}
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Адрес содержит секретный ключ — не публикуйте его.</p>
           </div>
-          <button onClick={() => setShowSetup(!showSetup)}
-            className="mt-2 text-xs text-fuchsia-600 hover:text-fuchsia-700 flex items-center gap-1">
-            {showSetup ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Как подключить к amoCRM
-          </button>
-          {showSetup && (
-            <ol className="mt-2 text-xs text-slate-600 space-y-1.5 list-decimal pl-5 bg-slate-50 rounded-xl p-4">
-              <li>amoCRM → Настройки → Интеграции → ваша интеграция (та же, чьи Client ID / Secret указаны в ERP: «Интеграции» → amoCRM) → загрузите архив «Виджет».</li>
-              <li>Установите виджет и вставьте в его настройки адрес агента из поля выше.</li>
-              <li>Создайте Salesbot: единственный шаг — «Ответ ИИ-агента» (из раздела виджетов).</li>
-              <li>В воронке, на этапах для новых заявок из Instagram, добавьте триггер «Salesbot» с запуском при входящем сообщении.</li>
-              <li>Чтобы остановить бота в конкретной сделке, поставьте ей тег из поля «Тег паузы» ниже.</li>
-              <li>Сначала проверьте ответы в тестовом чате внизу, затем отключите nextbot на этих этапах, чтобы клиенту не отвечали два бота.</li>
-            </ol>
-          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Поле сделки «Ответ ИИ» (ID)</label>
+              <div className="flex gap-2">
+                <input type="text" value={value.replyFieldId}
+                  onChange={(e) => onChange({ replyFieldId: e.target.value.trim() })}
+                  placeholder="создайте кнопкой →"
+                  className={`${inputCls} font-mono`} />
+                {!value.replyFieldId && (
+                  <button onClick={createReplyField} disabled={creatingField}
+                    className="px-3 py-2.5 bg-white text-fuchsia-600 border border-fuchsia-200 rounded-xl text-xs font-medium hover:bg-fuchsia-50 disabled:opacity-50 flex items-center gap-1 shrink-0">
+                    {creatingField ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />} Создать в amoCRM
+                  </button>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">ID Salesbot, который отправляет ответ</label>
+              <input type="text" value={value.salesbotId}
+                onChange={(e) => onChange({ salesbotId: e.target.value.replace(/\D/g, '') })}
+                placeholder="из адреса бота в amoCRM"
+                className={`${inputCls} font-mono`} />
+            </div>
+          </div>
+          {setupError && <p className="text-sm text-red-500 flex items-center gap-1.5"><XCircle size={14} /> {setupError}</p>}
+
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+            <input type="checkbox" checked={value.onlyInstagram !== false}
+              onChange={(e) => onChange({ onlyInstagram: e.target.checked })}
+              className="w-4 h-4 rounded" />
+            Отвечать только в чатах Instagram (Telegram, WhatsApp и др. игнорировать)
+          </label>
+
+          <div>
+            <button onClick={() => setShowSetup(!showSetup)}
+              className="text-xs text-fuchsia-600 hover:text-fuchsia-700 flex items-center gap-1">
+              {showSetup ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Как подключить к amoCRM
+            </button>
+            {showSetup && (
+              <ol className="mt-2 text-xs text-slate-600 space-y-1.5 list-decimal pl-5">
+                <li>Нажмите «Создать в amoCRM» — в сделках появится поле «Ответ ИИ».</li>
+                <li>amoCRM → AI-агенты и боты → создайте Salesbot с одним шагом «Отправить сообщение», текст — поле сделки «Ответ ИИ». Сохраните и вставьте ID бота (число из адреса) выше.</li>
+                <li>amoМаркет → WEB HOOKS → добавьте адрес вебхука выше и отметьте событие «Входящее сообщение добавлено».</li>
+                <li>Чтобы остановить бота в конкретной сделке, поставьте ей тег из поля «Тег паузы» ниже.</li>
+                <li>Проверьте ответы в тестовом чате внизу, затем отключите nextbot, чтобы клиенту не отвечали два бота.</li>
+              </ol>
+            )}
+          </div>
         </div>
 
         {/* Behaviour */}

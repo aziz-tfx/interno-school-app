@@ -45,6 +45,10 @@ const EMPTY = {
     handoffTag: 'ИИ: нужен менеджер',
     pauseTag: 'бот-стоп',
     maxRepliesPerLead: 30,
+    webhookKey: '',
+    replyFieldId: '',
+    salesbotId: '',
+    onlyInstagram: true,
     enabled: false,
   },
 }

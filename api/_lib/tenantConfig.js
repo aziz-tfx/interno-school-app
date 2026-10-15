@@ -8,7 +8,8 @@
 //               redirectUri, pipelineId, statusId, enabled },
 //   onpbx:    { domain, apiKey, enabled },
 //   aiAgent:  { openaiKey, model, systemPrompt, knowledge, includeCourses,
-//               handoffStatusId, handoffTag, pauseTag, maxRepliesPerLead, enabled },
+//               handoffStatusId, handoffTag, pauseTag, maxRepliesPerLead,
+//               webhookKey, replyFieldId, salesbotId, onlyInstagram, enabled },
 // }
 //
 // Required env var for Firestore access:  FIREBASE_SERVICE_ACCOUNT_KEY (JSON string)
@@ -218,6 +219,10 @@ export async function resolveAiAgent(req) {
     handoffTag:        cfg.handoffTag || 'ИИ: нужен менеджер',
     pauseTag:          cfg.pauseTag || 'бот-стоп',
     maxRepliesPerLead: Number(cfg.maxRepliesPerLead) || 30,
+    webhookKey:        cfg.webhookKey || '',
+    replyFieldId:      cfg.replyFieldId || '',
+    salesbotId:        cfg.salesbotId || '',
+    onlyInstagram:     cfg.onlyInstagram !== false,
     enabled: cfg.enabled === true,
   }
 }

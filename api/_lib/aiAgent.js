@@ -1,53 +1,33 @@
 // AI sales agent for Instagram chats that live in amoCRM (native Instagram
-// integration). amoCRM Salesbot calls us via the `widget_request` handler of
-// our amo widget (see amo-widget/), we answer with ChatGPT and continue the
-// bot through `return_url` with a `show` handler that sends the reply.
+// integration). No amo widget is needed (a private integration would require
+// a passport statement and waiving amo support), so the loop is:
 //
-// Flow:
-//   Salesbot ─widget_request─▶ POST /api/ai/amo-agent?tenantId=…
-//     ↳ we reply 200 immediately (amo doesn't wait for the LLM)
-//     ↳ background: load history → OpenAI (+ tools) → amo actions
-//     ↳ POST return_url { execute_handlers: [{ handler: 'show', … }] }
+//   amo webhook «Входящее сообщение добавлено»
+//     ─▶ POST /api/ai/amo-agent?mode=webhook&tenantId=…&key=…
+//     ↳ we reply 200 immediately (amo disables slow webhooks)
+//     ↳ background: debounce bursts → OpenAI (+ tools) → amo actions
+//     ↳ write the reply into the lead field «Ответ ИИ» (replyFieldId)
+//     ↳ POST /api/v2/salesbot/run → a plain Salesbot whose only step sends
+//       {{lead.cf.<replyFieldId>}} to the client
 //
-// Conversation history is stored in Firestore: aiAgentConversations/{tenantId}__{leadId}
+// Conversation history is stored in Firestore: aiAgentConversations/{tenantId}__lead_{leadId}
 
 import crypto from 'node:crypto'
 import { waitUntil } from '@vercel/functions'
-import { getDb, getTenantId, resolveAmo, resolveAiAgent } from './tenantConfig.js'
+import { getDb, getTenantId, resolveAmo, resolveAiAgent, saveTenantIntegration } from './tenantConfig.js'
 import { createAmoClient } from './amoClient.js'
 
 const HISTORY_LIMIT = 40          // messages kept in Firestore
 const HISTORY_TO_MODEL = 20       // messages sent to the model
 const MAX_TOOL_ROUNDS = 3
-const OPENAI_TIMEOUT_MS = 45000
+const OPENAI_TIMEOUT_MS = 40000
+const DEBOUNCE_MS = 6000          // wait for the client to finish a burst of messages
+const PROCESSED_IDS_LIMIT = 50    // amo may redeliver a webhook — dedupe by message id
 
 const TARIFF_LABELS = {
   standard: 'Стандарт', vip: 'VIP', premium: 'Премиум', individual: 'Индивидуальный', budget: 'Бюджет',
 }
 const REGION_LABELS = { tashkent: 'Ташкент', fergana: 'Фергана', samarkand: 'Самарканд', online: 'Онлайн' }
-
-// ─── amo widget_request JWT ─────────────────────────────────────────────
-// amo signs `token` with the integration's client secret (HS256).
-function b64urlDecode(s) {
-  return Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
-}
-
-export function verifyAmoJwt(token, secret) {
-  if (!token || !secret) return null
-  const parts = String(token).split('.')
-  if (parts.length !== 3) return null
-  const [h, p, sig] = parts
-  const expected = crypto.createHmac('sha256', secret).update(`${h}.${p}`).digest()
-  const given = b64urlDecode(sig)
-  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return null
-  try {
-    const payload = JSON.parse(b64urlDecode(p).toString('utf8'))
-    if (payload.exp && payload.exp * 1000 < Date.now() - 60_000) return null
-    return payload
-  } catch {
-    return null
-  }
-}
 
 // ─── Knowledge from ERP ─────────────────────────────────────────────────
 const fmtPrice = (v) => {
@@ -298,110 +278,180 @@ async function loadConversation(ref) {
   return snap.exists ? snap.data() : null
 }
 
-// ─── Handlers ───────────────────────────────────────────────────────────
-function parseWidgetData(body) {
-  let data = body?.data
-  if (typeof data === 'string') {
-    try { data = JSON.parse(data) } catch { data = {} }
+// ─── Webhook from amo ───────────────────────────────────────────────────
+// amo posts application/x-www-form-urlencoded; depending on the parser keys
+// arrive flat ("message[add][0][text]") or nested. Support both.
+function formField(body, path) {
+  const flat = path[0] + path.slice(1).map(k => `[${k}]`).join('')
+  if (body && body[flat] !== undefined) return body[flat]
+  return path.reduce((o, k) => (o == null ? undefined : o[k]), body)
+}
+
+export function parseIncomingMessages(body) {
+  const out = []
+  for (let i = 0; i < 20; i++) {
+    const f = (...k) => formField(body, ['message', 'add', String(i), ...k])
+    if (f('id') === undefined && f('text') === undefined) break
+    const entityType = String(f('entity_type') ?? f('element_type') ?? '')
+    out.push({
+      id: String(f('id') ?? ''),
+      text: String(f('text') ?? '').trim(),
+      type: String(f('type') ?? 'incoming'),
+      origin: String(f('origin') ?? ''),
+      leadId: (entityType === 'lead' || entityType === '2') ? String(f('entity_id') ?? f('element_id') ?? '') : '',
+      contactId: String(f('contact_id') ?? ''),
+      authorName: String(f('author', 'name') ?? ''),
+    })
   }
-  return data || {}
+  return out
 }
 
-// amo leaves the placeholder as-is when a variable is unavailable
-const clean = (v) => {
-  const s = String(v ?? '').trim()
-  return !s || /^\{\{.*\}\}$/.test(s) ? '' : s
-}
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-async function continueBot(amo, returnUrl, reply) {
-  if (!returnUrl) return
-  await amo.post(returnUrl, {
-    data: { status: reply ? 'answered' : 'skipped' },
-    execute_handlers: reply ? [{ handler: 'show', params: { type: 'text', value: reply } }] : [],
+async function sendReply(amo, cfg, leadId, reply) {
+  await amo.patch(`/api/v4/leads/${leadId}`, {
+    custom_fields_values: [{ field_id: Number(cfg.replyFieldId), values: [{ value: reply }] }],
   })
+  await amo.post('/api/v2/salesbot/run', [{ bot_id: Number(cfg.salesbotId), entity_id: Number(leadId), entity_type: 2 }])
 }
 
-export async function processWidgetRequest({ cfg, amoCfg, body }) {
+export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DEBOUNCE_MS }) {
+  const db = getDb()
+  const ref = convRef(cfg.tenantId, `lead_${msg.leadId}`)
+  if (!db || !ref) return
+  const now = new Date().toISOString()
+
+  // 1. Record the message (transaction: several webhooks may land at once)
+  const fresh = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    const conv = snap.exists ? snap.data() : { messages: [], replies: 0, createdAt: now }
+    const processed = conv.processedIds || []
+    if (msg.id && processed.includes(msg.id)) return false
+    tx.set(ref, {
+      ...conv,
+      tenantId: cfg.tenantId || 'default',
+      leadId: msg.leadId,
+      contactId: msg.contactId || conv.contactId || null,
+      contactName: msg.authorName || conv.contactName || null,
+      origin: msg.origin || conv.origin || null,
+      messages: [...(conv.messages || []), { role: 'user', text: msg.text, at: now, id: msg.id }].slice(-HISTORY_LIMIT),
+      processedIds: [...processed, msg.id].filter(Boolean).slice(-PROCESSED_IDS_LIMIT),
+      updatedAt: now,
+    })
+    return true
+  })
+  if (!fresh) return
+
+  // 2. Debounce: only the newest message of a burst triggers a reply
+  if (debounceMs) await sleep(debounceMs)
+  const conv = await loadConversation(ref)
+  const messages = conv?.messages || []
+  if (messages.at(-1)?.id !== msg.id) return
+
   const amo = createAmoClient(amoCfg)
-  const data = parseWidgetData(body)
-  const returnUrl = body.return_url
-  const message = clean(data.message)
-  const leadId = clean(data.lead_id)
-  const contactId = clean(data.contact_id)
-  const key = leadId ? `lead_${leadId}` : contactId ? `contact_${contactId}` : ''
-
   try {
-    if (!message || !key) return await continueBot(amo, returnUrl, '')
-
-    const ref = convRef(cfg.tenantId, key)
-    const conv = (await loadConversation(ref)) || { messages: [], replies: 0 }
-
-    // Stop conditions: handed off, manual pause tag, reply cap
-    // The reply cap counts from the last manual resume in the ERP log
+    // 3. Stop conditions: handed off / paused, reply cap, pause tag or handoff stage in amo
     let paused = conv.paused || (conv.replies || 0) - (conv.resumedAtReplies || 0) >= cfg.maxRepliesPerLead
-    if (!paused && leadId) {
-      const lead = await amo.get(`/api/v4/leads/${leadId}`)
+    if (!paused) {
+      const lead = await amo.get(`/api/v4/leads/${msg.leadId}`)
       const tags = (lead?._embedded?.tags || []).map(t => t.name)
       if (tags.includes(cfg.pauseTag) || tags.includes(cfg.handoffTag)) paused = true
       if (cfg.handoffStatusId && String(lead?.status_id) === String(cfg.handoffStatusId)) paused = true
     }
+    if (paused) return
 
-    const now = new Date().toISOString()
-    const history = conv.messages || []
-    let result = { reply: '', actions: [], handoff: null, usage: { prompt: 0, completion: 0 } }
-    if (!paused) {
-      result = await runAgentTurn({ cfg, history, message, ctx: { amo, leadId, contactId, dryRun: false } })
-    }
+    // 4. Unanswered tail of user messages = this turn's input
+    let split = messages.length
+    while (split > 0 && messages[split - 1].role === 'user') split--
+    const history = messages.slice(0, split)
+    const message = messages.slice(split).map(m => m.text).filter(Boolean).join('\n')
+    if (!message) return
 
-    await continueBot(amo, returnUrl, result.reply)
+    const result = await runAgentTurn({
+      cfg, history, message,
+      ctx: { amo, leadId: msg.leadId, contactId: msg.contactId, dryRun: false },
+    })
+    if (result.reply) await sendReply(amo, cfg, msg.leadId, result.reply)
 
-    if (ref) {
-      const messages = [
-        ...history,
-        { role: 'user', text: message, at: now },
-        ...(result.reply ? [{ role: 'assistant', text: result.reply, at: new Date().toISOString(), actions: result.actions }] : []),
-      ].slice(-HISTORY_LIMIT)
-      await ref.set({
-        tenantId: cfg.tenantId || 'default',
-        leadId: leadId || null,
-        contactId: contactId || null,
-        contactName: clean(data.contact_name) || conv.contactName || null,
-        messages,
-        replies: (conv.replies || 0) + (result.reply ? 1 : 0),
-        paused: !!(paused || result.handoff),
-        handoffReason: result.handoff || conv.handoffReason || null,
-        resumedAtReplies: conv.resumedAtReplies || 0,
-        promptTokens: (conv.promptTokens || 0) + result.usage.prompt,
-        completionTokens: (conv.completionTokens || 0) + result.usage.completion,
-        createdAt: conv.createdAt || now,
+    // 5. Persist the answer (merge: new user messages may have arrived meanwhile)
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      const cur = snap.data() || {}
+      tx.set(ref, {
+        ...cur,
+        messages: result.reply
+          ? [...(cur.messages || []), { role: 'assistant', text: result.reply, at: new Date().toISOString(), actions: result.actions }].slice(-HISTORY_LIMIT)
+          : (cur.messages || []),
+        replies: (cur.replies || 0) + (result.reply ? 1 : 0),
+        paused: !!(cur.paused || result.handoff),
+        handoffReason: result.handoff || cur.handoffReason || null,
+        promptTokens: (cur.promptTokens || 0) + result.usage.prompt,
+        completionTokens: (cur.completionTokens || 0) + result.usage.completion,
+        lastError: null,
         updatedAt: new Date().toISOString(),
       })
-    }
+    })
   } catch (e) {
     console.error('AI agent error:', e)
-    // Never leave the Salesbot hanging — continue it silently so a manager can pick up
-    try { await continueBot(amo, returnUrl, '') } catch {}
+    try { await ref.set({ lastError: String(e.message).slice(0, 500), updatedAt: new Date().toISOString() }, { merge: true }) } catch {}
   }
 }
 
-/** POST /api/ai/amo-agent?tenantId=… — called by amoCRM Salesbot widget_request. */
-export async function handleAmoAgent(req, res) {
-  if (req.query?.mode === 'log') return handleAgentLog(req, res)
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+function keyMatches(given, expected) {
+  const a = Buffer.from(String(given || ''))
+  const b = Buffer.from(String(expected || ''))
+  return a.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b)
+}
 
-  // Test chat from the Integrations page: no amo, no persistence
-  if (req.query?.mode === 'test' || req.body?.mode === 'test') return handleAgentTest(req, res)
-
+async function handleWebhook(req, res) {
   const [cfg, amoCfg] = await Promise.all([resolveAiAgent(req), resolveAmo(req)])
-  if (!cfg.enabled || !cfg.openaiKey) return res.status(200).json({ ok: false, error: 'AI agent disabled' })
-  if (!amoCfg.subdomain || !amoCfg.accessToken) return res.status(200).json({ ok: false, error: 'amoCRM not configured' })
+  if (!keyMatches(req.query?.key, cfg.webhookKey)) return res.status(403).json({ error: 'Forbidden' })
+  // Always 200 for amo so it doesn't disable the webhook; just ignore what we can't handle
+  if (!cfg.enabled || !cfg.openaiKey || !cfg.replyFieldId || !cfg.salesbotId) return res.status(200).json({ ok: true, skipped: 'agent not configured' })
+  if (!amoCfg.subdomain || !amoCfg.accessToken) return res.status(200).json({ ok: true, skipped: 'amo not configured' })
 
-  const jwt = verifyAmoJwt(req.body?.token, amoCfg.clientSecret)
-  if (!jwt) return res.status(401).json({ error: 'Invalid amoCRM signature' })
+  const messages = parseIncomingMessages(req.body).filter(m =>
+    m.type === 'incoming' && m.text && m.leadId &&
+    (!cfg.onlyInstagram || !m.origin || /insta/i.test(m.origin)))
 
-  // Answer amo right away; the LLM round-trip continues in the background
-  waitUntil(processWidgetRequest({ cfg, amoCfg, body: req.body }))
-  return res.status(200).json({ ok: true })
+  if (messages.length) {
+    waitUntil(Promise.all(messages.map(msg => processIncomingMessage({ cfg, amoCfg, msg }))))
+  }
+  return res.status(200).json({ ok: true, accepted: messages.length })
+}
+
+// One-click amo setup from the ERP: creates the lead field «Ответ ИИ».
+async function handleSetup(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const tenantId = getTenantId(req)
+  const [cfg, amoCfg] = await Promise.all([resolveAiAgent(req), resolveAmo(req)])
+  if (!amoCfg.subdomain || !amoCfg.accessToken) return res.status(400).json({ ok: false, error: 'Сначала подключите amoCRM в «Интеграциях»' })
+  try {
+    if (req.body?.action === 'create-field') {
+      if (cfg.replyFieldId) return res.status(200).json({ ok: true, replyFieldId: cfg.replyFieldId, existed: true })
+      const amo = createAmoClient(amoCfg)
+      const created = await amo.post('/api/v4/leads/custom_fields', [{ type: 'textarea', name: 'Ответ ИИ' }])
+      const id = String(created?._embedded?.custom_fields?.[0]?.id || '')
+      if (!id) throw new Error('amoCRM не вернул id поля')
+      await saveTenantIntegration(tenantId || 'default', 'aiAgent', { replyFieldId: id })
+      return res.status(200).json({ ok: true, replyFieldId: id })
+    }
+    return res.status(400).json({ ok: false, error: 'Unknown action' })
+  } catch (e) {
+    console.error('AI agent setup error:', e)
+    return res.status(500).json({ ok: false, error: e.message })
+  }
+}
+
+/** /api/ai/amo-agent?mode=webhook|test|log|setup */
+export async function handleAmoAgent(req, res) {
+  const mode = req.query?.mode || req.body?.mode
+  if (mode === 'log') return handleAgentLog(req, res)
+  if (mode === 'setup') return handleSetup(req, res)
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (mode === 'test') return handleAgentTest(req, res)
+  if (mode === 'webhook') return handleWebhook(req, res)
+  return res.status(400).json({ error: 'Unknown mode' })
 }
 
 // Simple in-memory rate limiter for the test chat (resets on cold start)
