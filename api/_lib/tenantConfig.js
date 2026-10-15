@@ -9,7 +9,8 @@
 //   onpbx:    { domain, apiKey, enabled },
 //   aiAgent:  { openaiKey, model, systemPrompt, knowledge, includeCourses,
 //               handoffStatusId, handoffTag, pauseTag, maxRepliesPerLead,
-//               webhookKey, replyFieldId, salesbotId, onlyInstagram, enabled },
+//               webhookKey, replyFieldId, salesbotId, onlyInstagram,
+//               testMode, testTag, enabled },
 // }
 //
 // Required env var for Firestore access:  FIREBASE_SERVICE_ACCOUNT_KEY (JSON string)
@@ -223,6 +224,8 @@ export async function resolveAiAgent(req) {
     replyFieldId:      cfg.replyFieldId || '',
     salesbotId:        cfg.salesbotId || '',
     onlyInstagram:     cfg.onlyInstagram !== false,
+    testMode:          cfg.testMode !== false,
+    testTag:           cfg.testTag || 'ии-тест',
     enabled: cfg.enabled === true,
   }
 }

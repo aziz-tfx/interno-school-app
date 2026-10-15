@@ -315,11 +315,25 @@ async function sendReply(amo, cfg, leadId, reply) {
   await amo.post('/api/v2/salesbot/run', [{ bot_id: Number(cfg.salesbotId), entity_id: Number(leadId), entity_type: 2 }])
 }
 
+const leadTags = (lead) => (lead?._embedded?.tags || []).map(t => t.name)
+
 export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DEBOUNCE_MS }) {
   const db = getDb()
   const ref = convRef(cfg.tenantId, `lead_${msg.leadId}`)
   if (!db || !ref) return
   const now = new Date().toISOString()
+  const amo = createAmoClient(amoCfg)
+
+  // Test mode: only leads tagged with testTag are handled; others aren't even logged
+  if (cfg.testMode) {
+    try {
+      const lead = await amo.get(`/api/v4/leads/${msg.leadId}`)
+      if (!leadTags(lead).includes(cfg.testTag)) return
+    } catch (e) {
+      console.warn('AI agent test-mode lead check failed:', e.message)
+      return
+    }
+  }
 
   // 1. Record the message (transaction: several webhooks may land at once)
   const fresh = await db.runTransaction(async (tx) => {
@@ -348,13 +362,12 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
   const messages = conv?.messages || []
   if (messages.at(-1)?.id !== msg.id) return
 
-  const amo = createAmoClient(amoCfg)
   try {
     // 3. Stop conditions: handed off / paused, reply cap, pause tag or handoff stage in amo
     let paused = conv.paused || (conv.replies || 0) - (conv.resumedAtReplies || 0) >= cfg.maxRepliesPerLead
     if (!paused) {
       const lead = await amo.get(`/api/v4/leads/${msg.leadId}`)
-      const tags = (lead?._embedded?.tags || []).map(t => t.name)
+      const tags = leadTags(lead)
       if (tags.includes(cfg.pauseTag) || tags.includes(cfg.handoffTag)) paused = true
       if (cfg.handoffStatusId && String(lead?.status_id) === String(cfg.handoffStatusId)) paused = true
     }

@@ -49,6 +49,8 @@ const EMPTY = {
     replyFieldId: '',
     salesbotId: '',
     onlyInstagram: true,
+    testMode: true,
+    testTag: 'ии-тест',
     enabled: false,
   },
 }

@@ -170,6 +170,24 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
           </div>
           {setupError && <p className="text-sm text-red-500 flex items-center gap-1.5"><XCircle size={14} /> {setupError}</p>}
 
+          <div className={`rounded-xl p-3 border ${value.testMode !== false ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer select-none">
+              <input type="checkbox" checked={value.testMode !== false}
+                onChange={(e) => onChange({ testMode: e.target.checked })}
+                className="w-4 h-4 rounded" />
+              Тестовый режим — отвечать только в сделках с тегом
+            </label>
+            {value.testMode !== false && (
+              <div className="mt-2 flex items-center gap-2">
+                <input type="text" value={value.testTag}
+                  onChange={(e) => onChange({ testTag: e.target.value })}
+                  placeholder="ии-тест"
+                  className={`${inputCls} max-w-xs`} />
+                <p className="text-xs text-amber-700">Остальным клиентам бот не отвечает. Снимите галочку, когда проверите.</p>
+              </div>
+            )}
+          </div>
+
           <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
             <input type="checkbox" checked={value.onlyInstagram !== false}
               onChange={(e) => onChange({ onlyInstagram: e.target.checked })}
