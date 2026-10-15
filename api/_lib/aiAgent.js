@@ -456,8 +456,20 @@ async function handleSetup(req, res) {
   }
 }
 
+// amo HTML-escapes saved webhook URLs ("&" → "&amp;"), so params arrive as
+// "amp;tenantId" / "amp;key". Fold them back before anything reads req.query.
+function normalizeQuery(req) {
+  const q = req.query || {}
+  for (const k of Object.keys(q)) {
+    const clean = k.replace(/^(amp;)+/, '')
+    if (clean !== k && q[clean] === undefined) q[clean] = q[k]
+  }
+  req.query = q
+}
+
 /** /api/ai/amo-agent?mode=webhook|test|log|setup */
 export async function handleAmoAgent(req, res) {
+  normalizeQuery(req)
   const mode = req.query?.mode || req.body?.mode
   if (mode === 'log') return handleAgentLog(req, res)
   if (mode === 'setup') return handleSetup(req, res)
