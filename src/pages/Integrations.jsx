@@ -13,8 +13,7 @@ import { loadIntegrations, saveIntegrationSection } from '../utils/tenantIntegra
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { branchToSlug } from '../utils/branchSlug'
 import { toast } from '../components/Toaster'
-import AiAgentSettings from '../components/AiAgentSettings'
-import AiAgentLog from '../components/AiAgentLog'
+import { Link } from 'react-router-dom'
 
 const BRANCH_LABELS = {
   tashkent: 'Ташкент',
@@ -292,7 +291,6 @@ export default function Integrations() {
     blue: 'bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/25',
     indigo: 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/25',
     emerald: 'bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/25',
-    fuchsia: 'bg-fuchsia-600 hover:bg-fuchsia-700 shadow-lg shadow-fuchsia-500/25',
   }
   const saveBtn = (section, color = 'blue') => (
     <button onClick={() => save(section)} disabled={savingSection === section}
@@ -634,15 +632,22 @@ export default function Integrations() {
         </div>
       </div>
 
-      {/* ═══════ AI agent (Instagram via amoCRM Salesbot) ═══════ */}
-      <AiAgentSettings
-        tenantId={tenantId}
-        value={cfg.aiAgent}
-        onChange={(patch) => updateSection('aiAgent', patch)}
-        persist={() => saveIntegrationSection(tenantId, 'aiAgent', cfg.aiAgent)}
-        saveButton={saveBtn('aiAgent', 'fuchsia')}
-      />
-      <AiAgentLog tenantId={tenantId} amoSubdomain={cfg.amocrm.subdomain} />
+      {/* ═══════ AI agent — moved to its own page (/ai-agent) ═══════ */}
+      <Link to="/ai-agent" className="glass rounded-2xl overflow-hidden block hover:opacity-90 transition-opacity">
+        <div className="bg-gradient-to-r from-fuchsia-500 to-pink-500 p-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+              <Zap size={24} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">ИИ-агент для Instagram</h3>
+              <p className="text-white/80 text-sm">Настройки, тестовый чат и журнал — в разделе «ИИ-агент»</p>
+            </div>
+          </div>
+          <span className="bg-white/20 px-3 py-1.5 rounded-full text-sm text-white font-medium">Открыть →</span>
+        </div>
+      </Link>
+
 
       {/* ═══════ OnlinePBX ═══════ */}
       <div className="glass rounded-2xl overflow-hidden">

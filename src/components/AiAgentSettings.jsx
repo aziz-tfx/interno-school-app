@@ -126,7 +126,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
           </button>
           {showSetup && (
             <ol className="mt-2 text-xs text-slate-600 space-y-1.5 list-decimal pl-5 bg-slate-50 rounded-xl p-4">
-              <li>amoCRM → Настройки → Интеграции → ваша интеграция (та же, чьи Client ID / Secret указаны выше в блоке amoCRM) → загрузите архив «Виджет».</li>
+              <li>amoCRM → Настройки → Интеграции → ваша интеграция (та же, чьи Client ID / Secret указаны в ERP: «Интеграции» → amoCRM) → загрузите архив «Виджет».</li>
               <li>Установите виджет и вставьте в его настройки адрес агента из поля выше.</li>
               <li>Создайте Salesbot: единственный шаг — «Ответ ИИ-агента» (из раздела виджетов).</li>
               <li>В воронке, на этапах для новых заявок из Instagram, добавьте триггер «Salesbot» с запуском при входящем сообщении.</li>

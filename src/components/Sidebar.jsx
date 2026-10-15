@@ -30,6 +30,7 @@ import {
   Sun,
   Moon,
   MessageCircle,
+  Bot,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -104,6 +105,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/leaderboard', icon: Trophy, label: t('sidebar.leaderboard'), permission: 'finance' },
       ],
     },
+    { to: '/ai-agent', icon: Bot, label: 'ИИ-агент', permission: 'settings' },
     {
       group: 'settings',
       icon: Sliders,
