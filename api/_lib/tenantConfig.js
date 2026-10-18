@@ -7,6 +7,11 @@
 //   amocrm:   { subdomain, accessToken, refreshToken, clientId, clientSecret,
 //               redirectUri, pipelineId, statusId, enabled },
 //   onpbx:    { domain, apiKey, enabled },
+//   aiAgent:  { openaiKey, model, systemPrompt, knowledge, includeCourses,
+//               handoffStatusId, handoffTag, pauseTag, maxRepliesPerLead,
+//               webhookKey, replyFieldId, salesbotId, replyInstagram,
+//               replyComments, replyTelegram, replyOtherChannels,
+//               testMode, testTag, enabled },
 // }
 //
 // Required env var for Firestore access:  FIREBASE_SERVICE_ACCOUNT_KEY (JSON string)
@@ -198,5 +203,34 @@ export async function resolveOnpbx(req) {
     domain: sanitizeOnpbxDomain(cfg.domain || envIf(useEnv, process.env.ONPBX_DOMAIN)),
     apiKey: cfg.apiKey || envIf(useEnv, process.env.ONPBX_API_KEY),
     enabled: cfg.enabled !== false,
+  }
+}
+
+export async function resolveAiAgent(req) {
+  const tenantId = getTenantId(req)
+  const cfg = await loadTenantIntegration(tenantId, 'aiAgent')
+  const useEnv = isDefaultTenant(tenantId)
+  return {
+    tenantId,
+    openaiKey:         cfg.openaiKey || envIf(useEnv, process.env.OPENAI_API_KEY),
+    model:             cfg.model || 'gpt-4o-mini',
+    systemPrompt:      cfg.systemPrompt || '',
+    knowledge:         cfg.knowledge || '',
+    includeCourses:    cfg.includeCourses !== false,
+    handoffStatusId:   cfg.handoffStatusId || '',
+    handoffTag:        cfg.handoffTag || 'ИИ: нужен менеджер',
+    pauseTag:          cfg.pauseTag || 'бот-стоп',
+    maxRepliesPerLead: Number(cfg.maxRepliesPerLead) || 30,
+    webhookKey:        cfg.webhookKey || '',
+    replyFieldId:      cfg.replyFieldId || '',
+    salesbotId:        cfg.salesbotId || '',
+    replyInstagram:    cfg.replyInstagram !== false,
+    replyComments:     cfg.replyComments !== false,
+    replyTelegram:     cfg.replyTelegram !== false,
+    // legacy: onlyInstagram=false meant «answer in every channel»
+    replyOtherChannels: cfg.replyOtherChannels ?? (cfg.onlyInstagram === false),
+    testMode:          cfg.testMode !== false,
+    testTag:           cfg.testTag || 'ии-тест',
+    enabled: cfg.enabled === true,
   }
 }

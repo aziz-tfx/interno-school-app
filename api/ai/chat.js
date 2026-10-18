@@ -1,3 +1,12 @@
+// Vercel Serverless Function — AI endpoints (one function: Hobby plan quota).
+//
+//   POST /api/ai/chat        → student LMS helper (Gemini)
+//   POST /api/ai/amo-agent   → Instagram sales agent for amoCRM Salesbot
+//                              (rewritten to ?action=amo-agent in vercel.json,
+//                               logic lives in ../_lib/aiAgent.js)
+
+import { handleAmoAgent } from '../_lib/aiAgent.js'
+
 // Simple in-memory rate limiter (resets on cold start)
 const rateLimits = {}
 const RATE_LIMIT = 30 // messages per hour
@@ -23,6 +32,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
+  if (req.query?.action === 'amo-agent') return handleAmoAgent(req, res)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const apiKey = process.env.GOOGLE_AI_KEY

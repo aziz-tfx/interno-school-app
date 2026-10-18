@@ -9,6 +9,7 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { sameBranch } from '../utils/branchMatch'
+import { computeCountedSaleIds } from '../utils/countedSales'
 
 // ─── Role-aware sales analytics for the Finance page ────────────────────
 // Always computed for the CURRENT month (run-rate metrics don't make sense
@@ -175,6 +176,9 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
     }).filter(Boolean)
   }, [students, payments, scopeBranch, today, branches])
 
+  // ─── Зачтённые продажи (месячный порог) — брони/доплаты не в счёт ───
+  const countedSaleIds = useMemo(() => computeCountedSaleIds(payments), [payments])
+
   // ═══════════════ MANAGER PANEL ═══════════════
   const managerPanel = useMemo(() => {
     if (!isSales || !user?.managerId) return null
@@ -185,7 +189,7 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
       (p.managerId === mid || (Array.isArray(p.splits) && p.splits.some(sp => sp.managerId === mid)))
     )
     const fact = myPays.reduce((s, p) => s + shareOf(p, mid), 0)
-    const count = myPays.length
+    const count = myPays.filter(p => countedSaleIds.has(p.id)).length
     const plan = getSalesPlan(mid, curKey)
     const forecast = dayOfMonth > 0 ? Math.round((fact / dayOfMonth) * daysInMonth) : 0
     const avgCheck = count > 0 ? fact / count : 0
@@ -234,7 +238,7 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
     const gapToNext = myIdx > 0 ? ranked[myIdx - 1].revenue - fact : 0
 
     return { fact, plan, forecast, avgCheck, count, conv, overdueSum, overdueCount, streak, rank: myIdx + 1, total: ranked.length, gapToNext }
-  }, [isSales, user, payments, curKey, getSalesPlan, daily, debtors, employees, dayOfMonth, daysInMonth])
+  }, [isSales, user, payments, curKey, getSalesPlan, daily, debtors, employees, dayOfMonth, daysInMonth, countedSaleIds])
 
   // ═══════════════ ROP / OWNER PANEL ═══════════════
   const teamPanel = useMemo(() => {

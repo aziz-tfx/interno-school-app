@@ -19,6 +19,7 @@ import LMSGroupView from './pages/lms/LMSGroupView'
 import LMSCourseView from './pages/lms/LMSCourseView'
 import LMSLessonView from './pages/lms/LMSLessonView'
 import Integrations from './pages/Integrations'
+import AiAgent from './pages/AiAgent'
 import ContractTemplates from './pages/ContractTemplates'
 import AmoPerformance from './pages/AmoPerformance'
 import Schedule from './pages/Schedule'
@@ -120,6 +121,9 @@ export default function App() {
         } />
         <Route path="integrations" element={
           <ProtectedRoute permission="settings"><Integrations /></ProtectedRoute>
+        } />
+        <Route path="ai-agent" element={
+          <ProtectedRoute permission="settings"><AiAgent /></ProtectedRoute>
         } />
         <Route path="contract-templates" element={
           <ProtectedRoute permission="settings"><ContractTemplates /></ProtectedRoute>

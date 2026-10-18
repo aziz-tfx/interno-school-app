@@ -477,8 +477,8 @@ function buildSignatureTable(data, lang) {
               new Paragraph({ children: [] }),
               new Paragraph({
                 children: [r(isRu
-                  ? 'Адрес: г. Ташкент, Мирзо-Улугбекский район, ул. Хирмонтепа, дом 34Б'
-                  : 'Manzil: Toshkent shahri, Mirzo Ulug\u2018bek tumani, Xirmontepa ko\u2018chasi, 34B-uy')],
+                  ? 'Адрес: г. Ташкент, Мирабадский район, ул. Айбек, дом 22'
+                  : 'Manzil: Toshkent shahri, Mirobod tumani, Oybek ko\u2018chasi, 22-uy')],
               }),
               new Paragraph({
                 children: [r(isRu
@@ -488,7 +488,7 @@ function buildSignatureTable(data, lang) {
               new Paragraph({
                 children: [r(isRu ? 'ОКЭД: 85590' : 'SOEID (OKED): 85590')],
               }),
-              new Paragraph({ spacing: { before: 80 }, children: [r(isRu ? 'Телефон: +998 94 676 88 58' : 'Telefon: +998 94 676 88 58')] }),
+              new Paragraph({ spacing: { before: 80 }, children: [r(isRu ? 'Телефон: +998 78 113 18 08' : 'Telefon: +998 78 113 18 08')] }),
             ],
           }),
           new TableCell({
@@ -561,13 +561,13 @@ function buildThreePartySignatureTable(data, lang) {
         children: [rb(isRu ? 'Исполнитель \u201CInterno Edu\u201D' : 'Bajaruvchi \u201CInterno Edu\u201D')],
       }),
       new Paragraph({ children: [r(isRu
-        ? 'Адрес: г. Ташкент, Мирзо-Улугбекский район, ул. Хирмонтепа, дом 34Б'
-        : 'Manzil: Toshkent shahri, Mirzo Ulug\u2018bek tumani, Xirmontepa ko\u2018chasi, 34B-uy')] }),
+        ? 'Адрес: г. Ташкент, Мирабадский район, ул. Айбек, дом 22'
+        : 'Manzil: Toshkent shahri, Mirobod tumani, Oybek ko\u2018chasi, 22-uy')] }),
       new Paragraph({ children: [r(isRu
         ? 'Р/с: 2020 8000 7053 5951 4001, АТБ \u201COrient Finans\u201D, МФО: 01071, ИНН: 308 290 853'
         : 'Hisob raqami: 2020 8000 7053 5951 4001, ATB \u201COrient Finans\u201D, MFO: 01071, STIR: 308 290 853')] }),
       new Paragraph({ children: [r(isRu ? 'ОКЭД: 85590' : 'OKED: 85590')] }),
-      new Paragraph({ spacing: { before: 80 }, children: [r(isRu ? 'Телефон: +998 94 676 88 58' : 'Tel: +998 94 676 88 58')] }),
+      new Paragraph({ spacing: { before: 80 }, children: [r(isRu ? 'Телефон: +998 78 113 18 08' : 'Tel: +998 78 113 18 08')] }),
       new Paragraph({ spacing: { before: 120 }, children: [r(isRu ? 'Генеральный директор' : 'Bosh direktor')] }),
       new Paragraph({ children: [r(isRu ? 'Тошпулатов А.А.' : 'Toshpulatov A.A.')] }),
       new Paragraph({ spacing: { before: 40 }, children: [r('_______________________')] }),

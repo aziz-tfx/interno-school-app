@@ -367,12 +367,12 @@ export default function ContractSign() {
           <div className={`grid ${isThreeParty ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-2'} gap-4 mt-8 pt-6 border-t border-slate-200`}>
             <div className="text-sm border border-slate-200 rounded-lg p-3">
               <p className="font-bold text-center mb-3">{isRu ? 'Исполнитель "Interno Edu"' : 'Bajaruvchi "Interno Edu"'}</p>
-              <p className="text-xs text-slate-600">{isRu ? 'Адрес: г. Ташкент, Мирзо-Улугбекский район, ул. Хирмонтепа, дом 34Б' : "Manzil: Toshkent shahri, Mirzo Ulug'bek tumani, Xirmontepa ko'chasi, 34B-uy"}</p>
+              <p className="text-xs text-slate-600">{isRu ? 'Адрес: г. Ташкент, Мирабадский район, ул. Айбек, дом 22' : "Manzil: Toshkent shahri, Mirobod tumani, Oybek ko'chasi, 22-uy"}</p>
               <p className="text-xs text-slate-600">{isRu ? 'Расчётный счёт' : 'Hisob raqami'}: 2020 8000 7053 5951 4001</p>
               <p className="text-xs text-slate-600">{isRu ? 'Банк: АТБ "Ориент Финанс", МФО: 01071' : 'Bank: ATB "Orient Finans", MFO: 01071'}</p>
               <p className="text-xs text-slate-600">{isRu ? 'ИНН' : 'STIR (INN)'}: 308 290 853</p>
               <p className="text-xs text-slate-600">{isRu ? 'ОКЭД' : 'SOEID (OKED)'}: 85590</p>
-              <p className="text-xs text-slate-600 mt-1">{isRu ? 'Телефон' : 'Telefon'}: +998 94 676 88 58</p>
+              <p className="text-xs text-slate-600 mt-1">{isRu ? 'Телефон' : 'Telefon'}: +998 78 113 18 08</p>
               <div className="mt-3 pt-2 border-t border-slate-100">
                 <p className="text-xs text-slate-600">{isRu ? 'Генеральный директор' : 'Bosh direktor'}</p>
                 <p className="text-xs text-slate-600 font-medium">{isRu ? 'Тошпулатов А.А.' : 'Toshpulatov A.A.'}</p>

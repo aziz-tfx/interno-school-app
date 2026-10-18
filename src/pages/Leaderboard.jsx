@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { computeCountedSaleIds } from '../utils/countedSales'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -97,6 +98,9 @@ export default function Leaderboard() {
   }, [employees])
 
   // Compute stats per manager
+  // Сделкой считается только зачтённая продажа (оплата достигла месячной
+  // стоимости курса) — брони и доплаты идут в выручку, но не в счёт сделок.
+  const countedSaleIds = useMemo(() => computeCountedSaleIds(payments), [payments])
   const leaderboard = useMemo(() => {
     const filtered = managers.filter(m => branchFilter === 'all' || m.branch === branchFilter)
 
@@ -107,7 +111,7 @@ export default function Leaderboard() {
         (p.managerId === m.managerId || p.createdBy === m.id)
       )
       const revenue = managerSales.reduce((s, p) => s + (Number(p.amount) || 0), 0)
-      const dealsCount = managerSales.length
+      const dealsCount = managerSales.filter(p => countedSaleIds.has(p.id)).length
       const avgCheck = dealsCount > 0 ? Math.round(revenue / dealsCount) : 0
       const maxDeal = managerSales.reduce((mx, p) => Math.max(mx, Number(p.amount) || 0), 0)
       const perf = getManagerPerf(m.managerId, monthKey)
@@ -144,7 +148,7 @@ export default function Leaderboard() {
 
     // Assign ranks
     return sorted.map((row, i) => ({ ...row, rank: i + 1 }))
-  }, [managers, payments, monthKey, branchFilter, sortBy, getManagerPerf])
+  }, [managers, payments, monthKey, branchFilter, sortBy, getManagerPerf, countedSaleIds])
 
   // Totals
   const totals = useMemo(() => {

@@ -169,12 +169,14 @@ export async function fetchOnpbxCalls({ from, to }) {
 /**
  * Refresh amoCRM OAuth token for current tenant.
  */
-export async function refreshAmoToken() {
+// With `code` (authorization code of a new external integration) the server
+// exchanges it for the first token pair instead of refreshing.
+export async function refreshAmoToken(code) {
   try {
     const res = await fetch(`${API_BASE}/token-refresh`, {
       method: 'POST',
       headers: tenantHeaders(),
-      body: JSON.stringify({ tenantId: _tenantId }),
+      body: JSON.stringify({ tenantId: _tenantId, ...(code ? { code } : {}) }),
     })
     return await res.json()
   } catch (err) {

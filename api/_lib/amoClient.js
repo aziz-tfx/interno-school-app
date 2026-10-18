@@ -76,3 +76,44 @@ export async function ensureAmoToken(amo, tenantId) {
   const refreshed = await refreshAmoToken(amo, tenantId)
   return (refreshed && refreshed.access_token) || amo.accessToken
 }
+
+/**
+ * Minimal amoCRM REST client for jobs that run without a user (e.g. the AI
+ * agent): on a 401 it refreshes the token once via refreshAmoToken and retries.
+ * Accepts a path ("/api/v4/…") or a full amo URL (e.g. Salesbot return_url).
+ *
+ * @param {object} amo  resolved amo config (from resolveAmo, includes tenantId)
+ */
+export function createAmoClient(amo) {
+  const state = { ...amo }
+  const base = `https://${amo.subdomain}.amocrm.ru`
+
+  async function request(method, pathOrUrl, body) {
+    const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${base}${pathOrUrl}`
+    const doFetch = () => fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    let r = await doFetch()
+    if (r.status === 401) {
+      const refreshed = await refreshAmoToken(state, amo.tenantId)
+      if (refreshed?.access_token) {
+        state.accessToken = refreshed.access_token
+        state.refreshToken = refreshed.refresh_token
+        r = await doFetch()
+      }
+    }
+    if (r.status === 204) return null
+    const text = await r.text()
+    if (!r.ok) throw new Error(`amoCRM ${method} ${url} → ${r.status}: ${text.slice(0, 300)}`)
+    return text ? JSON.parse(text) : null
+  }
+
+  return {
+    get: (p) => request('GET', p),
+    post: (p, b) => request('POST', p, b),
+    patch: (p, b) => request('PATCH', p, b),
+    request,
+  }
+}

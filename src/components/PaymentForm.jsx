@@ -8,8 +8,10 @@ import { listTemplates, renderTemplateBlob, renderTemplateAndDownload } from '..
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { pushSaleToTelegram } from '../utils/telegram'
 import { branchToSlug } from '../utils/branchSlug'
-import { sameBranch } from '../utils/branchMatch'
+import { sameBranch, branchKey } from '../utils/branchMatch'
+import { isMyStudent, studentIdsWithMyPayments } from '../utils/studentAccess'
 import { getPromoCourses } from '../utils/lessonAccess'
+import { crossesThreshold, computeCountedSaleIds } from '../utils/countedSales'
 import { db, storage } from '../firebase'
 import { doc, setDoc, getDoc, increment } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -41,6 +43,10 @@ const BRANCH_TO_REGION = {
   bukhara: 'fergana',
   online: 'online',
 }
+// Pricing region for any branch reference (slug, random Firestore id or
+// branch doc) — collapses the id to its canonical slug first, so a branch
+// created through the UI still resolves to the right price list.
+const regionFor = (branchRef, branches) => BRANCH_TO_REGION[branchKey(branchRef, branches)] || 'tashkent'
 const BRANCH_OPTIONS = [
   { slug: 'tashkent', name: 'Ташкент' },
   { slug: 'samarkand', name: 'Самарканд' },
@@ -222,9 +228,15 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const canvasRef = useRef(null)
   const isDrawingRef = useRef(false)
 
+  // A manager sees their own branch's students, students they created or
+  // already took payments for (cross-branch sales — e.g. a Tashkent manager
+  // adding a доплата for their Samarkand client), and — when they pick
+  // another branch in the form — that branch's students too.
+  const myPaidStudentIds = useMemo(() => studentIdsWithMyPayments(payments, user), [payments, user])
   const branchStudents = students.filter(s =>
     user?.branch !== 'all'
-      ? (sameBranch(s.branch, user.branch, branches) || String(s.createdBy) === String(user?.id))
+      ? (isMyStudent(s, user, branches, myPaidStudentIds)
+        || sameBranch(s.branch, form.branch, branches))
       : sameBranch(s.branch, form.branch, branches)
   )
 
@@ -236,12 +248,24 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const totalPaid = studentPayments.reduce((sum, p) => sum + p.amount, 0)
   const currentAmount = Number(form.amount) || 0
 
+  // Branch choices for the sale: every manager can pick any branch (cross-
+  // branch sales are allowed). Canonical slugs first, then any tenant branch
+  // that doesn't collapse to a known slug (branches created through the UI).
+  const branchOptions = useMemo(() => {
+    const opts = BRANCH_OPTIONS.map(b => ({ ...b }))
+    for (const b of branches || []) {
+      const key = branchKey(b.id, branches)
+      if (!opts.some(o => o.slug === key)) opts.push({ slug: b.id, name: b.name || b.id })
+    }
+    return opts
+  }, [branches])
+
   // Show all groups (not filtered by branch)
   const branchGroups = groups.filter(g => g.status !== 'archived')
 
   // ─── Auto-calculate course price from course + tariff + discount + region ───
   const selectedCourse = courses.find(c => c.name === form.course)
-  const region = form.learningFormat === 'Онлайн' ? 'online' : (BRANCH_TO_REGION[form.branch] || 'tashkent')
+  const region = form.learningFormat === 'Онлайн' ? 'online' : regionFor(form.branch, branches)
   const coursePricing = selectedCourse?.pricing?.[region]?.[form.tariff]
   const courseFullPrice = coursePricing?.[form.discount] || coursePricing?.full || 0
   // Build tariff list: include all keys present in course pricing, plus resolve labels
@@ -273,6 +297,15 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const totalCoursePrice = courseFullPrice || selectedStudent?.totalCoursePrice || 0
   const autoDebt = totalCoursePrice > 0 ? Math.max(0, totalCoursePrice - totalPaid - currentAmount) : 0
 
+  // ─── Порог зачёта продажи: стоимость одного месяца курса ───
+  // Продажей считается платёж, с которым суммарная оплата ученика впервые
+  // достигает месячной цены; меньшая предоплата — бронь, а не продажа.
+  const monthlyCoursePrice = Number(coursePricing?.monthly) > 0
+    ? Number(coursePricing.monthly)
+    : (totalCoursePrice > 0 ? totalCoursePrice / (Number(form.durationMonths) || 3) : 0)
+  const countsAsSale = form.type === 'income' &&
+    crossesThreshold(totalPaid, currentAmount, monthlyCoursePrice)
+
   // Auto-fill from selected student
   useEffect(() => {
     if (form.studentId) {
@@ -292,13 +325,21 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
   }, [form.studentId, students, groups])
 
-  // Auto-fill from selected group (course, schedule, startDate, duration)
+  // Auto-fill from selected group (course, schedule, startDate, duration).
+  // The branch is only suggested from the group when the group itself
+  // changes AND the manager hasn't picked a branch by hand — otherwise a
+  // Tashkent manager selling to Samarkand would see their choice reset to
+  // the group's branch (e.g. on every tariff change).
+  const branchTouchedRef = useRef(false)
+  const lastGroupIdRef = useRef(form.groupId)
   useEffect(() => {
     if (form.groupId) {
       const group = groups.find(g => g.id === form.groupId)
+      const groupChanged = lastGroupIdRef.current !== form.groupId
+      lastGroupIdRef.current = form.groupId
       if (group) {
         const groupCourse = courses.find(c => c.name === group.course)
-        const groupRegion = BRANCH_TO_REGION[group.branch] || 'tashkent'
+        const groupRegion = regionFor(group.branch, branches)
         // Per-tariff duration override beats per-region beats global course duration.
         const tariffDur = groupCourse?.pricing?.[groupRegion]?.[form.tariff]?.durationMonths
         const regionDur = groupCourse?.durationByRegion?.[groupRegion]
@@ -311,7 +352,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           ...prev,
           course: group.course,
           schedule: group.schedule || prev.schedule,
-          branch: group.branch || prev.branch,
+          ...(groupChanged && !branchTouchedRef.current && group.branch ? { branch: group.branch } : {}),
           courseStartDate: group.startDate || prev.courseStartDate,
           contractLang: group.language || 'uz',
           ...(courseDuration ? { durationMonths: String(courseDuration) } : {}),
@@ -593,6 +634,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       templateId: selectedTemplateId || '',
       files: [], // placeholder — will be populated with Storage URLs after upload
       trancheNumber: studentPayments.length + 1,
+      // Порог зачёта и итог: продажа засчитана, только если суммарная оплата
+      // ученика этим платежом достигла месячной стоимости курса.
+      monthlyPrice: monthlyCoursePrice || 0,
+      countsAsSale,
       managerId: user?.managerId || null,
       createdBy: user?.id || null,
       createdByName: user?.name || '',
@@ -651,7 +696,9 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               tenantId,
               manager: managerName,
               day,
-              sales: increment(1),
+              // Бронь (до месячного порога) и доплата не увеличивают продажи,
+              // но деньги всегда попадают в выручку.
+              sales: increment(countsAsSale ? 1 : 0),
               revenue: increment(Number(form.amount) || 0),
             }, { merge: true })
           }
@@ -699,15 +746,22 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         (p.managerId === user?.managerId || p.createdBy === user?.id) &&
         p.date >= monthStart
       )
-      const thisMonthCount = managerSalesThisMonth.length + 1
+      // «N-я продажа» считает только зачтённые продажи (месячный порог),
+      // брони и доплаты дают деньги, но не номер продажи.
+      const countedIds = computeCountedSaleIds(payments)
+      const countedBefore = managerSalesThisMonth.filter(p => countedIds.has(p.id)).length
+      const thisMonthCount = countedBefore + (countsAsSale ? 1 : 0)
       const thisMonthRevenue = managerSalesThisMonth.reduce((s, p) => s + (Number(p.amount) || 0), 0) + Number(form.amount)
       const fmtRev = (n) => Number(n).toLocaleString('ru-RU').replace(/,/g, ' ')
-      const salesFact = `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
+      const salesFact = countsAsSale
+        ? `${thisMonthCount}-я продажа | ${fmtRev(thisMonthRevenue)} сум за месяц`
+        : `${isDoplata ? 'Доплата' : 'Предоплата (бронь), в продажи не зачтена'} | ${fmtRev(thisMonthRevenue)} сум за месяц`
 
       // 🎉 Victory moment: confetti + jackpot count-up + plan progress + sound
       setCelebration({
         amount: Number(form.amount) || 0,
-        salesCount: thisMonthCount,
+        salesCount: countsAsSale ? thisMonthCount : 0,
+        title: countsAsSale ? null : (isDoplata ? 'Доплата принята!' : 'Предоплата принята!'),
         planRevenue: user?.managerId ? getSalesPlan(user.managerId) : 0,
         prevRevenue: thisMonthRevenue - (Number(form.amount) || 0),
         newRevenue: thisMonthRevenue,
@@ -739,6 +793,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           debt: autoDebt,
           totalCoursePrice: courseFullPrice || 0,
           trancheNumber: studentPayments.length + 1,
+          countsAsSale,
           managerName: user?.name || '',
           salesFact,
           comment: form.comment,
@@ -1426,7 +1481,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                       set('course', e.target.value)
                       // Reset tariff if not available for this course
                       const c = courses.find(cr => cr.name === e.target.value)
-                      const r = form.learningFormat === 'Онлайн' ? 'online' : (BRANCH_TO_REGION[form.branch] || 'tashkent')
+                      const r = form.learningFormat === 'Онлайн' ? 'online' : regionFor(form.branch, branches)
                       if (c?.pricing?.[r] && !c.pricing[r][form.tariff]) {
                         const firstTariff = Object.keys(c.pricing[r])[0]
                         if (firstTariff) set('tariff', firstTariff)
@@ -1443,19 +1498,20 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                   {/* Branch (affects pricing per region) */}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_branch')} *</label>
-                    <select value={form.branch} onChange={(e) => {
+                    <select value={branchKey(form.branch, branches) || form.branch} onChange={(e) => {
                       const newBranch = e.target.value
+                      branchTouchedRef.current = true
                       set('branch', newBranch)
                       // Reset tariff if not available for new region
                       const c = courses.find(cr => cr.name === form.course)
-                      const r = form.learningFormat === 'Онлайн' ? 'online' : (BRANCH_TO_REGION[newBranch] || 'tashkent')
+                      const r = form.learningFormat === 'Онлайн' ? 'online' : regionFor(newBranch, branches)
                       if (c?.pricing?.[r] && !c.pricing[r][form.tariff]) {
                         const firstTariff = Object.keys(c.pricing[r])[0]
                         if (firstTariff) set('tariff', firstTariff)
                       }
                     }} required
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      {BRANCH_OPTIONS.map(b => (
+                      {branchOptions.map(b => (
                         <option key={b.slug} value={b.slug}>{b.name}</option>
                       ))}
                     </select>

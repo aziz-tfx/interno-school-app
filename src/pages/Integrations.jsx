@@ -13,6 +13,7 @@ import { loadIntegrations, saveIntegrationSection } from '../utils/tenantIntegra
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { branchToSlug } from '../utils/branchSlug'
 import { toast } from '../components/Toaster'
+import { Link } from 'react-router-dom'
 
 const BRANCH_LABELS = {
   tashkent: 'Ташкент',
@@ -130,6 +131,8 @@ export default function Integrations() {
   const [amoStatus, setAmoStatus] = useState(null)
   const [amoShowToken, setAmoShowToken] = useState(false)
   const [amoRefreshing, setAmoRefreshing] = useState(false)
+  const [amoAuthCode, setAmoAuthCode] = useState('')
+  const [amoExchanging, setAmoExchanging] = useState(false)
 
   const [pbxStatus, setPbxStatus] = useState(null)
   const [pbxShowKey, setPbxShowKey] = useState(false)
@@ -226,6 +229,31 @@ export default function Integrations() {
       toast.success('Токены обновлены' + (result.persisted ? ' и сохранены.' : ', но не сохранены автоматически.'))
     } else {
       toast.error('Не удалось обновить токен: ' + (result.error || result.details || 'Unknown'))
+    }
+  }
+
+  // First connection of a new external integration: authorization code → tokens
+  const doAmoExchange = async () => {
+    const code = amoAuthCode.trim()
+    const { subdomain, clientId, clientSecret, redirectUri } = cfg.amocrm
+    if (!subdomain || !clientId || !clientSecret || !redirectUri) {
+      toast.error('Сначала заполните субдомен, Client ID, Client Secret и Redirect URI новой интеграции')
+      return
+    }
+    setAmoExchanging(true)
+    try { await saveIntegrationSection(tenantId, 'amocrm', cfg.amocrm) } catch {}
+    const result = await refreshAmoToken(code)
+    setAmoExchanging(false)
+    if (result.success) {
+      setAmoAuthCode('')
+      setCfg(await loadIntegrations(tenantId))
+      setAmoStatus(null)
+      toast.success('Интеграция подключена, токены сохранены.')
+    } else {
+      const details = String(result.details || '')
+      toast.error(details.includes('expired') || details.includes('revoked')
+        ? 'Код авторизации истёк или уже использован. Обновите его в amoCRM и попробуйте снова.'
+        : 'Не удалось получить токены: ' + (result.error || 'Unknown') + (details ? ` (${details.slice(0, 200)})` : ''))
     }
   }
 
@@ -566,6 +594,25 @@ export default function Integrations() {
             </div>
           </div>
 
+          <div className="bg-slate-50 rounded-xl p-4">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Подключение новой внешней интеграции</label>
+            <p className="text-xs text-slate-500 mb-3">
+              Заполните выше субдомен, Client ID (ID интеграции), Client Secret (Секретный ключ) и Redirect URI —
+              точно как в настройках интеграции в amoCRM. Затем вставьте код авторизации со вкладки «Ключи и доступы»
+              (он действует 20 минут и одноразовый) — токены заполнятся автоматически.
+            </p>
+            <div className="flex gap-2">
+              <input type="password" value={amoAuthCode}
+                onChange={(e) => setAmoAuthCode(e.target.value)}
+                placeholder="Код авторизации: def50200..."
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <button onClick={doAmoExchange} disabled={amoExchanging || !amoAuthCode.trim()}
+                className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5 shrink-0">
+                <RefreshCw size={14} className={amoExchanging ? 'animate-spin' : ''} /> Получить токены
+              </button>
+            </div>
+          </div>
+
           {amoStatus === 'ok' && <div className="text-sm text-emerald-600 flex items-center gap-1.5"><CheckCircle size={14} /> Подключено</div>}
           {amoStatus === 'error' && <div className="text-sm text-red-500 flex items-center gap-1.5"><XCircle size={14} /> Ошибка подключения. Проверьте токен.</div>}
 
@@ -584,6 +631,23 @@ export default function Integrations() {
           </div>
         </div>
       </div>
+
+      {/* ═══════ AI agent — moved to its own page (/ai-agent) ═══════ */}
+      <Link to="/ai-agent" className="glass rounded-2xl overflow-hidden block hover:opacity-90 transition-opacity">
+        <div className="bg-gradient-to-r from-fuchsia-500 to-pink-500 p-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+              <Zap size={24} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white">ИИ-агент для Instagram и Telegram</h3>
+              <p className="text-white/80 text-sm">Настройки, тестовый чат и журнал — в разделе «ИИ-агент»</p>
+            </div>
+          </div>
+          <span className="bg-white/20 px-3 py-1.5 rounded-full text-sm text-white font-medium">Открыть →</span>
+        </div>
+      </Link>
+
 
       {/* ═══════ OnlinePBX ═══════ */}
       <div className="glass rounded-2xl overflow-hidden">

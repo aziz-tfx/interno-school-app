@@ -9,7 +9,8 @@ import { Trophy, TrendingUp, X } from 'lucide-react'
 //
 // Props:
 //   amount        — sale amount (сум)
-//   salesCount    — manager's Nth sale this month (1-based)
+//   salesCount    — manager's Nth counted sale this month (0 = бронь/доплата, line hidden)
+//   title         — headline override (default «Продажа оформлена!»)
 //   planRevenue   — manager's monthly plan (0 = no plan set)
 //   prevRevenue   — month revenue BEFORE this sale
 //   newRevenue    — month revenue AFTER this sale
@@ -111,7 +112,7 @@ function launchConfetti(canvas, { waves = 2, perWave = 90 } = {}) {
   return () => cancelAnimationFrame(raf)
 }
 
-export default function SaleCelebration({ amount, salesCount, planRevenue, prevRevenue, newRevenue, onClose }) {
+export default function SaleCelebration({ amount, salesCount, title, planRevenue, prevRevenue, newRevenue, onClose }) {
   const canvasRef = useRef(null)
   const closedRef = useRef(false)
   const [shownAmount, setShownAmount] = useState(0)
@@ -199,7 +200,7 @@ export default function SaleCelebration({ amount, salesCount, planRevenue, prevR
           <Trophy size={40} className="text-white" />
         </div>
 
-        <p className="text-amber-400 font-semibold tracking-widest text-sm uppercase mb-2">Продажа оформлена!</p>
+        <p className="text-amber-400 font-semibold tracking-widest text-sm uppercase mb-2">{title || 'Продажа оформлена!'}</p>
 
         <p className="text-white font-black text-5xl md:text-6xl tabular-nums tracking-tight mb-2">
           +{fmt(shownAmount)}

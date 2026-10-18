@@ -1,5 +1,9 @@
 // Vercel Serverless Function — refresh amoCRM OAuth token
 // POST /api/amo/token-refresh  body: { tenantId }
+// POST /api/amo/token-refresh  body: { tenantId, code }
+//   → first connection of a new external integration: exchanges the
+//     authorization code (amo → интеграция → «Ключи и доступы», valid 20 min)
+//     for the initial access/refresh pair.
 //
 // Uses per-tenant OAuth credentials stored in Firestore
 // (tenantIntegrations/{tenantId}.amocrm). Falls back to env vars if absent.
@@ -25,9 +29,15 @@ export default async function handler(req, res) {
     refreshToken: AMO_REFRESH_TOKEN,
   } = amo
 
-  if (!AMO_SUBDOMAIN || !AMO_CLIENT_ID || !AMO_CLIENT_SECRET || !AMO_REFRESH_TOKEN) {
+  const code = String(req.body?.code || '').trim()
+
+  if (!AMO_SUBDOMAIN || !AMO_CLIENT_ID || !AMO_CLIENT_SECRET || (!code && !AMO_REFRESH_TOKEN)) {
     return res.status(500).json({ error: 'OAuth credentials not configured for this tenant.' })
   }
+
+  const grant = code
+    ? { grant_type: 'authorization_code', code }
+    : { grant_type: 'refresh_token', refresh_token: AMO_REFRESH_TOKEN }
 
   try {
     const tokenRes = await fetch(`https://${AMO_SUBDOMAIN}.amocrm.ru/oauth2/access_token`, {
@@ -36,15 +46,14 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         client_id: AMO_CLIENT_ID,
         client_secret: AMO_CLIENT_SECRET,
-        grant_type: 'refresh_token',
-        refresh_token: AMO_REFRESH_TOKEN,
+        ...grant,
         redirect_uri: AMO_REDIRECT_URI || `https://${AMO_SUBDOMAIN}.amocrm.ru`,
       }),
     })
 
     if (!tokenRes.ok) {
       const err = await tokenRes.text()
-      return res.status(502).json({ error: 'Token refresh failed', details: err })
+      return res.status(502).json({ error: code ? 'Authorization code exchange failed' : 'Token refresh failed', details: err })
     }
 
     const tokens = await tokenRes.json()
