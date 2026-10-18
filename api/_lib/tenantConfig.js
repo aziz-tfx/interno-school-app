@@ -11,7 +11,8 @@
 //               handoffStatusId, handoffTag, pauseTag, maxRepliesPerLead,
 //               webhookKey, replyFieldId, salesbotId, replyInstagram,
 //               replyComments, replyTelegram, replyOtherChannels,
-//               testMode, testTag, enabled },
+//               testMode, testTag, followUpEnabled, followUpHours,
+//               notifyChatId, notifyHandoff, notifyErrors, enabled },
 // }
 //
 // Required env var for Firestore access:  FIREBASE_SERVICE_ACCOUNT_KEY (JSON string)
@@ -231,6 +232,11 @@ export async function resolveAiAgent(req) {
     replyOtherChannels: cfg.replyOtherChannels ?? (cfg.onlyInstagram === false),
     testMode:          cfg.testMode !== false,
     testTag:           cfg.testTag || 'ии-тест',
+    followUpEnabled:   cfg.followUpEnabled !== false,
+    followUpHours:     cfg.followUpHours ?? '2, 20',
+    notifyChatId:      cfg.notifyChatId || '',
+    notifyHandoff:     cfg.notifyHandoff !== false,
+    notifyErrors:      cfg.notifyErrors !== false,
     enabled: cfg.enabled === true,
   }
 }
