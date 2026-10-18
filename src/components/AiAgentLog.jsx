@@ -12,7 +12,9 @@ const fmtDate = (iso) => iso
   : '—'
 const fmtCost = (v) => v == null ? '—' : `$${v < 0.01 ? v.toFixed(4) : v.toFixed(2)}`
 
-// Conversation log of the Instagram AI agent (data: aiAgentConversations via API)
+const CHANNEL_BADGES = { instagram: 'Direct', comment: 'комментарий', telegram: 'Telegram', other: 'другой канал' }
+
+// Conversation log of the AI agent (data: aiAgentConversations via API)
 export default function AiAgentLog({ tenantId, amoSubdomain }) {
   const [days, setDays] = useState(7)
   const [data, setData] = useState(null)
@@ -98,7 +100,7 @@ export default function AiAgentLog({ tenantId, amoSubdomain }) {
           </div>
           <div>
             <h3 className="text-lg font-bold text-white">Журнал ИИ-агента</h3>
-            <p className="text-white/80 text-sm">Переписки бота с клиентами из Instagram</p>
+            <p className="text-white/80 text-sm">Переписки бота с клиентами из Instagram и Telegram</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -206,6 +208,9 @@ export default function AiAgentLog({ tenantId, amoSubdomain }) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-slate-900 truncate">{c.contactName || 'Клиент'}</span>
                       {c.leadId && <span className="text-xs text-slate-400">#{c.leadId}</span>}
+                      {CHANNEL_BADGES[c.channel] && (
+                        <span className="text-[10px] bg-fuchsia-50 text-fuchsia-700 px-1.5 py-0.5 rounded">{CHANNEL_BADGES[c.channel]}</span>
+                      )}
                       {c.phoneCaptured && (
                         <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                           <Phone size={9} /> телефон

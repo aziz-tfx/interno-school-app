@@ -10,6 +10,11 @@
 //     ↳ POST /api/v2/salesbot/run → a plain Salesbot whose only step sends
 //       {{lead.cf.<replyFieldId>}} to the client
 //
+// Channels: Instagram Direct, Instagram comments and Telegram (including the
+// bare «/start» a client sends by pressing Start in the bot). The channel is
+// taken from the webhook's `origin` and changes the prompt (e.g. comment replies
+// are public, so they stay short and invite the client to Direct).
+//
 // Conversation history is stored in Firestore: aiAgentConversations/{tenantId}__lead_{leadId}
 
 import crypto from 'node:crypto'
@@ -75,11 +80,47 @@ async function loadErpContext(tenantId) {
   }
 }
 
-async function buildSystemPrompt(cfg) {
+// ─── Channels ───────────────────────────────────────────────────────────
+export const CHANNEL_LABELS = {
+  instagram: 'Instagram Direct', comment: 'Комментарий Instagram', telegram: 'Telegram', other: 'Другой канал',
+}
+
+// amo puts the chat source into `origin` (e.g. "instagram_business", "telegram").
+// No origin at all was treated as Instagram before channels existed — keep that.
+export function detectChannel(origin) {
+  const o = String(origin || '').toLowerCase()
+  if (!o) return 'instagram'
+  if (/telegram|^tg\b/.test(o)) return 'telegram'
+  if (/insta/.test(o)) return /comment/.test(o) ? 'comment' : 'instagram'
+  return 'other'
+}
+
+function channelIntro(channel, school) {
+  if (channel === 'comment') return [
+    `Ты — консультант ${school} и отвечаешь на комментарии под постами в Instagram.`,
+    'Твой ответ публичный — его видят все. Пиши 1–2 коротких предложения: ответь по сути и пригласи написать в Direct, чтобы подобрать курс и записаться. Не проси телефон в комментариях.',
+  ]
+  if (channel === 'telegram') return [
+    `Ты — консультант ${school} и отвечаешь клиентам в Telegram.`,
+    'Если клиент только нажал «Старт» и ещё ничего не написал — коротко поздоровайся, представься и спроси, какое направление его интересует.',
+  ]
+  if (channel === 'other') return [`Ты — консультант ${school} и отвечаешь клиентам в мессенджере.`]
+  return [`Ты — консультант ${school} и отвечаешь клиентам в Instagram Direct.`]
+}
+
+// What the model sees for a client message that has no real text
+const START_RE = /^\/start(\s|$)/i
+function clientText(text) {
+  if (!text) return '[Клиент отправил вложение без текста: фото, голосовое или стикер]'
+  if (START_RE.test(text)) return '[Клиент нажал «Старт» и ещё ничего не написал]'
+  return text
+}
+
+async function buildSystemPrompt(cfg, channel) {
   const erp = cfg.includeCourses ? await loadErpContext(cfg.tenantId || 'default') : { schoolName: '' }
   const school = erp.schoolName || 'нашей школы'
   return [
-    `Ты — консультант ${school} и отвечаешь клиентам в Instagram Direct.`,
+    ...channelIntro(channel, school),
     '',
     'Правила:',
     '- Пиши коротко (1–4 предложения), живо и по-человечески, без markdown, списков со звёздочками и ссылок-заглушек.',
@@ -89,6 +130,7 @@ async function buildSystemPrompt(cfg) {
     '- Как только клиент сообщил имя или телефон — вызови save_contact. Когда понятно, что именно его интересует — вызови save_lead_info с кратким резюме.',
     '- Вызывай handoff_to_manager, если клиент просит живого человека, жалуется, готов оплатить, спрашивает про индивидуальные условия/скидки сверх указанных или ты не уверен в ответе.',
     '- Не обещай скидки, сроки и условия, которых нет в базе знаний.',
+    '- Вложения (фото, голосовые) ты не видишь и не слышишь — вежливо попроси написать вопрос текстом.',
     cfg.systemPrompt ? `\nДополнительные инструкции школы:\n${cfg.systemPrompt}` : '',
     cfg.knowledge ? `\n## База знаний\n${cfg.knowledge}` : '',
     erp.courses ? `\n## Курсы и цены (из ERP)\n${erp.courses}` : '',
@@ -228,11 +270,11 @@ async function callOpenAI(cfg, messages) {
  * One agent turn: history + new client message → reply text (+ amo actions).
  * Returns { reply, actions, handoff, usage }.
  */
-export async function runAgentTurn({ cfg, history, message, ctx }) {
-  const system = await buildSystemPrompt(cfg)
+export async function runAgentTurn({ cfg, history, message, channel = 'instagram', ctx }) {
+  const system = await buildSystemPrompt(cfg, channel)
   const messages = [
     { role: 'system', content: system },
-    ...history.slice(-HISTORY_TO_MODEL).map(m => ({ role: m.role, content: m.text })),
+    ...history.slice(-HISTORY_TO_MODEL).map(m => ({ role: m.role, content: m.role === 'user' ? clientText(m.text) : m.text })),
     { role: 'user', content: message },
   ]
   const state = { actions: [], handoff: null }
@@ -301,6 +343,7 @@ export function parseIncomingMessages(body) {
       leadId: (entityType === 'lead' || entityType === '2') ? String(f('entity_id') ?? f('element_id') ?? '') : '',
       contactId: String(f('contact_id') ?? ''),
       authorName: String(f('author', 'name') ?? ''),
+      attachmentType: String(f('attachment', 'type') ?? ''),
     })
   }
   return out
@@ -323,6 +366,7 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
   if (!db || !ref) return
   const now = new Date().toISOString()
   const amo = createAmoClient(amoCfg)
+  const channel = detectChannel(msg.origin)
 
   // Test mode: only leads tagged with testTag are handled; others aren't even logged
   if (cfg.testMode) {
@@ -348,6 +392,7 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
       contactId: msg.contactId || conv.contactId || null,
       contactName: msg.authorName || conv.contactName || null,
       origin: msg.origin || conv.origin || null,
+      channel,
       messages: [...(conv.messages || []), { role: 'user', text: msg.text, at: now, id: msg.id }].slice(-HISTORY_LIMIT),
       processedIds: [...processed, msg.id].filter(Boolean).slice(-PROCESSED_IDS_LIMIT),
       updatedAt: now,
@@ -377,11 +422,11 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
     let split = messages.length
     while (split > 0 && messages[split - 1].role === 'user') split--
     const history = messages.slice(0, split)
-    const message = messages.slice(split).map(m => m.text).filter(Boolean).join('\n')
+    const message = messages.slice(split).map(m => clientText(m.text)).join('\n')
     if (!message) return
 
     const result = await runAgentTurn({
-      cfg, history, message,
+      cfg, history, message, channel,
       ctx: { amo, leadId: msg.leadId, contactId: msg.contactId, dryRun: false },
     })
     if (result.reply) await sendReply(amo, cfg, msg.leadId, result.reply)
@@ -423,9 +468,20 @@ async function handleWebhook(req, res) {
   if (!cfg.enabled || !cfg.openaiKey || !cfg.replyFieldId || !cfg.salesbotId) return res.status(200).json({ ok: true, skipped: 'agent not configured' })
   if (!amoCfg.subdomain || !amoCfg.accessToken) return res.status(200).json({ ok: true, skipped: 'amo not configured' })
 
-  const messages = parseIncomingMessages(req.body).filter(m =>
-    m.type === 'incoming' && m.text && m.leadId &&
-    (!cfg.onlyInstagram || !m.origin || /insta/i.test(m.origin)))
+  const allowed = {
+    instagram: cfg.replyInstagram, comment: cfg.replyComments,
+    telegram: cfg.replyTelegram, other: cfg.replyOtherChannels,
+  }
+  const parsed = parseIncomingMessages(req.body)
+  const messages = parsed.filter(m =>
+    m.type === 'incoming' && (m.text || m.attachmentType) && m.leadId && allowed[detectChannel(m.origin)])
+  // origin values per channel aren't documented by amo — log them to tune detectChannel
+  for (const m of parsed) {
+    console.log('AI agent webhook:', JSON.stringify({
+      origin: m.origin, channel: detectChannel(m.origin), type: m.type, leadId: m.leadId,
+      hasText: !!m.text, attachment: m.attachmentType || null, accepted: messages.includes(m),
+    }))
+  }
 
   if (messages.length) {
     waitUntil(Promise.all(messages.map(msg => processIncomingMessage({ cfg, amoCfg, msg }))))
@@ -494,14 +550,15 @@ async function handleAgentTest(req, res) {
   if (!cfg.openaiKey) return res.status(400).json({ ok: false, error: 'Не указан OpenAI API key' })
   if (testRateLimited(tenantId || 'default')) return res.status(429).json({ ok: false, error: 'Лимит тестовых сообщений (60/час)' })
 
-  const { message, history } = req.body || {}
+  const { message, history, channel } = req.body || {}
   if (!message?.trim()) return res.status(400).json({ ok: false, error: 'Пустое сообщение' })
 
   try {
     const result = await runAgentTurn({
       cfg,
       history: Array.isArray(history) ? history.filter(m => m?.role && m?.text) : [],
-      message: message.trim(),
+      message: clientText(message.trim()),
+      channel: CHANNEL_LABELS[channel] ? channel : 'instagram',
       ctx: { dryRun: true },
     })
     return res.status(200).json({ ok: true, ...result })
@@ -596,6 +653,7 @@ async function handleAgentLog(req, res) {
         id: c.id,
         leadId: c.leadId,
         contactName: c.contactName,
+        channel: c.channel || detectChannel(c.origin),
         replies: c.replies || 0,
         messagesCount: (c.messages || []).length,
         lastText: last ? String(last.text || '').slice(0, 140) : '',
