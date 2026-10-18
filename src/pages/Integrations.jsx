@@ -640,7 +640,7 @@ export default function Integrations() {
               <Zap size={24} className="text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">ИИ-агент для Instagram</h3>
+              <h3 className="text-lg font-bold text-white">ИИ-агент для Instagram и Telegram</h3>
               <p className="text-white/80 text-sm">Настройки, тестовый чат и журнал — в разделе «ИИ-агент»</p>
             </div>
           </div>

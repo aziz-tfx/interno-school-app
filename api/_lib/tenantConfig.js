@@ -9,7 +9,8 @@
 //   onpbx:    { domain, apiKey, enabled },
 //   aiAgent:  { openaiKey, model, systemPrompt, knowledge, includeCourses,
 //               handoffStatusId, handoffTag, pauseTag, maxRepliesPerLead,
-//               webhookKey, replyFieldId, salesbotId, onlyInstagram,
+//               webhookKey, replyFieldId, salesbotId, replyInstagram,
+//               replyComments, replyTelegram, replyOtherChannels,
 //               testMode, testTag, enabled },
 // }
 //
@@ -223,7 +224,11 @@ export async function resolveAiAgent(req) {
     webhookKey:        cfg.webhookKey || '',
     replyFieldId:      cfg.replyFieldId || '',
     salesbotId:        cfg.salesbotId || '',
-    onlyInstagram:     cfg.onlyInstagram !== false,
+    replyInstagram:    cfg.replyInstagram !== false,
+    replyComments:     cfg.replyComments !== false,
+    replyTelegram:     cfg.replyTelegram !== false,
+    // legacy: onlyInstagram=false meant «answer in every channel»
+    replyOtherChannels: cfg.replyOtherChannels ?? (cfg.onlyInstagram === false),
     testMode:          cfg.testMode !== false,
     testTag:           cfg.testTag || 'ии-тест',
     enabled: cfg.enabled === true,

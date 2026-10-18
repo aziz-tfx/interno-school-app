@@ -6,9 +6,16 @@ import {
 
 const MODEL_SUGGESTIONS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
+const CHANNELS = [
+  { key: 'replyInstagram', channel: 'instagram', label: 'Instagram Direct' },
+  { key: 'replyComments', channel: 'comment', label: 'Комментарии в Instagram' },
+  { key: 'replyTelegram', channel: 'telegram', label: 'Telegram (в т.ч. нажатие «Старт»)' },
+  { key: 'replyOtherChannels', channel: 'other', label: 'Другие каналы (WhatsApp и др.)' },
+]
+
 const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-500'
 
-// Settings + test chat for the Instagram AI agent (amoCRM Salesbot).
+// Settings + test chat for the AI sales agent in amoCRM chats (Salesbot).
 // `value` is cfg.aiAgent; `persist` saves the section before a test so the
 // server uses exactly what's on screen.
 export default function AiAgentSettings({ tenantId, value, onChange, persist, saveButton }) {
@@ -20,6 +27,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
 
   const [chat, setChat] = useState([]) // { role, text, actions? }
   const [draft, setDraft] = useState('')
+  const [testChannel, setTestChannel] = useState('instagram')
   const [sending, setSending] = useState(false)
   const [testError, setTestError] = useState(null)
   const chatEndRef = useRef(null)
@@ -57,10 +65,10 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
     } catch {}
   }
 
-  const sendTest = async () => {
-    const message = draft.trim()
+  const sendTest = async (text = draft) => {
+    const message = text.trim()
     if (!message || sending) return
-    setDraft('')
+    if (text === draft) setDraft('')
     setTestError(null)
     const history = chat.map(({ role, text }) => ({ role, text }))
     setChat(prev => [...prev, { role: 'user', text: message }])
@@ -70,7 +78,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
       const res = await fetch('/api/ai/amo-agent?mode=test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId, message, history }),
+        body: JSON.stringify({ tenantId, message, history, channel: testChannel }),
       })
       const data = await res.json().catch(() => ({}))
       if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
@@ -89,7 +97,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
             <Bot size={24} className="text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">ИИ-агент для Instagram</h3>
+            <h3 className="text-lg font-bold text-white">ИИ-агент для Instagram и Telegram</h3>
             <p className="text-white/80 text-sm">ChatGPT отвечает на заявки в чатах amoCRM через Salesbot</p>
           </div>
         </div>
@@ -188,12 +196,22 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
             )}
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-            <input type="checkbox" checked={value.onlyInstagram !== false}
-              onChange={(e) => onChange({ onlyInstagram: e.target.checked })}
-              className="w-4 h-4 rounded" />
-            Отвечать только в чатах Instagram (Telegram, WhatsApp и др. игнорировать)
-          </label>
+          <div>
+            <p className="text-sm font-medium text-slate-700 mb-1.5">Где отвечать</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+              {CHANNELS.map(c => (
+                <label key={c.key} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                  <input type="checkbox"
+                    checked={c.key === 'replyOtherChannels'
+                      ? !!(value.replyOtherChannels ?? value.onlyInstagram === false)
+                      : value[c.key] !== false}
+                    onChange={(e) => onChange({ [c.key]: e.target.checked })}
+                    className="w-4 h-4 rounded" />
+                  {c.label}
+                </label>
+              ))}
+            </div>
+          </div>
 
           <div>
             <button onClick={() => setShowSetup(!showSetup)}
@@ -204,7 +222,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
               <ol className="mt-2 text-xs text-slate-600 space-y-1.5 list-decimal pl-5">
                 <li>Нажмите «Создать в amoCRM» — в сделках появится поле «Ответ ИИ».</li>
                 <li>amoCRM → AI-агенты и боты → создайте Salesbot с одним шагом «Отправить сообщение», текст — поле сделки «Ответ ИИ». Сохраните и вставьте ID бота (число из адреса) выше.</li>
-                <li>amoМаркет → WEB HOOKS → добавьте адрес вебхука выше и отметьте событие «Входящее сообщение добавлено».</li>
+                <li>amoМаркет → WEB HOOKS → добавьте адрес вебхука выше и отметьте событие «Входящее сообщение добавлено». Одно событие покрывает Instagram, комментарии и Telegram.</li>
                 <li>Чтобы остановить бота в конкретной сделке, поставьте ей тег из поля «Тег паузы» ниже.</li>
                 <li>Проверьте ответы в тестовом чате внизу, затем отключите nextbot, чтобы клиенту не отвечали два бота.</li>
               </ol>
@@ -265,8 +283,12 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
 
         {/* Test chat */}
         <div className="bg-slate-50 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <label className="text-sm font-medium text-slate-700">Тестовый чат</label>
+            <select value={testChannel} onChange={(e) => setTestChannel(e.target.value)}
+              className="ml-auto px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-fuchsia-500">
+              {CHANNELS.map(c => <option key={c.channel} value={c.channel}>{c.label.replace(/ \(.*\)$/, '')}</option>)}
+            </select>
             <button onClick={() => { setChat([]); setTestError(null) }} disabled={!chat.length}
               className="text-xs text-slate-500 hover:text-slate-700 disabled:opacity-40 flex items-center gap-1">
               <RotateCcw size={12} /> Начать заново
@@ -314,7 +336,13 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
               onKeyDown={(e) => { if (e.key === 'Enter') sendTest() }}
               placeholder="Сообщение от клиента…"
               className={inputCls} />
-            <button onClick={sendTest} disabled={sending || !draft.trim() || !value.openaiKey}
+            {testChannel === 'telegram' && (
+              <button onClick={() => sendTest('/start')} disabled={sending || !value.openaiKey}
+                className="px-3 py-2.5 bg-white text-fuchsia-600 border border-fuchsia-200 rounded-xl text-sm font-medium hover:bg-fuchsia-50 disabled:opacity-50 shrink-0">
+                /start
+              </button>
+            )}
+            <button onClick={() => sendTest()} disabled={sending || !draft.trim() || !value.openaiKey}
               className="px-4 py-2.5 bg-fuchsia-600 text-white rounded-xl text-sm font-medium hover:bg-fuchsia-700 disabled:opacity-50 flex items-center gap-1.5 shrink-0">
               <Send size={14} /> Отправить
             </button>

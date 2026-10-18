@@ -7,7 +7,7 @@ import { toast } from '../components/Toaster'
 import AiAgentSettings from '../components/AiAgentSettings'
 import AiAgentLog from '../components/AiAgentLog'
 
-// Instagram AI agent (amoCRM Salesbot): settings, test chat and conversation log.
+// AI sales agent for amoCRM chats (Salesbot): settings, test chat and conversation log.
 // Config lives in tenantIntegrations/{tenantId}.aiAgent, next to the amoCRM keys.
 export default function AiAgent() {
   const { user } = useAuth()
@@ -85,7 +85,7 @@ export default function AiAgent() {
       <div>
         <h2 className="text-xl md:text-2xl font-bold text-slate-900">ИИ-агент</h2>
         <p className="text-slate-500 mt-1">
-          Ответы ChatGPT на заявки из Instagram в amoCRM. Ключи amoCRM настраиваются в разделе «Интеграции».
+          Ответы ChatGPT на заявки из Instagram (Direct и комментарии) и Telegram в amoCRM. Ключи amoCRM настраиваются в разделе «Интеграции».
         </p>
       </div>
 
