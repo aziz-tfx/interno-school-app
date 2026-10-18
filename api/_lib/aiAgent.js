@@ -15,11 +15,20 @@
 // taken from the webhook's `origin` and changes the prompt (e.g. comment replies
 // are public, so they stay short and invite the client to Direct).
 //
+// Follow-ups: when the client goes silent after a bot reply, the bot nudges
+// them after cfg.followUpHours (e.g. "2, 20" → 2 h and 20 h after that reply).
+// Due conversations carry followUpDueAt; runFollowUps() sends them. Vercel Hobby
+// crons run only daily, so the sweep also runs (throttled) on every webhook and
+// via ?mode=followups, which an external cron can hit every 15 minutes.
+//
+// Managers get a Telegram message on handoff, and on errors (throttled), since
+// a failing bot is otherwise silent.
+//
 // Conversation history is stored in Firestore: aiAgentConversations/{tenantId}__lead_{leadId}
 
 import crypto from 'node:crypto'
 import { waitUntil } from '@vercel/functions'
-import { getDb, getTenantId, resolveAmo, resolveAiAgent, saveTenantIntegration } from './tenantConfig.js'
+import { getDb, getTenantId, resolveAmo, resolveAiAgent, resolveTelegram, saveTenantIntegration } from './tenantConfig.js'
 import { createAmoClient } from './amoClient.js'
 
 const HISTORY_LIMIT = 40          // messages kept in Firestore
@@ -28,6 +37,12 @@ const MAX_TOOL_ROUNDS = 3
 const OPENAI_TIMEOUT_MS = 40000
 const DEBOUNCE_MS = 6000          // wait for the client to finish a burst of messages
 const PROCESSED_IDS_LIMIT = 50    // amo may redeliver a webhook — dedupe by message id
+const FOLLOWUP_BATCH = 10         // follow-ups per sweep, sent in parallel (function limit is 60 s)
+const SWEEP_INTERVAL_MS = 5 * 60_000
+const IG_WINDOW_MS = 23 * 3600_000 // Instagram allows business messages only 24 h after the client's last one
+const WORK_HOURS = [9, 21]        // follow-ups only in the daytime, Tashkent time (UTC+5)
+const ALERT_COOLDOWN_MS = 30 * 60_000
+const CLOSED_STATUSES = ['142', '143'] // amo «Успешно реализовано» / «Закрыто и не реализовано»
 
 const TARIFF_LABELS = {
   standard: 'Стандарт', vip: 'VIP', premium: 'Премиум', individual: 'Индивидуальный', budget: 'Бюджет',
@@ -270,12 +285,14 @@ async function callOpenAI(cfg, messages) {
  * One agent turn: history + new client message → reply text (+ amo actions).
  * Returns { reply, actions, handoff, usage }.
  */
-export async function runAgentTurn({ cfg, history, message, channel = 'instagram', ctx }) {
+export async function runAgentTurn({ cfg, history, message, followUp, channel = 'instagram', ctx }) {
   const system = await buildSystemPrompt(cfg, channel)
   const messages = [
     { role: 'system', content: system },
     ...history.slice(-HISTORY_TO_MODEL).map(m => ({ role: m.role, content: m.role === 'user' ? clientText(m.text) : m.text })),
-    { role: 'user', content: message },
+    followUp
+      ? { role: 'system', content: followUpInstruction(followUp) }
+      : { role: 'user', content: message },
   ]
   const state = { actions: [], handoff: null }
   const usage = { prompt: 0, completion: 0 }
@@ -306,6 +323,15 @@ export async function runAgentTurn({ cfg, history, message, channel = 'instagram
   }
 
   return { reply, actions: state.actions, handoff: state.handoff, usage }
+}
+
+function followUpInstruction({ hours, number, total }) {
+  return [
+    `Клиент не отвечает на твоё последнее сообщение уже примерно ${hours} ч. Это напоминание №${number} из ${total}.`,
+    'Напиши одно короткое ненавязчивое сообщение (1–2 предложения), которое мягко возвращает к разговору:',
+    'напомни, о чём шла речь, и задай простой вопрос, на который легко ответить. Не повторяй прошлые сообщения дословно и не дави.',
+    number === total ? 'Это последнее напоминание — можно добавить, что ты на связи, если вопрос станет актуальным.' : '',
+  ].filter(Boolean).join('\n')
 }
 
 // ─── Conversation storage ───────────────────────────────────────────────
@@ -375,6 +401,7 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
       if (!leadTags(lead).includes(cfg.testTag)) return
     } catch (e) {
       console.warn('AI agent test-mode lead check failed:', e.message)
+      await alertError(cfg, amoCfg, msg.leadId, e)
       return
     }
   }
@@ -395,6 +422,8 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
       channel,
       messages: [...(conv.messages || []), { role: 'user', text: msg.text, at: now, id: msg.id }].slice(-HISTORY_LIMIT),
       processedIds: [...processed, msg.id].filter(Boolean).slice(-PROCESSED_IDS_LIMIT),
+      followUpsSent: 0,
+      followUpDueAt: null,
       updatedAt: now,
     })
     return true
@@ -432,15 +461,189 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
     if (result.reply) await sendReply(amo, cfg, msg.leadId, result.reply)
 
     // 5. Persist the answer (merge: new user messages may have arrived meanwhile)
-    await db.runTransaction(async (tx) => {
+    const replyAt = new Date().toISOString()
+    const awaitingClient = !!result.reply && !result.handoff
+    const saved = await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref)
       const cur = snap.data() || {}
-      tx.set(ref, {
+      const next = {
         ...cur,
         messages: result.reply
-          ? [...(cur.messages || []), { role: 'assistant', text: result.reply, at: new Date().toISOString(), actions: result.actions }].slice(-HISTORY_LIMIT)
+          ? [...(cur.messages || []), { role: 'assistant', text: result.reply, at: replyAt, actions: result.actions }].slice(-HISTORY_LIMIT)
           : (cur.messages || []),
+        followUpBaseAt: awaitingClient ? replyAt : null,
+        followUpDueAt: awaitingClient && followUpsAllowed(cfg, channel) ? followUpDueAt(cfg, replyAt, 0) : null,
         replies: (cur.replies || 0) + (result.reply ? 1 : 0),
+        paused: !!(cur.paused || result.handoff),
+        handoffReason: result.handoff || cur.handoffReason || null,
+        promptTokens: (cur.promptTokens || 0) + result.usage.prompt,
+        completionTokens: (cur.completionTokens || 0) + result.usage.completion,
+        lastError: null,
+        updatedAt: new Date().toISOString(),
+      }
+      tx.set(ref, next)
+      return next
+    })
+    if (result.handoff) await notifyHandoff(cfg, amoCfg, saved, result.handoff)
+  } catch (e) {
+    console.error('AI agent error:', e)
+    try { await ref.set({ lastError: String(e.message).slice(0, 500), updatedAt: new Date().toISOString() }, { merge: true }) } catch {}
+    await alertError(cfg, amoCfg, msg.leadId, e)
+  }
+}
+
+// ─── Telegram notifications for managers ────────────────────────────────
+const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const tenantReq = (tenantId) => ({ query: { tenantId: tenantId || 'default' } })
+const leadLink = (amoCfg, leadId) => amoCfg?.subdomain && leadId
+  ? `<a href="https://${amoCfg.subdomain}.amocrm.ru/leads/detail/${leadId}">Открыть сделку #${leadId}</a>`
+  : (leadId ? `Сделка #${leadId}` : '')
+
+// Managers' chat: cfg.notifyChatId, else the main (Tashkent) chat from the Telegram integration.
+async function sendManagerMessage(cfg, text) {
+  const tg = await resolveTelegram(tenantReq(cfg.tenantId))
+  const chatId = cfg.notifyChatId || tg.chats.tashkent
+  if (!tg.botToken || !chatId) throw new Error('Не настроен Telegram-бот или чат для уведомлений')
+  const r = await fetch(`https://api.telegram.org/bot${tg.botToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+  })
+  if (!r.ok) throw new Error(`Telegram ${r.status}: ${(await r.text()).slice(0, 200)}`)
+}
+
+async function notifyHandoff(cfg, amoCfg, conv, reason) {
+  if (!cfg.notifyHandoff) return
+  const actions = (conv.messages || []).flatMap(m => m.actions || [])
+  const phone = actions.filter(a => a.tool === 'save_contact' && a.args?.phone).map(a => normalizePhone(a.args.phone)).at(-1)
+  const name = actions.filter(a => a.tool === 'save_contact' && a.args?.name).map(a => a.args.name).at(-1) || conv.contactName
+  const info = actions.filter(a => a.tool === 'save_lead_info').at(-1)?.args || {}
+  const lastClient = (conv.messages || []).filter(m => m.role === 'user').at(-1)
+  const text = [
+    '🙋 <b>Клиент ждёт менеджера</b>',
+    `Клиент: ${esc([name, phone].filter(Boolean).join(' · ') || 'без имени')}`,
+    `Канал: ${esc(CHANNEL_LABELS[conv.channel] || CHANNEL_LABELS.instagram)}`,
+    `Причина: ${esc(reason)}`,
+    (info.course || info.city_or_format) && `Интерес: ${esc([info.course, info.city_or_format].filter(Boolean).join(', '))}`,
+    lastClient?.text && `Последнее сообщение: «${esc(String(lastClient.text).slice(0, 200))}»`,
+    leadLink(amoCfg, conv.leadId),
+  ].filter(Boolean).join('\n')
+  try { await sendManagerMessage(cfg, text) } catch (e) { console.warn('AI agent handoff notify failed:', e.message) }
+}
+
+function explainError(message) {
+  const m = String(message || '')
+  if (/OpenAI 401/.test(m)) return 'Неверный OpenAI API key.'
+  if (/OpenAI 429/.test(m) && /quota|billing/i.test(m)) return 'Закончились деньги на балансе OpenAI.'
+  if (/OpenAI 429/.test(m)) return 'OpenAI временно ограничил число запросов.'
+  if (/OpenAI 5\d\d|abort/i.test(m)) return 'OpenAI не ответил — вероятно, временный сбой.'
+  if (/amoCRM .*→ 401/.test(m)) return 'Токен amoCRM истёк и не обновился — переподключите amoCRM в «Интеграциях».'
+  if (/amoCRM .*→ 40[034]/.test(m)) return 'amoCRM отклонил запрос — проверьте ID поля «Ответ ИИ» и ID Salesbot.'
+  return 'Неизвестная ошибка.'
+}
+
+// At most one alert per tenant per ALERT_COOLDOWN_MS, so an outage doesn't flood the chat.
+async function alertError(cfg, amoCfg, leadId, err) {
+  if (!cfg.notifyErrors) return
+  const db = getDb()
+  if (!db) return
+  try {
+    const ref = db.collection('aiAgentAlerts').doc(cfg.tenantId || 'default')
+    const due = await db.runTransaction(async (tx) => {
+      const last = (await tx.get(ref)).data()?.lastAlertAt
+      if (last && Date.now() - Date.parse(last) < ALERT_COOLDOWN_MS) return false
+      tx.set(ref, { lastAlertAt: new Date().toISOString(), lastError: String(err?.message).slice(0, 500) }, { merge: true })
+      return true
+    })
+    if (!due) return
+    await sendManagerMessage(cfg, [
+      '⚠️ <b>ИИ-агент не смог ответить клиенту</b>',
+      esc(explainError(err?.message)),
+      leadLink(amoCfg, leadId),
+      `<code>${esc(String(err?.message).slice(0, 300))}</code>`,
+      'Пока ошибка не исправлена, бот молчит. Следующее уведомление — не раньше чем через 30 минут.',
+    ].filter(Boolean).join('\n'))
+  } catch (e) {
+    console.warn('AI agent error alert failed:', e.message)
+  }
+}
+
+// ─── Follow-ups ─────────────────────────────────────────────────────────
+export function parseFollowUpHours(raw) {
+  return String(raw ?? '').split(/[,;\s]+/).map(Number).filter(n => n > 0 && n <= 168).slice(0, 3)
+}
+
+// Comments are public, so they never get nudges
+const followUpsAllowed = (cfg, channel) => cfg.followUpEnabled && channel !== 'comment' && parseFollowUpHours(cfg.followUpHours).length > 0
+
+function followUpDueAt(cfg, baseAt, sent) {
+  const hours = parseFollowUpHours(cfg.followUpHours)
+  return sent < hours.length ? new Date(Date.parse(baseAt) + hours[sent] * 3600_000).toISOString() : null
+}
+
+function isWorkingHours(date = new Date()) {
+  const h = (date.getUTCHours() + 5) % 24
+  return h >= WORK_HOURS[0] && h < WORK_HOURS[1]
+}
+
+const CHANNEL_SETTING = { instagram: 'replyInstagram', comment: 'replyComments', telegram: 'replyTelegram', other: 'replyOtherChannels' }
+
+// Returns 'sent' or the reason it was skipped. Claiming clears followUpDueAt,
+// so a skipped conversation leaves the queue until the client writes again.
+async function sendFollowUp(ref, cfg, amoCfg) {
+  const db = getDb()
+  // Claim it: a parallel sweep or a fresh client message may have changed it
+  const conv = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    const c = snap.data()
+    if (!c?.followUpDueAt || c.followUpDueAt > new Date().toISOString()) return null
+    tx.set(ref, { followUpDueAt: null }, { merge: true })
+    return c
+  })
+  if (!conv) return 'claimed elsewhere'
+
+  const channel = conv.channel || detectChannel(conv.origin)
+  const messages = conv.messages || []
+  if (!cfg.enabled || !cfg.openaiKey || !cfg.replyFieldId || !cfg.salesbotId || !amoCfg.accessToken) return 'agent not configured'
+  if (!followUpsAllowed(cfg, channel) || !cfg[CHANNEL_SETTING[channel]]) return 'channel off'
+  if (conv.paused || messages.at(-1)?.role !== 'assistant') return 'not awaiting client'
+  if ((conv.replies || 0) - (conv.resumedAtReplies || 0) >= cfg.maxRepliesPerLead) return 'reply cap'
+  const lastClientAt = messages.filter(m => m.role === 'user').at(-1)?.at
+  if (channel === 'instagram' && lastClientAt && Date.now() - Date.parse(lastClientAt) > IG_WINDOW_MS) return 'instagram 24h window'
+
+  const amo = createAmoClient(amoCfg)
+  try {
+    const lead = await amo.get(`/api/v4/leads/${conv.leadId}`)
+    const tags = leadTags(lead)
+    if (tags.includes(cfg.pauseTag) || tags.includes(cfg.handoffTag)) return 'paused in amo'
+    if (cfg.testMode && !tags.includes(cfg.testTag)) return 'test mode'
+    if (CLOSED_STATUSES.includes(String(lead?.status_id))) return 'lead closed'
+    if (cfg.handoffStatusId && String(lead?.status_id) === String(cfg.handoffStatusId)) return 'at manager stage'
+
+    const hours = parseFollowUpHours(cfg.followUpHours)
+    const sent = conv.followUpsSent || 0
+    const result = await runAgentTurn({
+      cfg, history: messages, channel,
+      followUp: {
+        hours: Math.round((Date.now() - Date.parse(conv.followUpBaseAt || messages.at(-1).at)) / 3600_000) || 1,
+        number: sent + 1, total: hours.length,
+      },
+      ctx: { amo, leadId: conv.leadId, contactId: conv.contactId, dryRun: false },
+    })
+    if (!result.reply) return 'empty reply'
+    await sendReply(amo, cfg, conv.leadId, result.reply)
+
+    await db.runTransaction(async (tx) => {
+      const cur = (await tx.get(ref)).data() || {}
+      const clientWrote = (cur.messages || []).at(-1)?.role === 'user'
+      tx.set(ref, {
+        ...cur,
+        messages: [...(cur.messages || []), {
+          role: 'assistant', text: result.reply, at: new Date().toISOString(), actions: result.actions, followUp: true,
+        }].slice(-HISTORY_LIMIT),
+        replies: (cur.replies || 0) + 1,
+        followUpsSent: sent + 1,
+        followUpDueAt: clientWrote || result.handoff ? null : followUpDueAt(cfg, conv.followUpBaseAt || messages.at(-1).at, sent + 1),
         paused: !!(cur.paused || result.handoff),
         handoffReason: result.handoff || cur.handoffReason || null,
         promptTokens: (cur.promptTokens || 0) + result.usage.prompt,
@@ -449,10 +652,43 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
         updatedAt: new Date().toISOString(),
       })
     })
+    if (result.handoff) await notifyHandoff(cfg, amoCfg, { ...conv, channel }, result.handoff)
+    return 'sent'
   } catch (e) {
-    console.error('AI agent error:', e)
-    try { await ref.set({ lastError: String(e.message).slice(0, 500), updatedAt: new Date().toISOString() }, { merge: true }) } catch {}
+    console.error('AI agent follow-up error:', e)
+    await ref.set({ lastError: String(e.message).slice(0, 500), updatedAt: new Date().toISOString() }, { merge: true })
+    await alertError(cfg, amoCfg, conv.leadId, e)
+    return 'error'
   }
+}
+
+/** Sends due follow-ups for all tenants. Safe to run concurrently (each one is claimed). */
+export async function runFollowUps() {
+  const db = getDb()
+  if (!db) return { ok: false, error: 'Firestore unavailable' }
+  if (!isWorkingHours()) return { ok: true, skipped: 'outside working hours' }
+  const snap = await db.collection('aiAgentConversations')
+    .where('followUpDueAt', '<=', new Date().toISOString())
+    .orderBy('followUpDueAt')
+    .limit(FOLLOWUP_BATCH)
+    .get()
+  const configs = {}
+  const results = {}
+  await Promise.all(snap.docs.map(async (doc) => {
+    const tenantId = doc.data().tenantId || 'default'
+    configs[tenantId] ||= Promise.all([resolveAiAgent(tenantReq(tenantId)), resolveAmo(tenantReq(tenantId))])
+    const [cfg, amoCfg] = await configs[tenantId]
+    const outcome = await sendFollowUp(doc.ref, cfg, amoCfg)
+    results[outcome] = (results[outcome] || 0) + 1
+  }))
+  return { ok: true, due: snap.size, results }
+}
+
+let lastSweepAt = 0
+function sweepFollowUpsSoon() {
+  if (Date.now() - lastSweepAt < SWEEP_INTERVAL_MS) return
+  lastSweepAt = Date.now()
+  waitUntil(runFollowUps().catch(e => console.error('AI agent follow-up sweep failed:', e)))
 }
 
 function keyMatches(given, expected) {
@@ -486,6 +722,7 @@ async function handleWebhook(req, res) {
   if (messages.length) {
     waitUntil(Promise.all(messages.map(msg => processIncomingMessage({ cfg, amoCfg, msg }))))
   }
+  sweepFollowUpsSoon()
   return res.status(200).json({ ok: true, accepted: messages.length })
 }
 
@@ -505,6 +742,10 @@ async function handleSetup(req, res) {
       await saveTenantIntegration(tenantId || 'default', 'aiAgent', { replyFieldId: id })
       return res.status(200).json({ ok: true, replyFieldId: id })
     }
+    if (req.body?.action === 'test-notify') {
+      await sendManagerMessage(cfg, '✅ Уведомления ИИ-агента подключены. Сюда будут приходить клиенты, переданные менеджеру, и ошибки бота.')
+      return res.status(200).json({ ok: true })
+    }
     return res.status(400).json({ ok: false, error: 'Unknown action' })
   } catch (e) {
     console.error('AI agent setup error:', e)
@@ -523,11 +764,25 @@ function normalizeQuery(req) {
   req.query = q
 }
 
-/** /api/ai/amo-agent?mode=webhook|test|log|setup */
+// GET|POST ?mode=followups&tenantId=…&key=… — for an external cron (every 15 min).
+// The key of any tenant authorizes the sweep; it only sends follow-ups that are due.
+async function handleFollowUps(req, res) {
+  const cfg = await resolveAiAgent(req)
+  if (!keyMatches(req.query?.key, cfg.webhookKey)) return res.status(403).json({ error: 'Forbidden' })
+  try {
+    return res.status(200).json(await runFollowUps())
+  } catch (e) {
+    console.error('AI agent follow-ups error:', e)
+    return res.status(500).json({ ok: false, error: e.message })
+  }
+}
+
+/** /api/ai/amo-agent?mode=webhook|followups|test|log|setup */
 export async function handleAmoAgent(req, res) {
   normalizeQuery(req)
   const mode = req.query?.mode || req.body?.mode
   if (mode === 'log') return handleAgentLog(req, res)
+  if (mode === 'followups') return handleFollowUps(req, res)
   if (mode === 'setup') return handleSetup(req, res)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (mode === 'test') return handleAgentTest(req, res)

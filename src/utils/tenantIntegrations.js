@@ -53,6 +53,11 @@ const EMPTY = {
     replyTelegram: true,
     testMode: true,
     testTag: 'ии-тест',
+    followUpEnabled: true,
+    followUpHours: '2, 20',
+    notifyChatId: '',
+    notifyHandoff: true,
+    notifyErrors: true,
     enabled: false,
   },
 }
