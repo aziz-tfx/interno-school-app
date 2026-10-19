@@ -179,7 +179,7 @@ export default function AiAgentLog({ tenantId, amoSubdomain }) {
                         {m.text}
                       </div>
                       <p className={`text-[10px] text-slate-400 mt-0.5 ${m.role === 'user' ? '' : 'text-right'}`}>
-                        {m.role === 'user' ? 'Клиент' : 'Бот'} · {fmtDate(m.at)}
+                        {m.role === 'user' ? 'Клиент' : m.followUp ? 'Бот · напоминание' : 'Бот'} · {fmtDate(m.at)}
                       </p>
                       {(m.actions || []).map((a, j) => (
                         <div key={j} className="mt-1 text-[11px] text-slate-500 flex items-start gap-1 justify-end">

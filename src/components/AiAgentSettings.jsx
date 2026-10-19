@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Bot, Eye, EyeOff, Copy, CheckCircle, Send, RefreshCw,
-  RotateCcw, ChevronDown, ChevronUp, Wrench, XCircle, Plus,
+  RotateCcw, ChevronDown, ChevronUp, Wrench, XCircle, Plus, BellRing,
 } from 'lucide-react'
 
 const MODEL_SUGGESTIONS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
@@ -24,6 +24,8 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
   const [showSetup, setShowSetup] = useState(false)
   const [creatingField, setCreatingField] = useState(false)
   const [setupError, setSetupError] = useState(null)
+  const [notifyState, setNotifyState] = useState(null) // null | 'sending' | 'ok' | error text
+  const [copiedCron, setCopiedCron] = useState(false)
 
   const [chat, setChat] = useState([]) // { role, text, actions? }
   const [draft, setDraft] = useState('')
@@ -37,6 +39,35 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
   const endpoint = value.webhookKey
     ? `${window.location.origin}/api/ai/amo-agent?mode=webhook&tenantId=${encodeURIComponent(tenantId)}&key=${value.webhookKey}`
     : ''
+
+  const cronUrl = value.webhookKey
+    ? `${window.location.origin}/api/ai/amo-agent?mode=followups&tenantId=${encodeURIComponent(tenantId)}&key=${value.webhookKey}`
+    : ''
+
+  const copyCronUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(cronUrl)
+      setCopiedCron(true)
+      setTimeout(() => setCopiedCron(false), 1500)
+    } catch {}
+  }
+
+  const testNotify = async () => {
+    setNotifyState('sending')
+    try {
+      await persist()
+      const res = await fetch('/api/ai/amo-agent?mode=setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, action: 'test-notify' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setNotifyState('ok')
+    } catch (err) {
+      setNotifyState(err.message)
+    }
+  }
 
   const createReplyField = async () => {
     setCreatingField(true)
@@ -278,6 +309,82 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
             <input type="number" min={1} value={value.maxRepliesPerLead}
               onChange={(e) => onChange({ maxRepliesPerLead: Number(e.target.value) || 1 })}
               className={inputCls} />
+          </div>
+        </div>
+
+        {/* Follow-ups and manager notifications */}
+        <div className="bg-slate-50 rounded-xl p-4 space-y-4">
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer select-none">
+              <input type="checkbox" checked={value.followUpEnabled !== false}
+                onChange={(e) => onChange({ followUpEnabled: e.target.checked })}
+                className="w-4 h-4 rounded" />
+              Напоминать клиенту, если он перестал отвечать
+            </label>
+            {value.followUpEnabled !== false && (
+              <div className="mt-2 space-y-2 pl-6">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-slate-600">Через сколько часов после ответа бота:</span>
+                  <input type="text" value={value.followUpHours ?? '2, 20'}
+                    onChange={(e) => onChange({ followUpHours: e.target.value })}
+                    placeholder="2, 20"
+                    className={`${inputCls} max-w-[8rem] font-mono`} />
+                </div>
+                <p className="text-xs text-slate-400">
+                  До 3 напоминаний, только с 9:00 до 21:00. В Instagram — только в течение 24 ч после последнего сообщения клиента (правило Instagram), на комментарии напоминаний нет.
+                </p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Адрес для внешнего cron (необязательно)</label>
+                  <div className="flex gap-2">
+                    <input readOnly value={cronUrl || 'Сохраните настройки, чтобы получить адрес'}
+                      className={`${inputCls} font-mono text-xs`} />
+                    <button onClick={copyCronUrl} disabled={!cronUrl}
+                      className="px-4 py-2.5 bg-white text-fuchsia-600 border border-fuchsia-200 rounded-xl text-sm font-medium hover:bg-fuchsia-50 disabled:opacity-50 flex items-center gap-1.5 shrink-0">
+                      {copiedCron ? <CheckCircle size={14} /> : <Copy size={14} />} {copiedCron ? 'Скопировано' : 'Копировать'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Напоминания отправляются, когда в amoCRM приходят новые сообщения. Чтобы они уходили точно вовремя, добавьте этот адрес на cron-job.org с интервалом 15 минут.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-200 pt-4">
+            <p className="text-sm font-medium text-slate-700 mb-2">Уведомления менеджерам в Telegram</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">ID чата или группы менеджеров</label>
+                <input type="text" value={value.notifyChatId}
+                  onChange={(e) => onChange({ notifyChatId: e.target.value.trim() })}
+                  placeholder="пусто — чат Ташкента из «Интеграций»"
+                  className={`${inputCls} font-mono`} />
+                <p className="text-xs text-slate-400 mt-1">Пишет бот из «Интеграции → Telegram»; добавьте его в эту группу.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                  <input type="checkbox" checked={value.notifyHandoff !== false}
+                    onChange={(e) => onChange({ notifyHandoff: e.target.checked })}
+                    className="w-4 h-4 rounded" />
+                  Когда бот передаёт клиента менеджеру
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                  <input type="checkbox" checked={value.notifyErrors !== false}
+                    onChange={(e) => onChange({ notifyErrors: e.target.checked })}
+                    className="w-4 h-4 rounded" />
+                  Когда бот не смог ответить (ошибка)
+                </label>
+                <button onClick={testNotify} disabled={notifyState === 'sending'}
+                  className="mt-1 px-3 py-2 bg-white text-fuchsia-600 border border-fuchsia-200 rounded-xl text-xs font-medium hover:bg-fuchsia-50 disabled:opacity-50 flex items-center gap-1.5">
+                  {notifyState === 'sending' ? <RefreshCw size={12} className="animate-spin" /> : <BellRing size={12} />} Отправить тестовое уведомление
+                </button>
+                {notifyState === 'ok' && <p className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle size={12} /> Отправлено — проверьте чат</p>}
+                {notifyState && !['ok', 'sending'].includes(notifyState) && (
+                  <p className="text-xs text-red-500 flex items-center gap-1"><XCircle size={12} /> {notifyState}</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
