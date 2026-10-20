@@ -50,6 +50,8 @@ const EMPTY = {
     contactReplyFieldId: '',
     qualifiedStatusId: '',
     openLessonStatusId: '',
+    openLessonFrom: '10:00',
+    openLessonTo: '20:00',
     salesbotId: '',
     replyInstagram: true,
     replyComments: true,

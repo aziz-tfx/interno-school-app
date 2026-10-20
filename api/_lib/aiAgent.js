@@ -134,6 +134,12 @@ function clientText(text) {
   return text
 }
 
+function nowInTashkent(date = new Date()) {
+  return date.toLocaleString('ru-RU', {
+    timeZone: 'Asia/Tashkent', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 async function buildSystemPrompt(cfg, channel) {
   const erp = cfg.includeCourses ? await loadErpContext(cfg.tenantId || 'default') : { schoolName: '' }
   const school = erp.schoolName || 'нашей школы'
@@ -146,7 +152,8 @@ async function buildSystemPrompt(cfg, channel) {
     '- Используй ТОЛЬКО факты из базы знаний и данных ниже. Если ответа нет — не выдумывай: скажи, что уточнишь у менеджера, и вызови handoff_to_manager.',
     '- Твоя цель — понять, какой курс интересен, в каком городе/формате удобно учиться, и получить имя и номер телефона для записи на консультацию или пробный урок.',
     '- Как только клиент сообщил имя или телефон — вызови save_contact. Когда понятно, что именно его интересует — вызови save_lead_info с кратким резюме.',
-    '- Если клиент согласен прийти на открытый (пробный) урок — предложи дату и время только из базы знаний, узнай имя и телефон и вызови book_open_lesson. Не называй запись подтверждённой, пока не вызвал book_open_lesson.',
+    `- Открытый (пробный) урок можно назначить на любой день с ${cfg.openLessonFrom} до ${cfg.openLessonTo} по ташкентскому времени. Предложи клиенту 1–2 ближайших удобных варианта с конкретной датой и временем (не в прошлом и не раньше чем через 2 часа от текущего времени), узнай имя и телефон и вызови book_open_lesson. Время вне этого интервала не предлагай и не принимай. Не называй запись подтверждённой, пока не вызвал book_open_lesson.`,
+    `- Сейчас ${nowInTashkent()} (Ташкент).`,
     '- Вызывай handoff_to_manager, если клиент просит живого человека, жалуется, готов оплатить, спрашивает про индивидуальные условия/скидки сверх указанных или ты не уверен в ответе.',
     '- Не обещай скидки, сроки и условия, которых нет в базе знаний.',
     '- Вложения (фото, голосовые) ты не видишь и не слышишь — вежливо попроси написать вопрос текстом.',
@@ -245,7 +252,12 @@ async function qualifyLead(amo, cfg, leadId, reason, statusId) {
   const lead = await amo.get(`/api/v4/leads/${leadId}`)
   const statuses = await pipelineStatuses(amo, lead.pipeline_id)
   const current = statuses.find(s => s.id === lead.status_id)
-  const target = Number(statusId || cfg.qualifiedStatusId) ||
+  // A configured stage only applies inside its own pipeline (leads from other
+  // channels may live elsewhere) — otherwise fall back to the first stage
+  const inPipeline = (id) => statuses.some(s => s.id === Number(id))
+  const configured = [statusId, cfg.qualifiedStatusId].find(id => id && inPipeline(id))
+  if (statusId && !inPipeline(statusId)) statusId = undefined
+  const target = Number(configured) ||
     statuses.find(s => s.type === 0 && s.id !== 142 && s.id !== 143)?.id
   if (!target || target === lead.status_id) return false
   // Accepted leads only ever move forward, and only to an explicitly configured stage

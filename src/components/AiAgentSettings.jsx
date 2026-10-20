@@ -228,6 +228,18 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
                 className={`${inputCls} font-mono`} />
             </div>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Время открытых уроков (Ташкент) — агент предлагает время только в этом интервале</label>
+            <div className="flex items-center gap-2 max-w-xs">
+              <input type="time" value={value.openLessonFrom}
+                onChange={(e) => onChange({ openLessonFrom: e.target.value })}
+                className={inputCls} />
+              <span className="text-slate-400">—</span>
+              <input type="time" value={value.openLessonTo}
+                onChange={(e) => onChange({ openLessonTo: e.target.value })}
+                className={inputCls} />
+            </div>
+          </div>
 
           <div className={`rounded-xl p-3 border ${value.testMode !== false ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer select-none">

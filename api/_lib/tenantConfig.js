@@ -227,6 +227,8 @@ export async function resolveAiAgent(req) {
     contactReplyFieldId: cfg.contactReplyFieldId || '',
     qualifiedStatusId: cfg.qualifiedStatusId || '',
     openLessonStatusId: cfg.openLessonStatusId || '',
+    openLessonFrom:    cfg.openLessonFrom || '10:00',
+    openLessonTo:      cfg.openLessonTo || '20:00',
     salesbotId:        cfg.salesbotId || '',
     replyInstagram:    cfg.replyInstagram !== false,
     replyComments:     cfg.replyComments !== false,
