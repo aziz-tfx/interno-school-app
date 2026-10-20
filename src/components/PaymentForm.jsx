@@ -21,7 +21,7 @@ import SaleCelebration from './SaleCelebration'
 import { toast } from './Toaster'
 import { useLanguage } from '../contexts/LanguageContext'
 
-const METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
+const METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Alif', 'Paynet', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 const MAX_FILES = 5
 const TARIFF_OPTIONS = [
   { tKey: 'paymentForm.tariff_standard', value: 'standard' },
