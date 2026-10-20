@@ -77,11 +77,11 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
       const res = await fetch('/api/ai/amo-agent?mode=setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId, action: 'create-field' }),
+        body: JSON.stringify({ tenantId, action: 'create-contact-field' }),
       })
       const data = await res.json().catch(() => ({}))
       if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      onChange({ replyFieldId: data.replyFieldId })
+      onChange({ contactReplyFieldId: data.contactReplyFieldId })
     } catch (err) {
       setSetupError(err.message)
     }
@@ -185,13 +185,13 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Поле сделки «Ответ ИИ» (ID)</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Поле контакта «Ответ ИИ» (ID)</label>
               <div className="flex gap-2">
-                <input type="text" value={value.replyFieldId}
-                  onChange={(e) => onChange({ replyFieldId: e.target.value.trim() })}
+                <input type="text" value={value.contactReplyFieldId}
+                  onChange={(e) => onChange({ contactReplyFieldId: e.target.value.trim() })}
                   placeholder="создайте кнопкой →"
                   className={`${inputCls} font-mono`} />
-                {!value.replyFieldId && (
+                {!value.contactReplyFieldId && (
                   <button onClick={createReplyField} disabled={creatingField}
                     className="px-3 py-2.5 bg-white text-fuchsia-600 border border-fuchsia-200 rounded-xl text-xs font-medium hover:bg-fuchsia-50 disabled:opacity-50 flex items-center gap-1 shrink-0">
                     {creatingField ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />} Создать в amoCRM
@@ -208,6 +208,26 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
             </div>
           </div>
           {setupError && <p className="text-sm text-red-500 flex items-center gap-1.5"><XCircle size={14} /> {setupError}</p>}
+          <p className="text-xs text-slate-400 -mt-2">
+            Ответ пишется в поле контакта, чтобы сделка оставалась в «Неразобранном», пока клиент не оставит телефон или не запишется на открытый урок.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Этап, когда получен телефон (Status ID)</label>
+              <input type="text" value={value.qualifiedStatusId}
+                onChange={(e) => onChange({ qualifiedStatusId: e.target.value.replace(/\D/g, '') })}
+                placeholder="первый этап воронки («Новая заявка»)"
+                className={`${inputCls} font-mono`} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Этап при записи на открытый урок (Status ID)</label>
+              <input type="text" value={value.openLessonStatusId}
+                onChange={(e) => onChange({ openLessonStatusId: e.target.value.replace(/\D/g, '') })}
+                placeholder="как при получении телефона"
+                className={`${inputCls} font-mono`} />
+            </div>
+          </div>
 
           <div className={`rounded-xl p-3 border ${value.testMode !== false ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer select-none">
@@ -251,8 +271,8 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
             </button>
             {showSetup && (
               <ol className="mt-2 text-xs text-slate-600 space-y-1.5 list-decimal pl-5">
-                <li>Нажмите «Создать в amoCRM» — в сделках появится поле «Ответ ИИ».</li>
-                <li>amoCRM → AI-агенты и боты → создайте Salesbot с одним шагом «Отправить сообщение», текст — поле сделки «Ответ ИИ». Сохраните и вставьте ID бота (число из адреса) выше.</li>
+                <li>Нажмите «Создать в amoCRM» — в контактах появится поле «Ответ ИИ».</li>
+                <li>amoCRM → AI-агенты и боты → создайте Salesbot с одним шагом «Отправить сообщение», текст — поле контакта «Ответ ИИ». Сохраните и вставьте ID бота (число из адреса) выше.</li>
                 <li>amoМаркет → WEB HOOKS → добавьте адрес вебхука выше и отметьте событие «Входящее сообщение добавлено». Одно событие покрывает Instagram, комментарии и Telegram.</li>
                 <li>Чтобы остановить бота в конкретной сделке, поставьте ей тег из поля «Тег паузы» ниже.</li>
                 <li>Проверьте ответы в тестовом чате внизу, затем отключите nextbot, чтобы клиенту не отвечали два бота.</li>

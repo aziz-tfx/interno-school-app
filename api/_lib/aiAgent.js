@@ -6,9 +6,12 @@
 //     ─▶ POST /api/ai/amo-agent?mode=webhook&tenantId=…&key=…
 //     ↳ we reply 200 immediately (amo disables slow webhooks)
 //     ↳ background: debounce bursts → OpenAI (+ tools) → amo actions
-//     ↳ write the reply into the lead field «Ответ ИИ» (replyFieldId)
+//     ↳ write the reply into the contact field «Ответ ИИ» (contactReplyFieldId;
+//       legacy: lead field replyFieldId). Editing a lead that sits in
+//       «Неразобранное» makes amo accept it, so the lead is left untouched
+//       until it qualifies (phone given / open lesson booked) — see qualifyLead
 //     ↳ POST /api/v2/salesbot/run → a plain Salesbot whose only step sends
-//       {{lead.cf.<replyFieldId>}} to the client
+//       {{contact.cf.<contactReplyFieldId>}} to the client
 //
 // Channels: Instagram Direct, Instagram comments and Telegram (including the
 // bare «/start» a client sends by pressing Start in the bot). The channel is
@@ -143,6 +146,7 @@ async function buildSystemPrompt(cfg, channel) {
     '- Используй ТОЛЬКО факты из базы знаний и данных ниже. Если ответа нет — не выдумывай: скажи, что уточнишь у менеджера, и вызови handoff_to_manager.',
     '- Твоя цель — понять, какой курс интересен, в каком городе/формате удобно учиться, и получить имя и номер телефона для записи на консультацию или пробный урок.',
     '- Как только клиент сообщил имя или телефон — вызови save_contact. Когда понятно, что именно его интересует — вызови save_lead_info с кратким резюме.',
+    '- Если клиент согласен прийти на открытый (пробный) урок — предложи дату и время только из базы знаний, узнай имя и телефон и вызови book_open_lesson. Не называй запись подтверждённой, пока не вызвал book_open_lesson.',
     '- Вызывай handoff_to_manager, если клиент просит живого человека, жалуется, готов оплатить, спрашивает про индивидуальные условия/скидки сверх указанных или ты не уверен в ответе.',
     '- Не обещай скидки, сроки и условия, которых нет в базе знаний.',
     '- Вложения (фото, голосовые) ты не видишь и не слышишь — вежливо попроси написать вопрос текстом.',
@@ -188,6 +192,24 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'book_open_lesson',
+      description: 'Записать клиента на открытый (пробный) урок: заявка уходит менеджеру на подтверждение.',
+      parameters: {
+        type: 'object',
+        properties: {
+          course: { type: 'string', description: 'Курс / направление' },
+          date_time: { type: 'string', description: 'Дата и время урока, как договорились с клиентом' },
+          branch_or_format: { type: 'string', description: 'Филиал или онлайн' },
+          name: { type: 'string', description: 'Имя клиента' },
+          phone: { type: 'string', description: 'Телефон клиента' },
+        },
+        required: ['date_time'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'handoff_to_manager',
       description: 'Передать диалог живому менеджеру. После этого бот перестаёт отвечать в этой сделке.',
       parameters: {
@@ -206,6 +228,52 @@ function normalizePhone(raw) {
   return '+' + digits
 }
 
+// amo accepts an unsorted lead as soon as anything on the lead changes, so the
+// agent keeps chat leads in «Неразобранное» and moves them explicitly once they
+// qualify. Target: given status, else cfg.qualifiedStatusId, else the first
+// regular stage of the lead's own pipeline («Новая заявка»).
+const pipelineCache = new Map()
+async function pipelineStatuses(amo, pipelineId) {
+  if (!pipelineCache.has(pipelineId)) {
+    const p = await amo.get(`/api/v4/leads/pipelines/${pipelineId}`)
+    pipelineCache.set(pipelineId, (p?._embedded?.statuses || []).sort((a, b) => a.sort - b.sort))
+  }
+  return pipelineCache.get(pipelineId)
+}
+
+async function qualifyLead(amo, cfg, leadId, reason, statusId) {
+  const lead = await amo.get(`/api/v4/leads/${leadId}`)
+  const statuses = await pipelineStatuses(amo, lead.pipeline_id)
+  const current = statuses.find(s => s.id === lead.status_id)
+  const target = Number(statusId || cfg.qualifiedStatusId) ||
+    statuses.find(s => s.type === 0 && s.id !== 142 && s.id !== 143)?.id
+  if (!target || target === lead.status_id) return false
+  // Accepted leads only ever move forward, and only to an explicitly configured stage
+  if (current && current.type !== 1) {
+    const targetSort = statuses.find(s => s.id === target)?.sort
+    if (!statusId || [142, 143].includes(current.id) || targetSort == null || targetSort <= current.sort) return false
+  }
+  await amo.patch(`/api/v4/leads/${leadId}`, { status_id: target })
+  await amo.post(`/api/v4/leads/${leadId}/notes`, [{
+    note_type: 'common',
+    params: { text: `🤖 ИИ-агент перевёл сделку на этап «${statuses.find(s => s.id === target)?.name || target}»: ${reason}.` },
+  }])
+  return true
+}
+
+async function saveContactFields(amo, contactId, name, phone) {
+  const patch = {}
+  if (name) patch.name = name
+  if (phone) {
+    const contact = await amo.get(`/api/v4/contacts/${contactId}`)
+    const phoneField = (contact.custom_fields_values || []).find(f => f.field_code === 'PHONE')
+    const existing = (phoneField?.values || []).map(v => ({ value: v.value, enum_code: v.enum_code || 'WORK' }))
+    const has = existing.some(v => v.value.replace(/\D/g, '').endsWith(phone.replace(/\D/g, '').slice(-9)))
+    if (!has) patch.custom_fields_values = [{ field_code: 'PHONE', values: [...existing, { value: phone, enum_code: 'WORK' }] }]
+  }
+  if (Object.keys(patch).length) await amo.patch(`/api/v4/contacts/${contactId}`, patch)
+}
+
 // Executes a tool call. In dry-run (test) mode nothing is written to amo.
 async function executeTool(name, args, ctx) {
   const { amo, leadId, contactId, cfg, dryRun, state } = ctx
@@ -215,21 +283,35 @@ async function executeTool(name, args, ctx) {
     const phone = normalizePhone(args.phone)
     log(`Контакт: ${[args.name, phone].filter(Boolean).join(', ') || '—'}`)
     if (dryRun || !contactId) return { ok: true }
-    const patch = {}
-    if (args.name) patch.name = args.name
-    if (phone) {
-      const contact = await amo.get(`/api/v4/contacts/${contactId}`)
-      const phoneField = (contact.custom_fields_values || []).find(f => f.field_code === 'PHONE')
-      const existing = (phoneField?.values || []).map(v => ({ value: v.value, enum_code: v.enum_code || 'WORK' }))
-      const has = existing.some(v => v.value.replace(/\D/g, '').endsWith(phone.replace(/\D/g, '').slice(-9)))
-      if (!has) {
-        patch.custom_fields_values = [{
-          field_code: 'PHONE',
-          values: [...existing, { value: phone, enum_code: 'WORK' }],
-        }]
-      }
-    }
-    if (Object.keys(patch).length) await amo.patch(`/api/v4/contacts/${contactId}`, patch)
+    await saveContactFields(amo, contactId, args.name, phone)
+    if (phone && leadId) await qualifyLead(amo, cfg, leadId, `получен телефон ${phone}`)
+    return { ok: true }
+  }
+
+  if (name === 'book_open_lesson') {
+    const phone = normalizePhone(args.phone)
+    const details = [
+      args.course && `Курс: ${args.course}`,
+      `Когда: ${args.date_time || 'не указано'}`,
+      args.branch_or_format && `Где: ${args.branch_or_format}`,
+      (args.name || phone) && `Клиент: ${[args.name, phone].filter(Boolean).join(', ')}`,
+    ].filter(Boolean)
+    state.booking = { ...args, phone }
+    log(`Записан на открытый урок\n${details.join('\n')}`)
+    if (dryRun || !leadId) return { ok: true }
+    if (contactId) await saveContactFields(amo, contactId, args.name, phone)
+    await amo.post(`/api/v4/leads/${leadId}/notes`, [{
+      note_type: 'common',
+      params: { text: ['🤖 ИИ-агент записал клиента на открытый урок', ...details].join('\n') },
+    }])
+    await qualifyLead(amo, cfg, leadId, 'записан на открытый урок', cfg.openLessonStatusId)
+    await amo.post('/api/v4/tasks', [{
+      task_type_id: 1,
+      text: `Подтвердить запись на открытый урок. ${details.join('. ')}`,
+      complete_till: Math.floor(Date.now() / 1000) + 2 * 3600,
+      entity_id: Number(leadId),
+      entity_type: 'leads',
+    }])
     return { ok: true }
   }
 
@@ -322,7 +404,7 @@ export async function runAgentTurn({ cfg, history, message, followUp, channel = 
     }
   }
 
-  return { reply, actions: state.actions, handoff: state.handoff, usage }
+  return { reply, actions: state.actions, handoff: state.handoff, booking: state.booking || null, usage }
 }
 
 function followUpInstruction({ hours, number, total }) {
@@ -377,12 +459,29 @@ export function parseIncomingMessages(body) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-async function sendReply(amo, cfg, leadId, reply) {
-  await amo.patch(`/api/v4/leads/${leadId}`, {
-    custom_fields_values: [{ field_id: Number(cfg.replyFieldId), values: [{ value: reply }] }],
-  })
+// Reply goes into a contact field so the lead itself isn't touched (see header).
+// The lead field is only a fallback for setups without the contact field.
+async function sendReply(amo, cfg, { leadId, contactId }, reply) {
+  if (cfg.contactReplyFieldId) {
+    let cid = contactId
+    if (!cid) {
+      const lead = await amo.get(`/api/v4/leads/${leadId}?with=contacts`)
+      const contacts = lead?._embedded?.contacts || []
+      cid = (contacts.find(c => c.is_main) || contacts[0])?.id
+    }
+    if (!cid) throw new Error(`У сделки ${leadId} нет контакта для поля «Ответ ИИ»`)
+    await amo.patch(`/api/v4/contacts/${cid}`, {
+      custom_fields_values: [{ field_id: Number(cfg.contactReplyFieldId), values: [{ value: reply }] }],
+    })
+  } else {
+    await amo.patch(`/api/v4/leads/${leadId}`, {
+      custom_fields_values: [{ field_id: Number(cfg.replyFieldId), values: [{ value: reply }] }],
+    })
+  }
   await amo.post('/api/v2/salesbot/run', [{ bot_id: Number(cfg.salesbotId), entity_id: Number(leadId), entity_type: 2 }])
 }
+
+const replyConfigured = (cfg) => !!((cfg.contactReplyFieldId || cfg.replyFieldId) && cfg.salesbotId)
 
 const leadTags = (lead) => (lead?._embedded?.tags || []).map(t => t.name)
 
@@ -458,7 +557,7 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
       cfg, history, message, channel,
       ctx: { amo, leadId: msg.leadId, contactId: msg.contactId, dryRun: false },
     })
-    if (result.reply) await sendReply(amo, cfg, msg.leadId, result.reply)
+    if (result.reply) await sendReply(amo, cfg, { leadId: msg.leadId, contactId: msg.contactId }, result.reply)
 
     // 5. Persist the answer (merge: new user messages may have arrived meanwhile)
     const replyAt = new Date().toISOString()
@@ -485,6 +584,7 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
       return next
     })
     if (result.handoff) await notifyHandoff(cfg, amoCfg, saved, result.handoff)
+    if (result.booking) await notifyBooking(cfg, amoCfg, saved, result.booking)
   } catch (e) {
     console.error('AI agent error:', e)
     try { await ref.set({ lastError: String(e.message).slice(0, 500), updatedAt: new Date().toISOString() }, { merge: true }) } catch {}
@@ -529,6 +629,21 @@ async function notifyHandoff(cfg, amoCfg, conv, reason) {
     leadLink(amoCfg, conv.leadId),
   ].filter(Boolean).join('\n')
   try { await sendManagerMessage(cfg, text) } catch (e) { console.warn('AI agent handoff notify failed:', e.message) }
+}
+
+async function notifyBooking(cfg, amoCfg, conv, b) {
+  if (!cfg.notifyHandoff) return
+  const text = [
+    '📅 <b>Запись на открытый урок</b>',
+    `Клиент: ${esc([b.name || conv.contactName, b.phone].filter(Boolean).join(' · ') || 'без имени')}`,
+    b.course && `Курс: ${esc(b.course)}`,
+    `Когда: ${esc(b.date_time || 'не указано')}`,
+    b.branch_or_format && `Где: ${esc(b.branch_or_format)}`,
+    `Канал: ${esc(CHANNEL_LABELS[conv.channel] || CHANNEL_LABELS.instagram)}`,
+    'Подтвердите запись с клиентом — задача уже поставлена в amoCRM.',
+    leadLink(amoCfg, conv.leadId),
+  ].filter(Boolean).join('\n')
+  try { await sendManagerMessage(cfg, text) } catch (e) { console.warn('AI agent booking notify failed:', e.message) }
 }
 
 function explainError(message) {
@@ -604,7 +719,7 @@ async function sendFollowUp(ref, cfg, amoCfg) {
 
   const channel = conv.channel || detectChannel(conv.origin)
   const messages = conv.messages || []
-  if (!cfg.enabled || !cfg.openaiKey || !cfg.replyFieldId || !cfg.salesbotId || !amoCfg.accessToken) return 'agent not configured'
+  if (!cfg.enabled || !cfg.openaiKey || !replyConfigured(cfg) || !amoCfg.accessToken) return 'agent not configured'
   if (!followUpsAllowed(cfg, channel) || !cfg[CHANNEL_SETTING[channel]]) return 'channel off'
   if (conv.paused || messages.at(-1)?.role !== 'assistant') return 'not awaiting client'
   if ((conv.replies || 0) - (conv.resumedAtReplies || 0) >= cfg.maxRepliesPerLead) return 'reply cap'
@@ -631,7 +746,7 @@ async function sendFollowUp(ref, cfg, amoCfg) {
       ctx: { amo, leadId: conv.leadId, contactId: conv.contactId, dryRun: false },
     })
     if (!result.reply) return 'empty reply'
-    await sendReply(amo, cfg, conv.leadId, result.reply)
+    await sendReply(amo, cfg, { leadId: conv.leadId, contactId: conv.contactId }, result.reply)
 
     await db.runTransaction(async (tx) => {
       const cur = (await tx.get(ref)).data() || {}
@@ -701,7 +816,7 @@ async function handleWebhook(req, res) {
   const [cfg, amoCfg] = await Promise.all([resolveAiAgent(req), resolveAmo(req)])
   if (!keyMatches(req.query?.key, cfg.webhookKey)) return res.status(403).json({ error: 'Forbidden' })
   // Always 200 for amo so it doesn't disable the webhook; just ignore what we can't handle
-  if (!cfg.enabled || !cfg.openaiKey || !cfg.replyFieldId || !cfg.salesbotId) return res.status(200).json({ ok: true, skipped: 'agent not configured' })
+  if (!cfg.enabled || !cfg.openaiKey || !replyConfigured(cfg)) return res.status(200).json({ ok: true, skipped: 'agent not configured' })
   if (!amoCfg.subdomain || !amoCfg.accessToken) return res.status(200).json({ ok: true, skipped: 'amo not configured' })
 
   const allowed = {
@@ -726,7 +841,7 @@ async function handleWebhook(req, res) {
   return res.status(200).json({ ok: true, accepted: messages.length })
 }
 
-// One-click amo setup from the ERP: creates the lead field «Ответ ИИ».
+// One-click amo setup from the ERP: creates the «Ответ ИИ» field (contact; legacy: lead).
 async function handleSetup(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const tenantId = getTenantId(req)
@@ -741,6 +856,15 @@ async function handleSetup(req, res) {
       if (!id) throw new Error('amoCRM не вернул id поля')
       await saveTenantIntegration(tenantId || 'default', 'aiAgent', { replyFieldId: id })
       return res.status(200).json({ ok: true, replyFieldId: id })
+    }
+    if (req.body?.action === 'create-contact-field') {
+      if (cfg.contactReplyFieldId) return res.status(200).json({ ok: true, contactReplyFieldId: cfg.contactReplyFieldId, existed: true })
+      const amo = createAmoClient(amoCfg)
+      const created = await amo.post('/api/v4/contacts/custom_fields', [{ type: 'textarea', name: 'Ответ ИИ' }])
+      const id = String(created?._embedded?.custom_fields?.[0]?.id || '')
+      if (!id) throw new Error('amoCRM не вернул id поля')
+      await saveTenantIntegration(tenantId || 'default', 'aiAgent', { contactReplyFieldId: id })
+      return res.status(200).json({ ok: true, contactReplyFieldId: id })
     }
     if (req.body?.action === 'test-notify') {
       await sendManagerMessage(cfg, '✅ Уведомления ИИ-агента подключены. Сюда будут приходить клиенты, переданные менеджеру, и ошибки бота.')
