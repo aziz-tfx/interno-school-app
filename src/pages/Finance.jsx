@@ -712,6 +712,23 @@ export default function Finance() {
     return filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
   }, [payments, monthKey, branchFilter, isSales, isRop, isBranchDirector, user, canSeeSalesList, branches])
 
+  // Income of the selected month by payment method (same scope as the sales list)
+  const methodStats = useMemo(() => {
+    const byMethod = {}
+    filteredTransactions.forEach(p => {
+      const m = p.method || 'Не указан'
+      if (!byMethod[m]) byMethod[m] = { count: 0, sum: 0 }
+      byMethod[m].count++
+      byMethod[m].sum += Number(p.amount) || 0
+    })
+    const rows = Object.entries(byMethod).sort(([, a], [, b]) => b.sum - a.sum)
+    return {
+      rows,
+      total: rows.reduce((s, [, v]) => s + v.sum, 0),
+      max: Math.max(1, ...rows.map(([, v]) => v.sum)),
+    }
+  }, [filteredTransactions])
+
   const recentTransactions = useMemo(
     () => (isSales ? filteredTransactions.slice(0, 10) : filteredTransactions),
     [filteredTransactions, isSales]
@@ -1318,6 +1335,39 @@ export default function Finance() {
       </div>
       )}
 
+      {/* ─── Payment methods of the month ───────────────────────────────── */}
+      {pageTab === 'overview' && canSeeSalesList && !isSales && (
+      <div className="glass-card rounded-2xl p-4 md:p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <CreditCard size={20} className="text-teal-600" />
+          Способы оплаты
+          <span className="ml-auto text-xs font-normal text-slate-400">
+            {MONTH_NAMES[selectedMonth - 1]} {selectedYear} · {formatRevenue(methodStats.total)}
+          </span>
+        </h3>
+        {methodStats.rows.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-6">Нет платежей за период</p>
+        ) : (
+          <div className="space-y-2">
+            {methodStats.rows.map(([method, v]) => (
+              <div key={method} className="flex items-center gap-3">
+                <span className="w-28 md:w-40 text-xs md:text-sm text-slate-600 text-right flex-shrink-0 truncate">{method}</span>
+                <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-lg"
+                    style={{ width: `${Math.max(4, (v.sum / methodStats.max) * 100)}%` }} />
+                </div>
+                <span className="w-24 md:w-28 text-xs md:text-sm font-semibold text-slate-700 tabular-nums text-right flex-shrink-0">{formatRevenue(v.sum)}</span>
+                <span className="w-10 text-xs text-slate-500 tabular-nums text-right flex-shrink-0">
+                  {methodStats.total > 0 ? Math.round(v.sum / methodStats.total * 100) : 0}%
+                </span>
+                <span className="hidden md:inline w-10 text-xs text-slate-400 tabular-nums flex-shrink-0">{v.count}×</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      )}
+
       {/* ─── Recent Transactions ─────────────────────────────────────────── */}
       {pageTab === 'overview' && canSeeSalesList && (
       <div className="glass-card rounded-2xl p-4 md:p-6">
@@ -1400,16 +1450,7 @@ export default function Finance() {
           const newSum = sum(newSales)
           const dopSum = sum(doplatas)
           const avgCheck = list.length ? total / list.length : 0
-          // By payment method
-          const byMethod = {}
-          list.forEach(p => {
-            const m = p.method || 'Не указан'
-            if (!byMethod[m]) byMethod[m] = { count: 0, sum: 0 }
-            byMethod[m].count++
-            byMethod[m].sum += Number(p.amount) || 0
-          })
-          const methodRows = Object.entries(byMethod).sort(([, a], [, b]) => b.sum - a.sum)
-          const maxMethod = Math.max(1, ...methodRows.map(([, v]) => v.sum))
+          const { rows: methodRows, max: maxMethod } = methodStats
           return (
             <div className="space-y-5">
               {/* Summary tiles */}
