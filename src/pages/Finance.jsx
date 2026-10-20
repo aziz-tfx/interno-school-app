@@ -169,7 +169,7 @@ export default function Finance() {
     setKpiSaving(false)
   }
 
-  const EDIT_METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
+  const EDIT_METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Alif', 'Paynet', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 
   const openEditPayment = (p) => {
     setEditForm({
