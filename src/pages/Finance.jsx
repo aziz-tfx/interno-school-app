@@ -69,6 +69,7 @@ export default function Finance() {
   // ─── State ──────────────────────────────────────────────────────────────
   const [paymentModal, setPaymentModal] = useState(false)
   const [showRevenueDetail, setShowRevenueDetail] = useState(false)
+  const [methodDetail, setMethodDetail] = useState(null) // payment method whose payments are listed
   // Page tabs: 'overview' (ежедневная работа) | 'debts' (вся дебиторка) |
   // 'analytics' (бизнес-сводка руководителя)
   const [pageTab, setPageTab] = useState('overview')
@@ -1350,7 +1351,8 @@ export default function Finance() {
         ) : (
           <div className="space-y-2">
             {methodStats.rows.map(([method, v]) => (
-              <div key={method} className="flex items-center gap-3">
+              <button key={method} onClick={() => setMethodDetail(method)}
+                className="w-full flex items-center gap-3 rounded-lg -mx-1 px-1 py-0.5 hover:bg-slate-50 transition-colors text-left">
                 <span className="w-28 md:w-40 text-xs md:text-sm text-slate-600 text-right flex-shrink-0 truncate">{method}</span>
                 <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-lg"
@@ -1361,8 +1363,9 @@ export default function Finance() {
                   {methodStats.total > 0 ? Math.round(v.sum / methodStats.total * 100) : 0}%
                 </span>
                 <span className="hidden md:inline w-10 text-xs text-slate-400 tabular-nums flex-shrink-0">{v.count}×</span>
-              </div>
+              </button>
             ))}
+            <p className="text-[11px] text-slate-400 pt-1">Нажмите на способ оплаты, чтобы увидеть все платежи</p>
           </div>
         )}
       </div>
@@ -1433,6 +1436,58 @@ export default function Finance() {
         )}
       </div>
       )}
+
+      {/* ─── Payments of one method (click a row in «Способы оплаты») ────── */}
+      <Modal isOpen={!!methodDetail} onClose={() => setMethodDetail(null)}
+        title={`${methodDetail || ''} — ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`} size="lg">
+        {(() => {
+          const list = filteredTransactions.filter(p => (p.method || 'Не указан') === methodDetail)
+          const total = list.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+          return (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                  <p className="text-xs text-slate-500">Сумма</p>
+                  <p className="text-lg font-bold text-emerald-600">{formatRevenue(total)}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                  <p className="text-xs text-slate-500">Платежей</p>
+                  <p className="text-lg font-bold text-slate-800">{list.length}</p>
+                </div>
+              </div>
+              {list.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-6">Нет платежей за период</p>
+              ) : (
+                <div className="space-y-1.5 max-h-[55vh] overflow-auto pr-1">
+                  {list.map(p => (
+                    <div key={p.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl text-sm group">
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-800 truncate">{p.student || '—'}</p>
+                        <p className="text-[11px] text-slate-400">
+                          {p.date} · {branches.find(b => b.id === p.branch)?.name || '—'}
+                          {p.course ? ` · ${p.course}` : ''}
+                          {p.trancheNumber > 1 ? ` · ${t('finance.tranche_number')}${p.trancheNumber}` : ''}
+                          {p.createdByName ? ` · ${p.createdByName}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                        <span className="font-semibold text-emerald-600 tabular-nums">{formatCurrency(p.amount)}</span>
+                        {canPayments && (
+                          <button onClick={() => openEditPayment(p)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                            title="Редактировать">
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
+      </Modal>
 
       {/* ─── Revenue detail modal (click «Факт выручки» / «Продажи») ──────── */}
       <Modal isOpen={showRevenueDetail} onClose={() => setShowRevenueDetail(false)}
