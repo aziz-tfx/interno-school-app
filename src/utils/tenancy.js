@@ -1,5 +1,5 @@
 import { db } from '../firebase'
-import { collection, doc, getDocs, updateDoc, setDoc, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDocs, updateDoc, setDoc, writeBatch } from '../backend/firestore'
 
 export const DEFAULT_TENANT_ID = 'default'
 

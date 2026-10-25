@@ -11,6 +11,7 @@ export default function Login() {
   const { login, error, setError } = useAuth()
   const [form, setForm] = useState({ login: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   // Prefill credentials handed off from the course landing registration
   useEffect(() => {
@@ -23,9 +24,17 @@ export default function Login() {
     } catch {}
   }, [])
 
-  const handleSubmit = (e) => {
+  // login() is synchronous with Firestore and a request with the server
+  // backend — await covers both.
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    login(form.login, form.password)
+    if (busy) return
+    setBusy(true)
+    try {
+      await login(form.login, form.password)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -87,7 +96,8 @@ export default function Login() {
 
           <button
             type="submit"
-            className="w-full bg-[#6161ff] text-white py-3 rounded-full font-medium hover:bg-[#4f4fe6] transition-all flex items-center justify-center gap-2"
+            disabled={busy}
+            className="w-full bg-[#6161ff] text-white py-3 rounded-full font-medium hover:bg-[#4f4fe6] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
           >
             <LogIn size={18} />
             {t('login.btn_submit')}

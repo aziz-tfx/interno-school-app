@@ -10,7 +10,8 @@ test('addDoc → getDoc round-trip keeps the Firestore document shape', async ()
   assert.equal(res.statusCode, 201)
   const created = res.json()
   assert.match(created.id, /^[A-Za-z0-9]{20}$/)
-  assert.equal(created.tenantId, 'school-a')
+  assert.equal(created.data.tenantId, 'school-a')
+  assert.equal(created.data.name, 'Иванов')
 
   const got = (await owner().get(`/api/collections/students/${created.id}`)).json()
   assert.deepEqual(got, created)
@@ -25,7 +26,7 @@ test('updateDoc supports dotted paths and Firestore sentinels', async () => {
     tmp: { $delete: true },
     seenAt: { $serverTimestamp: true },
   })
-  const doc = res.json()
+  const doc = res.json().data
   assert.equal(doc.balance, 60)
   assert.deepEqual(doc.stats, { a: 1, b: 2 })
   assert.deepEqual(doc.tags, ['x', 'y'])
@@ -38,12 +39,12 @@ test('updateDoc supports dotted paths and Firestore sentinels', async () => {
 test('setDoc merge deep-merges; plain setDoc replaces', async () => {
   await owner().put('/api/collections/settings/permissions_school-a', { sales: { finance: true }, rop: { crm: true } })
   await owner().put('/api/collections/settings/permissions_school-a?merge=1', { sales: { crm: true } })
-  let doc = (await owner().get('/api/collections/settings/permissions_school-a')).json()
+  let doc = (await owner().get('/api/collections/settings/permissions_school-a')).json().data
   assert.deepEqual(doc.sales, { finance: true, crm: true })
   assert.deepEqual(doc.rop, { crm: true })
   await owner().put('/api/collections/settings/permissions_school-a', { only: 1 })
-  doc = (await owner().get('/api/collections/settings/permissions_school-a')).json()
-  assert.deepEqual(Object.keys(doc).sort(), ['id', 'only', 'tenantId'])
+  doc = (await owner().get('/api/collections/settings/permissions_school-a')).json().data
+  assert.deepEqual(Object.keys(doc).sort(), ['only', 'tenantId'])
 })
 
 test('where / orderBy / limit behave like Firestore queries (type-strict)', async () => {
@@ -68,10 +69,10 @@ test('schools are isolated: other tenant ids are invisible and cannot be overwri
   assert.equal((await other.put('/api/collections/payments/p1', { amount: 1 })).statusCode, 404)
   assert.equal((await other.patch('/api/collections/payments/p1', { amount: 1 })).statusCode, 404)
   await other.delete('/api/collections/payments/p1')
-  assert.equal((await owner().get('/api/collections/payments/p1')).json().amount, 100)
+  assert.equal((await owner().get('/api/collections/payments/p1')).json().data.amount, 100)
   // tenantId in the body is ignored
   const res = await other.post('/api/collections/courses', { name: 'Хак', tenantId: 'school-a' })
-  assert.equal(res.json().tenantId, 'school-b')
+  assert.equal(res.json().data.tenantId, 'school-b')
 })
 
 test('students see only their own records and only LMS-side collections', async () => {
@@ -82,7 +83,7 @@ test('students see only their own records and only LMS-side collections', async 
 
   assert.deepEqual((await student.get('/api/collections/students')).json().map(d => d.id), ['st-1'])
   assert.equal((await student.get('/api/collections/students/st-2')).statusCode, 404)
-  assert.ok((await student.get('/api/collections/payments')).json().every(p => p.studentId === 'st-1'))
+  assert.ok((await student.get('/api/collections/payments')).json().every(p => p.data.studentId === 'st-1'))
   assert.equal((await student.get('/api/collections/employees')).statusCode, 403)
   assert.equal((await student.get('/api/collections/tenantIntegrations')).statusCode, 403)
   assert.equal((await student.post('/api/collections/payments', { amount: 1, studentId: 'st-1' })).statusCode, 403)
@@ -100,7 +101,7 @@ test('students see only their own records and only LMS-side collections', async 
 test('employees: passwords are hashed, never stored or returned in plain text', async () => {
   const res = await owner().post('/api/collections/employees', { name: 'Новый', login: 'new1', password: 'secret1', role: 'sales', status: 'active' })
   assert.equal(res.statusCode, 201)
-  assert.equal(res.json().password, undefined)
+  assert.equal(res.json().data.password, undefined)
   const { rows: [row] } = await ctx.pool.query('SELECT data, password_hash FROM employees WHERE id = $1', [res.json().id])
   assert.equal(row.data.password, undefined)
   assert.match(row.password_hash, /^\$2[aby]\$/)
@@ -115,9 +116,21 @@ test('employees: no self-promotion, profile edits allowed', async () => {
   assert.equal((await sales.patch('/api/collections/employees/e-teach', { name: 'x' })).statusCode, 403)
   const ok = await sales.patch('/api/collections/employees/e-sales', { avatar: 'Г', phone: '+998 90 111 22 33' })
   assert.equal(ok.statusCode, 200)
-  assert.equal(ok.json().role, 'sales')
+  assert.equal(ok.json().data.role, 'sales')
   // teachers can't see tenant secrets
   assert.equal((await ctx.as('teacher').get('/api/collections/tenantIntegrations')).statusCode, 403)
+})
+
+test('staff create and reset student LMS accounts, but cannot mint staff accounts', async () => {
+  const sales = ctx.as('sales')
+  const acc = await sales.put('/api/collections/employees/stud-acc-1', { login: '998977000111', password: '123456', role: 'student', studentId: 'st-9', name: 'Ученик' })
+  assert.equal(acc.statusCode, 200)
+  assert.equal((await sales.patch('/api/collections/employees/stud-acc-1', { password: '654321' })).statusCode, 200)
+  assert.equal((await sales.patch('/api/collections/employees/stud-acc-1', { role: 'admin' })).statusCode, 403)
+  assert.equal((await sales.put('/api/collections/employees/staff-x', { login: 'x', role: 'sales' })).statusCode, 403)
+  assert.equal((await sales.delete('/api/collections/employees/e-teach')).statusCode, 403)
+  const login = await ctx.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login: '977000111', password: '654321' } })
+  assert.equal(login.json().user.role, 'student')
 })
 
 test('batch writes are atomic', async () => {
@@ -138,7 +151,24 @@ test('batch writes are atomic', async () => {
     ],
   })
   assert.equal(ok.statusCode, 200)
-  assert.deepEqual((await owner().get('/api/collections/groups/g1')).json().size, 3)
+  assert.deepEqual((await owner().get('/api/collections/groups/g1')).json().data.size, 3)
+})
+
+test('documents keep their own `id` field (legacy numeric employee ids)', async () => {
+  await owner().put('/api/collections/employees/emp-doc-1', { id: 26, name: 'Нигора', role: 'teacher', login: 'nig' })
+  const got = (await owner().get('/api/collections/employees/emp-doc-1')).json()
+  assert.equal(got.id, 'emp-doc-1')
+  assert.equal(got.data.id, 26)
+})
+
+test('own password change keeps the session; an admin reset ends it', async () => {
+  const login = (await ctx.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login: 'teacher1', password: 'teach-pass' } })).json()
+  const headers = { authorization: `Bearer ${login.token}` }
+  const me = () => ctx.app.inject({ method: 'GET', url: '/api/auth/me', headers })
+  await ctx.app.inject({ method: 'PATCH', url: '/api/collections/employees/e-teach', headers, payload: { password: 'teach-pass-2' } })
+  assert.equal((await me()).statusCode, 200)
+  await owner().patch('/api/collections/employees/e-teach', { password: 'teach-pass' })
+  assert.equal((await me()).statusCode, 401)
 })
 
 test('unknown collections are rejected', async () => {

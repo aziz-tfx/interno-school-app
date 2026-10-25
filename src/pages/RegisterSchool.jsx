@@ -8,11 +8,12 @@ import {
 import Logo from '../components/Logo'
 import { createTenant, DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { db } from '../firebase'
-import { collection, doc, setDoc, getDocs, addDoc } from 'firebase/firestore'
+import { collection, doc, setDoc, getDocs, addDoc } from '../backend/firestore'
+import { USE_SERVER, api } from '../backend/api'
 
 export default function RegisterSchool() {
   const navigate = useNavigate()
-  const { login: authLogin } = useAuth()
+  const { login: authLogin, adoptSession } = useAuth()
 
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
@@ -46,7 +47,7 @@ export default function RegisterSchool() {
     if (!form.login.trim()) { setError('Введите логин'); return false }
     if (form.login.trim().length < 3) { setError('Логин должен быть не менее 3 символов'); return false }
     if (!form.password) { setError('Введите пароль'); return false }
-    if (form.password.length < 4) { setError('Пароль должен быть не менее 4 символов'); return false }
+    if (form.password.length < 6) { setError('Пароль должен быть не менее 6 символов'); return false }
     if (form.password !== form.confirmPassword) { setError('Пароли не совпадают'); return false }
     return true
   }
@@ -61,6 +62,27 @@ export default function RegisterSchool() {
 
     setSaving(true)
     setError('')
+
+    if (USE_SERVER) {
+      // The server creates school, owner and first branch in one transaction
+      // and returns a session — no client-side uniqueness scan, no retry loop.
+      try {
+        const { token, user } = await api('/api/public/register-school', {
+          method: 'POST',
+          auth: false,
+          body: {
+            schoolName: form.schoolName.trim(), ownerName: form.ownerName.trim(),
+            phone: form.phone || '', email: form.email || '', login: form.login.trim(), password: form.password,
+          },
+        })
+        adoptSession(token, user)
+        navigate('/')
+      } catch (err) {
+        setError(err.status === 409 || err.status === 400 ? err.message : 'Ошибка при регистрации. Попробуйте ещё раз.')
+        setSaving(false)
+      }
+      return
+    }
 
     try {
       // Check if login already exists

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { db } from '../firebase'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc } from '../backend/firestore'
 import {
   Zap, Bell, AlertTriangle, Lock, Save, CheckCircle,
   ToggleLeft, ToggleRight, Settings, Play, Loader,

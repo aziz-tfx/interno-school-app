@@ -39,7 +39,8 @@ const C = {
   payments:           { table: 'payments',           read: 'all',   write: 'staff', studentKey: 'student_id' },
   paymeTransactions:  { table: 'payme_transactions', read: 'staff', write: 'admin' },
   schedule:           { table: 'schedule',           read: 'all',   write: 'staff' },
-  attendance:         { table: 'attendance',         read: 'staff', write: 'staff' },
+  // students see their own attendance in the cabinet and the Telegram app
+  attendance:         { table: 'attendance',         read: 'all',   write: 'staff' },
   salesPlans:         { table: 'sales_plans',        read: 'staff', write: 'staff' },
   amoPlans:           { table: 'amo_plans',          read: 'staff', write: 'staff' },
   reportPlans:        { table: 'report_plans',       read: 'staff', write: 'staff' },

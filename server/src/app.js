@@ -12,6 +12,7 @@ import realtimeRoutes from './realtime.js'
 import authRoutes from './routes/auth.js'
 import collectionRoutes from './routes/collections.js'
 import crmRoutes from './routes/crm/index.js'
+import publicRoutes from './routes/public.js'
 
 export async function buildApp({ config, pool }) {
   const app = Fastify({
@@ -56,6 +57,7 @@ export async function buildApp({ config, pool }) {
   await app.register(collectionRoutes, deps)
   await app.register(realtimeRoutes, deps)
   await app.register(crmRoutes, deps)
+  await app.register(publicRoutes, deps)
 
   return app
 }

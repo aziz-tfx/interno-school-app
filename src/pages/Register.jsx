@@ -8,6 +8,8 @@ import {
   Building2, BookOpen, DollarSign, CheckCircle2, AlertCircle, Clock,
 } from 'lucide-react'
 import Logo from '../components/Logo'
+import { USE_SERVER, api } from '../backend/api'
+import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 
 const ALLOWED_ROLES = [
   'branch_director', 'rop', 'sales', 'accountant', 'financier', 'hr', 'smm', 'teacher',
@@ -85,7 +87,7 @@ export default function Register() {
     if (form.login.trim().length < 3) { setError('Логин должен быть не менее 3 символов'); return false }
     if (employees.some(e => e.login === form.login.trim())) { setError('Этот логин уже занят'); return false }
     if (!form.password) { setError('Введите пароль'); return false }
-    if (form.password.length < 4) { setError('Пароль должен быть не менее 4 символов'); return false }
+    if (form.password.length < 6) { setError('Пароль должен быть не менее 6 символов'); return false }
     if (form.password !== form.confirmPassword) { setError('Пароли не совпадают'); return false }
     return true
   }
@@ -105,6 +107,31 @@ export default function Register() {
     if (!validateStep3()) return
 
     setSaving(true)
+    if (USE_SERVER) {
+      // One request: the server checks the login, hashes the password and
+      // creates the teacher card — nothing is written from the browser.
+      try {
+        await api('/api/public/register-employee', {
+          method: 'POST',
+          auth: false,
+          body: {
+            tenantId: DEFAULT_TENANT_ID,
+            name: form.name.trim(),
+            login: form.login.trim(),
+            password: form.password,
+            role: form.role,
+            branch: COMPANY_WIDE_ROLES.includes(form.role) ? 'all' : form.branch,
+            phone: form.phone || '',
+            ...(form.role === 'teacher' && { subject: form.subject || '', salary: Number(form.salary) || 0 }),
+          },
+        })
+        setSuccess(true)
+      } catch (err) {
+        setError(err.status === 409 || err.status === 400 ? err.message : 'Ошибка при регистрации. Попробуйте ещё раз.')
+      }
+      setSaving(false)
+      return
+    }
     try {
       const employeeData = {
         name: form.name.trim(),

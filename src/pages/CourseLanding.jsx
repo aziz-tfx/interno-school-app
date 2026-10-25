@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { db } from '../firebase'
-import { collection, query, where, getDocs, addDoc, doc, getDoc, setDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc, doc, getDoc, setDoc } from '../backend/firestore'
+import { USE_SERVER, api } from '../backend/api'
 import {
   Play, Lock, CheckCircle2, Clock, Users, BookOpen, Star,
   ChevronDown, ChevronRight, Phone, User, ArrowRight,
@@ -16,7 +17,7 @@ const STORAGE_KEY = 'interno_lead'
 export default function CourseLanding() {
   const { courseId } = useParams()
   const navigate = useNavigate()
-  const { login: authLogin } = useAuth()
+  const { login: authLogin, adoptSession } = useAuth()
   // Keep a ref to the latest login fn — avoids stale closure in retry timers
   const loginRef = useRef(authLogin)
   loginRef.current = authLogin
@@ -46,6 +47,23 @@ export default function CourseLanding() {
 
   useEffect(() => {
     (async () => {
+      if (USE_SERVER) {
+        // One public request; locked lessons come without their video links.
+        try {
+          const res = await api(`/api/public/courses/${encodeURIComponent(courseId)}`, { auth: false })
+          const flat = (x) => ({ id: x.id, ...x.data })
+          const m = res.modules.map(flat)
+          setCourse(flat(res.course))
+          setModules(m)
+          setLessons(res.lessons.map(flat))
+          setGroups(res.groups.map(flat))
+          if (m.length > 0) setExpandedModule(m[0].id)
+        } catch (err) {
+          if (err.status !== 404) console.error('Failed to load course:', err)
+        }
+        setLoading(false)
+        return
+      }
       try {
         const docSnap = await getDoc(doc(db, 'courses', courseId))
         let courseData = null
@@ -86,9 +104,9 @@ export default function CourseLanding() {
     return lessons.slice(0, 3).map(l => l.id)
   }, [firstModuleId, lessons])
 
-  const tryAutoLogin = (login, password, attempts = 0) => {
+  const tryAutoLogin = async (login, password, attempts = 0) => {
     // Use the latest login fn (ref) so it sees freshly-synced employees
-    const ok = loginRef.current(login, password)
+    const ok = await loginRef.current(login, password)
     if (ok) { navigate('/'); return }
     if (attempts < 8) {
       setTimeout(() => tryAutoLogin(login, password, attempts + 1), 1200)
@@ -108,6 +126,31 @@ export default function CourseLanding() {
       return
     }
     setSubmitting(true)
+    if (USE_SERVER) {
+      // The server creates the student, the LMS account and the CRM lead,
+      // and logs the student in. An already registered phone gets no
+      // password back — they log in as usual.
+      try {
+        const res = await api(`/api/public/courses/${encodeURIComponent(courseId)}/signup`, {
+          method: 'POST', auth: false, body: { name: regForm.name.trim(), phone: regForm.phone.trim() },
+        })
+        setCredentials(res.credentials)
+        setRegistered(true)
+        setShowRegForm(false)
+        localStorage.setItem(`${STORAGE_KEY}_${courseId}`, JSON.stringify({ registered: true, credentials: res.credentials }))
+        toast.success("Ro'yxatdan o'tdingiz! 1-modul ochildi.")
+        setTimeout(() => { adoptSession(res.token, res.user); navigate('/') }, 900)
+      } catch (err) {
+        if (err.status === 409) {
+          toast.info("Bu raqam allaqachon ro'yxatdan o'tgan — login va parolingiz bilan kiring")
+          navigate('/login')
+        } else {
+          toast.error("Xatolik yuz berdi. Qaytadan urinib ko'ring.")
+        }
+      }
+      setSubmitting(false)
+      return
+    }
     try {
       const tenantId = course?.tenantId || 'default'
       const phoneDigits = regForm.phone.replace(/\D/g, '')
@@ -209,9 +252,9 @@ export default function CourseLanding() {
     setSubmitting(false)
   }
 
-  const goToCabinet = () => {
+  const goToCabinet = async () => {
     if (credentials) {
-      if (loginRef.current(credentials.login, credentials.password)) { navigate('/'); return }
+      if (await loginRef.current(credentials.login, credentials.password)) { navigate('/'); return }
       try { localStorage.setItem('interno_prefill_login', JSON.stringify(credentials)) } catch {}
     }
     navigate('/login')
@@ -381,7 +424,7 @@ export default function CourseLanding() {
                             {lesson.description && <p className="text-xs text-[#9095a5] truncate">{lesson.description}</p>}
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
-                            {lesson.videoUrl && <span className="text-xs text-[#9095a5] flex items-center gap-1"><Video size={12} /> Video</span>}
+                            {(lesson.videoUrl || lesson.hasVideo) && <span className="text-xs text-[#9095a5] flex items-center gap-1"><Video size={12} /> Video</span>}
                             {isFree && !registered && <span className="text-[10px] bg-[#dbdbff] text-[#5151f0] px-2 py-0.5 rounded-full font-semibold">BEPUL</span>}
                             {canWatch && <span className="text-[10px] bg-[#d9f7d0] text-[#1f7a33] px-2 py-0.5 rounded-full font-semibold">KO'RISH</span>}
                           </div>

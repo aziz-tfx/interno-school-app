@@ -14,9 +14,10 @@ import {
   where,
   orderBy,
   limit,
-} from 'firebase/firestore'
+} from '../backend/firestore'
 import { logAudit } from '../utils/auditLog'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
+import { USE_SERVER, api } from '../backend/api'
 
 // Цвета для филиалов (используются в графиках и бейджах)
 const BRANCH_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16']
@@ -95,6 +96,25 @@ export function DataProvider({ children, currentUser }) {
   const needsSchedule  = role !== 'anonymous'
 
   useEffect(() => {
+    // Server backend, not logged in: the API shares only the public catalog
+    // (branch and course names for the registration form) — the Firestore
+    // app used to load every student and payment before login.
+    if (USE_SERVER && !currentUser) {
+      let stopped = false
+      api(`/api/public/catalog?tenantId=${encodeURIComponent(tenantId)}`, { auth: false })
+        .then(({ branches: b, courses: c }) => {
+          if (stopped) return
+          setBranches(b.map(x => ({ ...x.data, id: x.id })))
+          setCourses(c.map(x => ({ ...x.data, id: x.id })))
+        })
+        .catch(err => console.warn('public catalog unavailable:', err.message))
+        .finally(() => {
+          Object.keys(loadedRef.current).forEach(k => { loadedRef.current[k] = true })
+          checkAllLoaded()
+        })
+      return () => { stopped = true }
+    }
+
     // Listener registry + retry machinery.
     //
     // КЛЮЧЕВОЕ: onSnapshot-листенер, получивший ошибку (quota throttling,
@@ -260,7 +280,7 @@ export function DataProvider({ children, currentUser }) {
       activeUnsubs.forEach(unsub => unsub())
       activeUnsubs.clear()
     }
-  }, [tenantId, role, needsLms, needsMessages, needsGame, needsSchedule])
+  }, [tenantId, role, needsLms, needsMessages, needsGame, needsSchedule, !!currentUser])
 
   // ─── Lazy audit log subscription ──────────────────────────────────
   // Starts only after the Audit page mounts and calls enableAuditLogs().

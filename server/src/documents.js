@@ -13,7 +13,9 @@ const FIELD_RE = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/
 const MAX_LIMIT = 5000
 export const MAX_BATCH = 500 // same as Firestore's writeBatch limit
 
-const toDoc = (row) => ({ ...row.data, id: row.id })
+// { id, data } rather than { ...data, id }: some documents carry their own
+// `id` field (employees have a legacy numeric id), which must survive.
+const toDoc = (row) => ({ id: row.id, data: row.data })
 
 export function resolveCollection(name, user, mode) {
   const col = getCollection(name)
@@ -124,7 +126,11 @@ const PROTECTED_EMPLOYEE_FIELDS = new Set([
 async function guardEmployeeWrite(user, id, before, after, changedKeys) {
   const self = id === user.employeeId
   const managesPeople = PEOPLE_ROLES.has(user.role)
-  if (!managesPeople) {
+  // Student LMS accounts live in employees too; any staff member creates
+  // them on a sale and resets their passwords. Staying a student is the
+  // condition, so this never turns into a way to mint staff accounts.
+  const studentAccount = after.role === 'student' && (!before || before.role === 'student')
+  if (!managesPeople && !studentAccount) {
     if (!self) throw forbidden()
     if (changedKeys.some(k => PROTECTED_EMPLOYEE_FIELDS.has(k))) {
       throw forbidden('Эти поля может менять только администратор')
@@ -198,8 +204,11 @@ export async function writeDoc(client, user, name, id, body, mode) {
       throw err
     }
   } else if (existing) {
+    // An admin resetting someone's password ends that person's sessions. Your
+    // own change keeps your session (POST /api/auth/password also ends the others).
+    const revoke = passwordHash && id !== user.employeeId ? ', token_version = token_version + 1' : ''
     await client.query(
-      `UPDATE ${col.table} SET data = $2${passwordHash ? ', password_hash = $3, token_version = token_version + 1' : ''}
+      `UPDATE ${col.table} SET data = $2${passwordHash ? `, password_hash = $3${revoke}` : ''}
         WHERE id = $1`,
       passwordHash ? [id, after, passwordHash] : [id, after]
     )
@@ -210,7 +219,7 @@ export async function writeDoc(client, user, name, id, body, mode) {
       passwordHash ? [id, user.tenantId, after, passwordHash] : [id, user.tenantId, after]
     )
   }
-  return { ...after, id }
+  return { id, data: after }
 }
 
 export async function deleteDocument(client, user, name, id) {
@@ -219,6 +228,6 @@ export async function deleteDocument(client, user, name, id) {
   // Firestore deleteDoc() on a missing doc succeeds silently — keep that.
   if (!existing || existing.tenant_id !== user.tenantId) return
   if (!ownsDoc(col, user, id, existing.data)) throw forbidden()
-  if (col.table === 'employees' && !PEOPLE_ROLES.has(user.role)) throw forbidden()
+  if (col.table === 'employees' && !PEOPLE_ROLES.has(user.role) && existing.data?.role !== 'student') throw forbidden()
   await client.query(`DELETE FROM ${col.table} WHERE id = $1`, [String(id)])
 }

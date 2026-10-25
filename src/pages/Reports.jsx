@@ -14,7 +14,7 @@ import { computeCountedSaleIds } from '../utils/countedSales'
 import { db } from '../firebase'
 import {
   collection, doc, addDoc, setDoc, getDocs, onSnapshot, query, where, deleteDoc,
-} from 'firebase/firestore'
+} from '../backend/firestore'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 

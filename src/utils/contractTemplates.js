@@ -5,7 +5,7 @@
 import { db, storage } from '../firebase'
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, getDocs, query, where, writeBatch,
-} from 'firebase/firestore'
+} from '../backend/firestore'
 import {
   ref as storageRef, uploadBytes, getDownloadURL, deleteObject,
 } from 'firebase/storage'

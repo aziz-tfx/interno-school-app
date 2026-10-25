@@ -4,7 +4,7 @@ import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
 import { db } from '../firebase'
-import { doc, setDoc, getDoc, collection } from 'firebase/firestore'
+import { doc, setDoc, getDoc, collection } from '../backend/firestore'
 
 export default function SalesPlanModal({ onClose }) {
   const { getSalesPlan, setSalesPlan, branches } = useData()

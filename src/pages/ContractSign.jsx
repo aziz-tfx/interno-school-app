@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { db } from '../firebase'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc } from '../backend/firestore'
+import { USE_SERVER, api } from '../backend/api'
 import Logo from '../components/Logo'
 import { toast } from '../components/Toaster'
 import { formatCurrency } from '../data/mockData'
@@ -45,7 +46,12 @@ export default function ContractSign() {
   useEffect(() => {
     const fetchPayment = async () => {
       try {
-        const snap = await getDoc(doc(db, 'payments', paymentId))
+        // Server backend: a public endpoint returns just the contract fields.
+        const snap = USE_SERVER
+          ? await api(`/api/public/contracts/${encodeURIComponent(paymentId)}`, { auth: false })
+              .then(r => ({ exists: () => true, id: r.id, data: () => r.data }))
+              .catch(err => { if (err.status === 404) return { exists: () => false }; throw err })
+          : await getDoc(doc(db, 'payments', paymentId))
         if (snap.exists()) {
           const data = { id: snap.id, ...snap.data() }
           setPayment(data)
@@ -91,11 +97,18 @@ export default function ContractSign() {
     const data = canvas.toDataURL('image/png')
     setSaving(true)
     try {
-      await updateDoc(doc(db, 'payments', paymentId), {
-        signatureData: data,
-        contractSigned: true,
-        signedAt: new Date().toISOString(),
-      })
+      if (USE_SERVER) {
+        // signs once; the server refuses to overwrite an existing signature
+        await api(`/api/public/contracts/${encodeURIComponent(paymentId)}/sign`, {
+          method: 'POST', auth: false, body: { signatureData: data },
+        })
+      } else {
+        await updateDoc(doc(db, 'payments', paymentId), {
+          signatureData: data,
+          contractSigned: true,
+          signedAt: new Date().toISOString(),
+        })
+      }
       setSignatureData(data)
       setSigned(true)
       setSigning(false)
