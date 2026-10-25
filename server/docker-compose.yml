@@ -1,0 +1,73 @@
+# Production stack for the Eskiz VPS:  docker compose up -d --build
+#
+#   caddy   — HTTPS (Let's Encrypt, automatic) → api
+#   api     — Node.js backend (runs DB migrations on start)
+#   db      — PostgreSQL 16, reachable only inside this network
+#   backup  — nightly pg_dump into ./backups, keeps 14 days
+#
+# Secrets live in .env next to this file (see .env.example).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: interno
+      POSTGRES_USER: interno
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U interno -d interno"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # no ports: the database is never exposed to the internet
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://interno:${POSTGRES_PASSWORD}@db:5432/interno
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: interno
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: interno
+      BACKUP_KEEP_DAYS: 14
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

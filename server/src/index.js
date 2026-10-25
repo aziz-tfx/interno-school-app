@@ -1,0 +1,22 @@
+import { loadConfig } from './config.js'
+import { createPool } from './db.js'
+import { migrate } from './migrate.js'
+import { buildApp } from './app.js'
+
+const config = loadConfig()
+const pool = createPool(config.databaseUrl)
+
+// Migrations run on every start, so a deploy is just "pull + restart".
+await migrate(pool, (msg) => console.log(msg))
+
+const app = await buildApp({ config, pool })
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, async () => {
+    await app.close()
+    await pool.end()
+    process.exit(0)
+  })
+}
+
+await app.listen({ port: config.port, host: config.host })
