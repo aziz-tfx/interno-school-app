@@ -463,6 +463,7 @@ export default {
   "access.section_attendance": "Davomat",
   "access.section_lms": "LMS",
   "access.section_settings": "Sozlamalar",
+  "access.section_crm": "CRM (bitimlar va vazifalar)",
   "access.action_view": "Ko'rish",
   "access.action_add": "Qo'shish",
   "access.action_edit": "Tahrirlash",

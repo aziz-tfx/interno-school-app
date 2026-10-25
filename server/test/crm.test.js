@@ -95,6 +95,9 @@ test('funnel report: cohort, reached stages, conversion, by manager', async () =
   assert.equal(r.stages.find(s => s.name === 'Неразобранное').reached, 2)
   const gul = r.byResponsible.find(x => x.created === 2)
   assert.ok(gul)
+  // both leads were typed in by a manager → no response-time figures
+  assert.equal(r.totals.medianResponseMin, null)
+  assert.equal(r.totals.noResponse, 0)
 })
 
 test('notes and tasks; completing a task writes to the timeline', async () => {

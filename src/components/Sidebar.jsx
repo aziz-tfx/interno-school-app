@@ -31,11 +31,13 @@ import {
   Moon,
   MessageCircle,
   Bot,
+  SquareKanban,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useTheme } from '../contexts/ThemeContext'
 import Logo from './Logo'
+import { USE_SERVER } from '../backend/api'
 
 export default function Sidebar({ open, onClose }) {
   const { user, hasPermission, getRoleLabel, logout } = useAuth()
@@ -95,6 +97,8 @@ export default function Sidebar({ open, onClose }) {
         { to: '/attendance', icon: ClipboardCheck, label: t('sidebar.attendance'), permission: 'attendance' },
       ],
     },
+    // The CRM lives on the INTERNO server; the Firestore build has no backend for it.
+    ...(USE_SERVER ? [{ to: '/crm', icon: SquareKanban, label: 'CRM', permission: 'crm' }] : []),
     {
       group: 'sales',
       icon: DollarSign,

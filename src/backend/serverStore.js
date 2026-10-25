@@ -277,6 +277,11 @@ function createLiveHub() {
       const all = resyncAll
       resyncAll = false
       for (const sub of subs) {
+        if (sub.kind === 'table') {
+          // the consumer re-loads whatever it shows; events may have been missed
+          if (all || !before.has(sub.collection)) sub.onEvent({ collection: sub.collection, resync: true })
+          continue
+        }
         // 403-only collections never appear in `covered`; fetch those anyway once.
         if (all || sub.awaitingStream || sub.refetchOnReady || !before.has(sub.collection)) {
           sub.awaitingStream = false
@@ -297,9 +302,12 @@ function createLiveHub() {
     }
   }
 
-  function onChange({ collection: name, id }) {
+  function onChange(evt) {
+    const { collection: name, id } = evt
     for (const sub of subs) {
-      if (sub.collection !== name || sub.awaitingStream) continue
+      if (sub.collection !== name) continue
+      if (sub.kind === 'table') { sub.onEvent(evt); continue }
+      if (sub.awaitingStream) continue
       if (sub.kind === 'doc') {
         if (sub.ref.id === id) debounce(sub, CHANGE_DEBOUNCE_MS, () => refresh(sub))
       } else if (sub.incremental && sub.loaded) {
@@ -412,6 +420,22 @@ function createLiveHub() {
         sub.active = false
         clearTimeout(sub.timer)
         clearTimeout(sub.waitTimer)
+        subs.delete(sub)
+        scheduleStream()
+      }
+    },
+    /**
+     * Raw change events for a server table (e.g. 'crm_leads') — for screens
+     * backed by dedicated endpoints rather than collection queries. onEvent
+     * gets {collection, id, op}, or {resync: true} after a reconnect.
+     * Returns an unsubscribe function.
+     */
+    listenTable(name, onEvent) {
+      const sub = { kind: 'table', collection: name, onEvent, active: true }
+      subs.add(sub)
+      scheduleStream()
+      return () => {
+        sub.active = false
         subs.delete(sub)
         scheduleStream()
       }

@@ -5,6 +5,10 @@
 // means the lead entered that stage or any later one (by sort), so a lead
 // that jumped from «Новая заявка» straight to «Успешно» still counts as
 // having passed the stages in between — the usual funnel convention.
+//
+// Response time only means something for leads that came in by themselves
+// (landing, channels, amo import — created_by IS NULL). A deal a manager
+// typed in after talking to the client would read as "answered in 0 min".
 
 const TZ = 'Asia/Tashkent'
 
@@ -41,10 +45,12 @@ export async function funnelReport(db, tenantId, { pipelineId, from, to }) {
            count(*) FILTER (WHERE s.kind = 'won')::int AS won,
            count(*) FILTER (WHERE s.kind = 'lost')::int AS lost,
            coalesce(sum(c.amount) FILTER (WHERE s.kind = 'won'), 0) AS won_amount,
-           round(avg(extract(epoch FROM c.first_response_at - c.created_at) / 60)::numeric, 1) AS avg_response_min,
+           round((avg(extract(epoch FROM c.first_response_at - c.created_at) / 60)
+             FILTER (WHERE c.created_by IS NULL))::numeric, 1) AS avg_response_min,
            round((percentile_cont(0.5) WITHIN GROUP (
-             ORDER BY extract(epoch FROM c.first_response_at - c.created_at) / 60))::numeric, 1) AS median_response_min,
-           count(*) FILTER (WHERE c.first_response_at IS NULL AND s.kind = 'open')::int AS no_response
+             ORDER BY extract(epoch FROM c.first_response_at - c.created_at) / 60)
+             FILTER (WHERE c.created_by IS NULL))::numeric, 1) AS median_response_min,
+           count(*) FILTER (WHERE c.created_by IS NULL AND c.first_response_at IS NULL AND s.kind = 'open')::int AS no_response
       FROM cohort c JOIN crm_stages s ON s.id = c.stage_id`, params)
 
   const { rows: byResponsible } = await db.query(`
@@ -55,7 +61,8 @@ export async function funnelReport(db, tenantId, { pipelineId, from, to }) {
            count(*) FILTER (WHERE s.kind = 'won')::int AS won,
            coalesce(sum(c.amount) FILTER (WHERE s.kind = 'won'), 0) AS won_amount,
            round((percentile_cont(0.5) WITHIN GROUP (
-             ORDER BY extract(epoch FROM c.first_response_at - c.created_at) / 60))::numeric, 1) AS median_response_min
+             ORDER BY extract(epoch FROM c.first_response_at - c.created_at) / 60)
+             FILTER (WHERE c.created_by IS NULL))::numeric, 1) AS median_response_min
       FROM cohort c
       JOIN crm_stages s ON s.id = c.stage_id
       LEFT JOIN employees e ON e.id = c.responsible_id

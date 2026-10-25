@@ -65,6 +65,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: true },
     audit:     true,
     settings: true,
+    crm: true,
   },
   admin: {
     dashboard: true, branches: true,
@@ -78,6 +79,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: true },
     audit:     true,
     settings: true,
+    crm: true,
   },
   branch_director: {
     dashboard: true, branches: true,
@@ -91,6 +93,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: true },
     audit:     false,
     settings: false,
+    crm: true,
   },
   branch_admin: {
     dashboard: true, branches: false,
@@ -104,6 +107,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: false },
     audit:     false,
     settings: false,
+    crm: true,
   },
   rop: {
     dashboard: true, branches: false,
@@ -117,6 +121,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: false },
     audit:     false,
     settings: false,
+    crm: true,
   },
   sales: {
     dashboard: true, branches: false,
@@ -130,6 +135,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: true,
   },
   accountant: {
     dashboard: true, branches: false,
@@ -143,6 +149,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: false,
   },
   financier: {
     dashboard: true, branches: false,
@@ -156,6 +163,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: false,
   },
   hr: {
     dashboard: true, branches: false,
@@ -169,6 +177,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: false,
   },
   smm: {
     dashboard: true, branches: false,
@@ -182,6 +191,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: true,
   },
   teacher: {
     dashboard: false, branches: false,
@@ -195,6 +205,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: false },
     audit:     false,
     settings: false,
+    crm: false,
   },
   student: {
     dashboard: false, branches: false,
@@ -208,6 +219,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: false },
     audit:     false,
     settings: false,
+    crm: false,
   },
 }
 
