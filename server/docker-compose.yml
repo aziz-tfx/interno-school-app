@@ -6,11 +6,35 @@
 #   backup  — nightly pg_dump into ./backups, keeps 14 days
 #
 # Secrets live in .env next to this file (see .env.example).
+#
+# Sized for Eskiz VPS 3 (2 cores, 4 GB RAM, 80 GB NVMe). On a bigger server
+# raise shared_buffers / effective_cache_size (≈25% / 50% of RAM).
+
+# Docker keeps container logs forever by default — on an 80 GB disk that
+# eventually fills it. Cap every service at 3 × 10 MB.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
+    # ~1 GB of the 4 GB goes to Postgres; the rest stays for the API, the OS
+    # page cache and the imports. random_page_cost 1.1: NVMe, not spinning disk.
+    command: >
+      postgres
+      -c shared_buffers=768MB
+      -c effective_cache_size=2GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=128MB
+      -c max_connections=40
+      -c random_page_cost=1.1
+    # Docker's default 64 MB /dev/shm is too small for parallel queries
+    shm_size: 256mb
     environment:
       POSTGRES_DB: interno
       POSTGRES_USER: interno
@@ -27,10 +51,13 @@ services:
   api:
     build: .
     restart: unless-stopped
+    logging: *logging
     env_file: .env
     environment:
       DATABASE_URL: postgres://interno:${POSTGRES_PASSWORD}@db:5432/interno
       PORT: 3000
+      # keep the heap bounded so a runaway request can't starve Postgres
+      NODE_OPTIONS: --max-old-space-size=768
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +65,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *logging
     ports:
       - "80:80"
       - "443:443"
@@ -53,6 +81,7 @@ services:
   backup:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       PGHOST: db
       PGUSER: interno

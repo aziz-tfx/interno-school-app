@@ -64,9 +64,13 @@
 ## Развёртывание на сервере Eskiz
 
 ### 1. Сервер и домен
-- VPS с **Ubuntu 22.04/24.04**. Для старта хватит 2–4 vCPU, 4–8 ГБ RAM, SSD от 80 ГБ.
-- В DNS создать A-запись, например `api.interno.uz` → IP сервера.
-- Вход только по SSH-ключу: в `/etc/ssh/sshd_config` выставить `PasswordAuthentication no`.
+- **Eskiz VPS 3**: 2 ядра, 4 ГБ RAM, 80 ГБ NVMe. Система: **Ubuntu 24.04** (или 22.04).
+  `docker-compose.yml` настроен под этот размер. На VPS 4 и выше можно поднять `shared_buffers`
+  и `effective_cache_size` (≈ 25% и 50% RAM).
+- Уточните у Eskiz до оплаты: скорость канала **в интернет** (не только TAS-IX; серверу нужны
+  Telegram, OpenAI и вебхуки Meta), выделенный IPv4 в цене и переход на VPS 4 без переустановки.
+- В DNS создайте A-запись, например `api.interno.uz` → IP сервера.
+- Вход только по SSH-ключу: в `/etc/ssh/sshd_config` выставьте `PasswordAuthentication no`.
 
 ### 2. Подготовка (один раз)
 ```bash
@@ -74,7 +78,14 @@ sudo apt update && sudo apt -y upgrade && sudo apt -y install unattended-upgrade
 sudo ufw allow OpenSSH && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw enable
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER   # перелогиниться после этого
+
+# Файл подкачки 2 ГБ: страховка от нехватки памяти во время сборки образа и импортов
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swap.conf && sudo sysctl -p /etc/sysctl.d/99-swap.conf
 ```
+Логи контейнеров ограничены 30 МБ на каждый сервис, так что диск ими не забьётся.
 
 ### 3. Запуск
 ```bash
@@ -112,8 +123,10 @@ docker compose run --rm api npm run create-owner -- --login=owner --password='�
 
 ### 5. Бэкапы
 Контейнер `backup` каждую ночь в 03:00 по Ташкенту пишет `./backups/interno-ДАТА.dump` и хранит 14 дней.
-**Этого мало:** бэкапы лежат на том же диске, что и база. Настройте копирование на другой сервер или в
-облако (например, `rclone` по cron) и раз в месяц проверяйте восстановление:
+**Этого мало:** бэкапы лежат на том же диске, что и база. Настройте копирование на другой сервер
+(например, `rclone` или `rsync` по cron). Чтобы данные не покидали страну, вторую копию тоже держите
+в Узбекистане: у другого провайдера или хотя бы на офисном компьютере. Если Eskiz делает
+снапшоты сервера, включите и их. Раз в месяц проверяйте восстановление:
 ```bash
 docker compose exec -T db pg_restore --clean --if-exists -U interno -d interno < backups/interno-….dump
 ```
