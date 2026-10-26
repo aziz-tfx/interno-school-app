@@ -71,57 +71,60 @@
   и `effective_cache_size` (≈ 25% и 50% RAM).
 - Уточните у Eskiz до оплаты: скорость канала **в интернет** (не только TAS-IX; серверу нужны
   Telegram, OpenAI и вебхуки Meta), выделенный IPv4 в цене и переход на VPS 4 без переустановки.
-- В DNS создайте A-запись, например `api.interno.uz` → IP сервера.
-- Вход только по SSH-ключу: в `/etc/ssh/sshd_config` выставьте `PasswordAuthentication no`.
+- Домен должен указывать на IP сервера (A-запись). Eskiz выдаёт `vpsNNNNN.eskiz.uz`; свой, например
+  `api.interno.uz`, можно подключить позже.
 
-### 2. Подготовка (один раз)
+### 2. Установка (один раз, ~10 минут)
+Код лежит в приватном репозитории, поэтому сначала серверу выдаётся ключ «только чтение» (deploy key).
+Подключитесь к серверу (`ssh root@IP` или веб-консоль в панели Eskiz) и выполните:
+
 ```bash
-sudo apt update && sudo apt -y upgrade && sudo apt -y install unattended-upgrades ufw git
-sudo ufw allow OpenSSH && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw enable
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER   # перелогиниться после этого
-
-# Файл подкачки 2 ГБ: страховка от нехватки памяти во время сборки образа и импортов
-sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
-sudo mkswap /swapfile && sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swap.conf && sudo sysctl -p /etc/sysctl.d/99-swap.conf
+apt-get update -q && apt-get install -yq git
+ssh-keygen -q -t ed25519 -N '' -C interno-server -f /root/.ssh/interno_deploy
+printf 'Host github.com\n  IdentityFile /root/.ssh/interno_deploy\n  IdentitiesOnly yes\n  StrictHostKeyChecking accept-new\n' >> /root/.ssh/config
+cat /root/.ssh/interno_deploy.pub
 ```
-Логи контейнеров ограничены 30 МБ на каждый сервис, так что диск ими не забьётся.
+Последняя строка выведет ключ `ssh-ed25519 …`. Добавьте его в GitHub:
+**репозиторий → Settings → Deploy keys → Add deploy key** (Title: `interno-server`, без «Allow write access»).
+Затем:
 
-### 3. Запуск
 ```bash
-# репозиторий приватный: добавьте серверу deploy key (GitHub → Settings → Deploy keys, только чтение)
-git clone git@github.com:aziz-tfx/interno-school-app.git
-cd interno-school-app/server
-cp .env.example .env
-nano .env        # API_DOMAIN, POSTGRES_PASSWORD, JWT_SECRET, CORS_ORIGINS
-docker compose up -d --build
-curl https://api.interno.uz/api/health    # → {"ok":true}
+git clone -b claude/vigilant-cerf-m3ppn4 git@github.com:aziz-tfx/interno-school-app.git /opt/interno
+bash /opt/interno/server/deploy/install.sh
 ```
+
+`deploy/install.sh` делает всё остальное и его можно запускать повторно:
+обновление системы и автообновления безопасности, часовой пояс Ташкента, файл подкачки 2 ГБ,
+файрвол (открыты только 22/80/443), fail2ban против подбора пароля SSH, Docker, `.env` со случайными
+паролями, проверка DNS, сборка и запуск, проверка `https://<домен>/api/health`.
+Домен по умолчанию — `vps11372.eskiz.uz`; другой: `API_DOMAIN=api.interno.uz bash …/install.sh`.
 Миграции базы применяются автоматически при каждом старте.
 
-### 4. Перенос данных
-Сначала Firestore, потом amo: сделки связываются с уже перенесёнными сотрудниками и учениками.
-Добавьте `FIREBASE_SERVICE_ACCOUNT_KEY` в `.env` (тот же JSON, что на Vercel, одной строкой), затем:
+### 3. Перенос данных
+Нужен ключ сервисного аккаунта Firebase (Firebase console → Project settings → Service accounts →
+Generate new private key; тот же JSON, что `FIREBASE_SERVICE_ACCOUNT_KEY` на Vercel). Загрузите его на
+сервер как `/root/firebase-key.json` и выполните:
 
 ```bash
-# Firestore → PostgreSQL. Из Firestore только читаем.
-docker compose run --rm api npm run import:firestore -- --dry-run   # посчитать, ничего не записывая
-docker compose run --rm api npm run import:firestore
-
-# amoCRM → CRM (ключи amo берутся из перенесённых tenantIntegrations)
-docker compose run --rm api npm run import:amo -- --tenant=default
+bash /opt/interno/server/deploy/import.sh /root/firebase-key.json --dry-run   # посчитать, ничего не записывая
+bash /opt/interno/server/deploy/import.sh /root/firebase-key.json             # Firestore, затем amoCRM
+shred -u /root/firebase-key.json                                              # ключ больше не нужен
 ```
-Оба импорта можно запускать повторно сколько угодно: изменения обновляются, дублей нет.
-Перед переключением запустите их ещё раз, чтобы перенести то, что изменилось за это время.
-Если токен amo истёк, импорт обновит его и сохранит новую пару **и в Firestore, и в Postgres**,
-чтобы не сломать текущую интеграцию на Vercel.
+Сначала переносится Firestore, потом amo: сделки связываются с уже перенесёнными сотрудниками и учениками.
+Оба импорта можно запускать повторно: изменения обновляются, дублей нет. Перед переключением запустите
+ещё раз, чтобы перенести то, что изменилось за это время. Если токен amo истёк, импорт обновит его и
+сохранит новую пару **и в Firestore, и в Postgres**, чтобы не сломать текущую интеграцию на Vercel.
 
 Аварийный вход, если войти не может никто:
 ```bash
-docker compose run --rm api npm run create-owner -- --login=owner --password='…' --name='Азиз'
+cd /opt/interno/server && docker compose run --rm api npm run create-owner -- --login=owner --password='…' --name='Азиз'
 ```
+
+### 4. Безопасность доступа
+- Смените пароль root (`passwd`), если он передавался по почте или в переписке.
+- Лучше входить по SSH-ключу: добавьте свой публичный ключ в `/root/.ssh/authorized_keys`, проверьте
+  вход, затем выставьте `PasswordAuthentication no` в `/etc/ssh/sshd_config` и `systemctl restart ssh`.
+  (Не отключайте пароль, пока вход по ключу не проверен — иначе потеряете доступ.)
 
 ### 5. Бэкапы
 Контейнер `backup` каждую ночь в 03:00 по Ташкенту пишет `./backups/interno-ДАТА.dump` и хранит 14 дней.
@@ -135,7 +138,7 @@ docker compose exec -T db pg_restore --clean --if-exists -U interno -d interno <
 
 ### 6. Обновление
 ```bash
-cd interno-school-app && git pull && cd server && docker compose up -d --build
+bash /opt/interno/server/deploy/update.sh     # свежий код ветки, пересборка, проверка
 ```
 
 ## Фронтенд на новом API (этап 2)
