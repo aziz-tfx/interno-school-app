@@ -36,6 +36,12 @@ export function loadConfig(env = process.env) {
     // * is a wildcard within the host (see parseOrigin)
     corsOrigins: (env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean).map(parseOrigin),
     logLevel: env.LOG_LEVEL || (isTest ? 'silent' : 'info'),
+    // https://<API_DOMAIN> — the address Telegram posts bot updates to
+    publicUrl: env.PUBLIC_URL || (env.API_DOMAIN ? `https://${env.API_DOMAIN}` : ''),
+    // Daily automations (Telegram payment reminders, debtor status, LMS
+    // blocking) at 14:00 Tashkent. Off until the switch from Firebase: while
+    // the old Vercel cron still runs, both would message the same people.
+    automations: env.AUTOMATIONS === 'on',
     // Login / password attempts per minute per IP (brute-force guard)
     authRateLimit: Number(env.AUTH_RATE_LIMIT || (isTest ? 10_000 : 10)),
   }

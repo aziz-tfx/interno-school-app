@@ -13,8 +13,12 @@ import authRoutes from './routes/auth.js'
 import collectionRoutes from './routes/collections.js'
 import crmRoutes from './routes/crm/index.js'
 import publicRoutes from './routes/public.js'
+import telegramRoutes from './routes/telegram.js'
+import adminRoutes from './routes/admin.js'
+import { sendTelegram, setTelegramWebhook } from './telegram.js'
 
-export async function buildApp({ config, pool }) {
+// telegram: injectable so tests don't call the real Bot API
+export async function buildApp({ config, pool, telegram = { send: sendTelegram, setWebhook: setTelegramWebhook } }) {
   const app = Fastify({
     logger: { level: config.logLevel },
     trustProxy: true, // behind Caddy: real client IP for rate limits
@@ -52,12 +56,14 @@ export async function buildApp({ config, pool }) {
     return { ok: true }
   })
 
-  const deps = { pool, config, realtime }
+  const deps = { pool, config, realtime, telegram }
   await app.register(authRoutes, deps)
   await app.register(collectionRoutes, deps)
   await app.register(realtimeRoutes, deps)
   await app.register(crmRoutes, deps)
   await app.register(publicRoutes, deps)
+  await app.register(telegramRoutes, deps)
+  await app.register(adminRoutes, deps)
 
   return app
 }

@@ -16,7 +16,7 @@ set -euo pipefail
 
 API_DOMAIN_ARG="${API_DOMAIN:-}"
 BRANCH="${BRANCH:-claude/vigilant-cerf-m3ppn4}"
-CORS_ORIGINS="${CORS_ORIGINS:-https://interno-school-app.vercel.app,https://interno-school-*-aziz-tfxs-projects.vercel.app}"
+CORS_ORIGINS="${CORS_ORIGINS:-https://app.internoedu.uz,https://interno-school-app.vercel.app,https://interno-school-*-aziz-tfxs-projects.vercel.app}"
 REPO="git@github.com:aziz-tfx/interno-school-app.git"
 APP_DIR=/opt/interno
 DEPLOY_KEY=/root/.ssh/interno_deploy

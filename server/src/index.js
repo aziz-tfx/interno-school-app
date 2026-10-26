@@ -2,6 +2,8 @@ import { loadConfig } from './config.js'
 import { createPool } from './db.js'
 import { migrate } from './migrate.js'
 import { buildApp } from './app.js'
+import { startAutomationScheduler } from './automations.js'
+import { loadTelegramConfig, sendTelegram } from './telegram.js'
 
 const config = loadConfig()
 const pool = createPool(config.databaseUrl)
@@ -10,6 +12,14 @@ const pool = createPool(config.databaseUrl)
 await migrate(pool, (msg) => console.log(msg))
 
 const app = await buildApp({ config, pool })
+
+if (config.automations) {
+  startAutomationScheduler(pool, {
+    send: sendTelegram,
+    loadTelegram: (tenantId) => loadTelegramConfig(pool, tenantId),
+  }, app.log)
+  app.log.info('daily automations: on (14:00 Asia/Tashkent)')
+}
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, async () => {

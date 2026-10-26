@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import useGamification from '../hooks/useGamification'
 import useStudentNotifications from '../hooks/useStudentNotifications'
+import { USE_SERVER } from '../backend/api'
 import AIChat from '../components/AIChat'
 import Certificate from '../components/Certificate'
 import StudentOnboarding from '../components/StudentOnboarding'
@@ -45,6 +46,8 @@ export default function StudentCabinet() {
   // Public payment/bot config (safe subset — no secrets)
   const [payConfig, setPayConfig] = useState(null)
   useEffect(() => {
+    // Payme still books payments into Firebase — off on the own server for now
+    if (USE_SERVER) return
     const tid = user?.tenantId || 'default'
     fetch(`/api/pay/payme?tenantId=${encodeURIComponent(tid)}`)
       .then(r => r.ok ? r.json() : null)

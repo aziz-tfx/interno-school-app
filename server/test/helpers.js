@@ -29,13 +29,17 @@ export const USERS = {
   otherOwner: { id: 'e-b-owner', tenant: 'school-b', login: 'owner', password: 'b-pass', role: 'owner', name: 'Другая школа' },
 }
 
-/** Sets up db + app for the calling test file; returns a context object. */
-export function setup() {
+/**
+ * Sets up db + app for the calling test file; returns a context object.
+ * opts.env — extra env for loadConfig; opts.telegram — fake Bot API.
+ */
+export function setup(opts = {}) {
   const ctx = { tokens: {} }
 
   before(async () => {
     await resetDatabase()
-    const config = loadConfig({ ...process.env, NODE_ENV: 'test', DATABASE_URL })
+    const config = loadConfig({ ...process.env, ...opts.env, NODE_ENV: 'test', DATABASE_URL })
+    ctx.config = config
     ctx.pool = createPool(DATABASE_URL)
     await migrate(ctx.pool, () => {})
     for (const t of ['school-a', 'school-b']) {
@@ -48,7 +52,7 @@ export function setup() {
         [id, tenant, { ...data, tenantId: tenant, status: data.status || 'active' }, await hashPassword(password)]
       )
     }
-    ctx.app = await buildApp({ config, pool: ctx.pool })
+    ctx.app = await buildApp({ config, pool: ctx.pool, ...(opts.telegram && { telegram: opts.telegram }) })
     await ctx.app.ready()
     for (const [key, u] of Object.entries(USERS)) {
       if (u.status === 'fired') continue

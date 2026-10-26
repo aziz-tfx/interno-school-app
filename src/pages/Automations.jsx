@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { db } from '../firebase'
 import { doc, getDoc, setDoc } from '../backend/firestore'
+import { USE_SERVER, api } from '../backend/api'
 import {
   Zap, Bell, AlertTriangle, Lock, Save, CheckCircle,
   ToggleLeft, ToggleRight, Settings, Play, Loader,
@@ -58,6 +59,15 @@ export default function Automations() {
     setTesting(true)
     setTestResult(null)
     try {
+      if (USE_SERVER) {
+        // First a dry run (counts only); sending for real is a second, explicit step
+        const dryRun = !testResult?.dryRun
+        if (!dryRun && !confirm('Отправить напоминания и применить изменения сейчас?')) { setTesting(false); return }
+        const data = await api('/api/admin/automations/run', { method: 'POST', body: { dryRun } })
+        setTestResult({ ...data, dryRun })
+        setTesting(false)
+        return
+      }
       const secret = prompt('Введите CRON_SECRET (из Vercel env vars):')
       if (!secret) { setTesting(false); return }
       const res = await fetch(`/api/cron/automations?secret=${encodeURIComponent(secret)}&tenantId=${tenantId}`)
@@ -188,7 +198,7 @@ export default function Automations() {
           <button onClick={handleTest} disabled={testing}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 disabled:opacity-50 transition-colors">
             {testing ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}
-            Запустить сейчас
+            {USE_SERVER && !testResult?.dryRun ? 'Проверить' : 'Запустить сейчас'}
           </button>
           <button onClick={handleSave} disabled={saving}
             className={`flex items-center gap-2 px-5 py-2 text-sm font-medium rounded-xl transition-all ${
@@ -203,13 +213,15 @@ export default function Automations() {
       {/* Test result */}
       {testResult && (
         <div className={`glass-card rounded-2xl p-4 ${testResult.error ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
-          <p className="text-sm font-semibold text-slate-800 mb-2">Результат запуска:</p>
+          <p className="text-sm font-semibold text-slate-800 mb-2">
+            {testResult.dryRun ? 'Пробный прогон — ничего не отправлено. Будет:' : 'Результат запуска:'}
+          </p>
           {testResult.error ? (
             <p className="text-sm text-red-600">{testResult.error}</p>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
               <div><p className="text-xl font-bold text-slate-900">{testResult.tenants}</p><p className="text-xs text-slate-500">тенантов</p></div>
-              <div><p className="text-xl font-bold text-amber-600">{testResult.reminders}</p><p className="text-xs text-slate-500">напоминаний</p></div>
+              <div><p className="text-xl font-bold text-amber-600">{testResult.reminders + (testResult.studentReminders || 0)}</p><p className="text-xs text-slate-500">напоминаний</p></div>
               <div><p className="text-xl font-bold text-red-600">{testResult.debtors}</p><p className="text-xs text-slate-500">→ должники</p></div>
               <div><p className="text-xl font-bold text-violet-600">{testResult.blocked}</p><p className="text-xs text-slate-500">LMS блокировок</p></div>
             </div>
@@ -267,7 +279,9 @@ export default function Automations() {
               <li>Напоминания отправляются в Telegram-чат филиала (настройте в Интеграциях)</li>
               <li>Авто-должник проверяет дату следующего платежа + грейс-период</li>
               <li>Блокировка LMS срабатывает при истечении 6-месячного срока доступа</li>
-              <li>Кнопка «Запустить сейчас» позволяет протестировать (требуется CRON_SECRET)</li>
+              {USE_SERVER
+                ? <li>«Проверить» показывает, что будет сделано, ничего не отправляя; затем «Запустить сейчас» выполняет по-настоящему</li>
+                : <li>Кнопка «Запустить сейчас» позволяет протестировать (требуется CRON_SECRET)</li>}
             </ul>
           </div>
         </div>

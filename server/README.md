@@ -48,18 +48,21 @@
 - [x] **Фронтенд на новом API** за флагом `VITE_BACKEND=server` (этап 2, см. ниже)
 - [x] Публичные страницы без прямого доступа к базе: регистрация, лендинг курса, подписание договора, Telegram-приложение
 - [x] **Интерфейс CRM** в приложении (этап 3, раздел «CRM» в меню серверной сборки)
-- [x] 46 автотестов на настоящем PostgreSQL + проверка в браузере
+- [x] Ежедневные автоматизации (напоминания об оплате, должники, блокировка LMS, списки доплат менеджерам) и Telegram-бот (привязка учеников по `/start`) — на сервере
+- [x] 55 автотестов на настоящем PostgreSQL + проверка в браузере
 
 Дальше:
 
 1. **Параллельная работа:** превью-сборка на сервере, сверка цифр со старой версией.
-3. **Перенос `api/*` с Vercel на сервер:** Payme, Telegram-бот, OnlinePBX, cron-напоминания, ИИ-агент. Каналы будут писать сразу в CRM.
+3. **Перенос остальных `api/*` с Vercel на сервер:** Payme (в серверной сборке пока скрыт), OnlinePBX, ИИ-агент. Каналы будут писать сразу в CRM.
 4. **Instagram через Meta API** (нужно пройти App Review), затем отключение amoCRM.
 5. **Переключение:** последний импорт, перевод Firestore в режим «только чтение», переключение фронтенда.
 
 Пока не сделано, учесть на следующих этапах:
 - кросс-школьный доступ суперадмина (страница SuperAdmin видит только свою школу);
-- функции на Vercel (`/api/amo/*`, `/api/telegram/notify`, `/api/ai/*`) по-прежнему читают Firestore;
+- функции на Vercel (`/api/amo/*`, уведомления о продажах `/api/telegram/notify`, `/api/ai/*`) по-прежнему читают Firestore
+  (настройки Telegram для уведомлений о продажах берутся оттуда — меняя чаты, поменяйте их и в старой версии);
+- Payme: оплаты через него пишутся в Firestore, поэтому в серверной сборке кнопка оплаты и настройки Payme скрыты;
 - пароли LMS в документах студентов (`lmsPassword`) пока лежат открытым текстом, как и в Firestore;
 - загрузка файлов: Firebase Storage пока остаётся.
 
@@ -144,6 +147,28 @@ docker compose exec -T db pg_restore --clean --if-exists -U interno -d interno <
 bash /opt/interno/server/deploy/update.sh     # свежий код ветки, пересборка, проверка
 ```
 
+### 7. Переключение app.internoedu.uz на сервер
+
+**Днём, заранее:**
+1. `bash /opt/interno/server/deploy/update.sh` — свежий код на сервере.
+2. В превью-версии: «Интеграции → Telegram» — проверить, что заполнены токен бота и чаты филиалов
+   (если пусто — вписать те же значения, что `TG_BOT_TOKEN` / `TG_CHAT_*` на Vercel, и сохранить).
+3. «Автоматизации → Проверить» — пробный прогон: сколько напоминаний, должников и блокировок будет. Ничего не отправляет.
+
+**Вечером (≈30 минут, сотрудники в это время ничего не вносят):**
+1. Последний перенос данных — после него новые изменения в старой версии на сервер уже не попадут:
+   `bash /opt/interno/server/deploy/import.sh /root/firebase-key.json`
+   (ключ удалён после первого импорта — загрузить снова, после — `shred -u`).
+2. `bash /opt/interno/server/deploy/cutover.sh` — пускает `app.internoedu.uz` к API и включает ежедневные автоматизации в 14:00.
+3. Vercel → Settings → Environment Variables, **Production**: `VITE_BACKEND=server`, `VITE_API_URL=https://<домен API>`.
+4. Влить ветку в `main` — Vercel соберёт прод на сервере; cron автоматизаций на Vercel отключится этим же слиянием.
+5. «Интеграции → Telegram → Подключить бота к серверу» — привязка учеников по ссылке из кабинета теперь пишет в новую базу.
+6. Сотрудникам: обновить страницу и войти тем же логином и паролем. Проверить вход, учеников, оплаты, CRM.
+
+**Откат** (если что-то пошло не так): Vercel → Deployments → прошлый прод → Instant Rollback;
+`bash /opt/interno/server/deploy/cutover.sh --undo`; вебхук бота вернуть на
+`https://app.internoedu.uz/api/telegram/notify?tenantId=default` (setWebhook). Внесённое за это время останется только на сервере.
+
 ## Фронтенд на новом API (этап 2)
 
 Приложение выбирает базу при сборке:
@@ -217,6 +242,9 @@ DATABASE_URL=postgres://localhost/interno JWT_SECRET=$(openssl rand -base64 48) 
 | `GET/POST /api/crm/tasks`, `PATCH /api/crm/tasks/:id` | задачи (`?status=open\|overdue\|done`) |
 | `GET /api/crm/analytics/funnel?pipelineId=&from=&to=` | воронка, конверсия, время реакции, по менеджерам |
 | `POST /api/public/leads?tenantId=` | заявка с лендинга без входа |
+| `POST /api/admin/automations/run` `{dryRun?}` | автоматизации своей школы сейчас (владелец/админ); `dryRun` — только посчитать |
+| `POST /api/admin/telegram/webhook` | направить бота школы на этот сервер |
+| `POST /api/telegram/webhook?tenantId=` | обновления от Telegram (проверяется секрет `X-Telegram-Bot-Api-Secret-Token`) |
 
 Роли в CRM: работают `owner`, `admin`, `branch_director`, `branch_admin`, `rop`, `sales`, `smm`;
 воронки настраивают и сделки удаляют `owner`, `admin`, `branch_director`, `rop`.

@@ -1,7 +1,4 @@
 {
-  "crons": [
-    { "path": "/api/cron/automations", "schedule": "0 9 * * *" }
-  ],
   "rewrites": [
     { "source": "/api/ai/amo-agent", "destination": "/api/ai/chat?action=amo-agent" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
