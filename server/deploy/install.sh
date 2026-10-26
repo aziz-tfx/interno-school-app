@@ -27,6 +27,22 @@ die()  { printf '\033[1;31m✖ %s\033[0m\n' "$*"; exit 1; }
 . /etc/os-release
 case "$ID" in ubuntu|debian) ;; *) die "Нужна Ubuntu или Debian, а здесь: $PRETTY_NAME" ;; esac
 
+step "Проверка диска"
+# Some VPS images ship a small root partition on a big disk (Eskiz VPS 3:
+# 3.9 GB of 80 GB) — the upgrade below would run out of space.
+ROOT_AVAIL_MB=$(df -Pm / | awk 'NR==2 {print $4}')
+ROOT_DEV=$(findmnt -no SOURCE /)
+DISK_MB=$(lsblk -bndo SIZE "/dev/$(lsblk -no PKNAME "$ROOT_DEV" | head -1)" 2>/dev/null | awk '{print int($1/1048576)}')
+ROOT_MB=$(lsblk -bndo SIZE "$ROOT_DEV" | awk '{print int($1/1048576)}')
+echo "свободно на /: ${ROOT_AVAIL_MB} МБ; раздел $ROOT_DEV: ${ROOT_MB} МБ из ${DISK_MB:-?} МБ диска"
+if [ -n "$DISK_MB" ] && [ $((DISK_MB - ROOT_MB)) -gt 2048 ]; then
+  die "Раздел $ROOT_DEV занимает не весь диск. Расширьте его (данные не трогаются):
+     growpart /dev/$(lsblk -no PKNAME "$ROOT_DEV" | head -1) ${ROOT_DEV##*[a-z]}   # нет команды? apt-get install -y cloud-guest-utils
+     resize2fs $ROOT_DEV                       # для xfs: xfs_growfs /
+   и запустите этот скрипт снова."
+fi
+[ "$ROOT_AVAIL_MB" -ge 3072 ] || die "На диске свободно меньше 3 ГБ (${ROOT_AVAIL_MB} МБ) — освободите место и запустите снова."
+
 step "Обновление системы и базовые пакеты"
 export DEBIAN_FRONTEND=noninteractive
 # Ubuntu's needrestart would stop and ask which services to restart; only list
