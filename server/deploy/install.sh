@@ -7,12 +7,14 @@
 # .env (database password, JWT secret) is never overwritten.
 #
 # Settings (environment variables, all optional):
-#   API_DOMAIN    domain whose A record points at this server (HTTPS cert is issued for it)
+#   API_DOMAIN    domain whose A record points at this server (HTTPS cert is issued for it).
+#                 Default on first install: <ip-with-dashes>.sslip.io, which resolves to this
+#                 server without any DNS setup. Passing it later switches the domain in .env.
 #   BRANCH        git branch to deploy
 #   CORS_ORIGINS  frontend origins allowed to call the API (* = wildcard inside the host)
 set -euo pipefail
 
-API_DOMAIN="${API_DOMAIN:-vps11372.eskiz.uz}"
+API_DOMAIN_ARG="${API_DOMAIN:-}"
 BRANCH="${BRANCH:-claude/vigilant-cerf-m3ppn4}"
 CORS_ORIGINS="${CORS_ORIGINS:-https://interno-school-app.vercel.app,https://interno-school-*-aziz-tfxs-projects.vercel.app}"
 REPO="git@github.com:aziz-tfx/interno-school-app.git"
@@ -113,12 +115,18 @@ git -C "$APP_DIR" log --oneline -1
 cd "$APP_DIR/server"
 
 step "Настройки (.env)"
+MY_IP=$(curl -fsS -4 --max-time 10 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 if [ -f .env ]; then
-  echo ".env уже есть — оставляю как есть (пароль базы и секрет входа не меняются)"
+  echo ".env уже есть — пароль базы и секрет входа не меняются"
+  if [ -n "$API_DOMAIN_ARG" ]; then
+    if grep -q '^API_DOMAIN=' .env; then sed -i "s|^API_DOMAIN=.*|API_DOMAIN=$API_DOMAIN_ARG|" .env
+    else echo "API_DOMAIN=$API_DOMAIN_ARG" >> .env; fi
+    echo "домен API: $API_DOMAIN_ARG"
+  fi
 else
   # hex: no characters that would need escaping inside DATABASE_URL
   cat > .env <<EOF
-API_DOMAIN=$API_DOMAIN
+API_DOMAIN=${API_DOMAIN_ARG:-${MY_IP//./-}.sslip.io}
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 JWT_SECRET=$(openssl rand -hex 48)
 CORS_ORIGINS=$CORS_ORIGINS
@@ -127,16 +135,18 @@ EOF
   echo "создан .env с новыми случайными паролями"
 fi
 mkdir -p backups
+API_DOMAIN=$(sed -n 's/^API_DOMAIN=//p' .env | tail -1)
 
 step "Проверка домена $API_DOMAIN"
-MY_IP=$(curl -fsS -4 --max-time 10 https://api.ipify.org || hostname -I | awk '{print $1}')
-DNS_IP=$(getent ahostsv4 "$API_DOMAIN" | awk 'NR==1 {print $1}')
+# a name that doesn't resolve must warn, not end the script (set -e)
+DNS_IP=$(getent ahostsv4 "$API_DOMAIN" 2>/dev/null | awk 'NR==1 {print $1}' || true)
 if [ "$DNS_IP" = "$MY_IP" ]; then
   echo "$API_DOMAIN → $MY_IP ✓"
 else
   warn "$API_DOMAIN указывает на «${DNS_IP:-ничего}», а IP сервера $MY_IP."
   warn "HTTPS-сертификат не выпустится, пока A-запись не укажет на $MY_IP. Сервер всё равно запущу —"
   warn "сертификат появится сам через несколько минут после исправления DNS."
+  warn "Без настройки DNS можно сразу:  API_DOMAIN=${MY_IP//./-}.sslip.io bash $0"
 fi
 
 step "Сборка и запуск (первый раз — несколько минут)"
