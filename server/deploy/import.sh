@@ -12,7 +12,14 @@ set -euo pipefail
 
 KEY_FILE="${1:-}"
 shift || true
-[ -n "$KEY_FILE" ] && [ -f "$KEY_FILE" ] || { echo "Укажите путь к ключу Firebase: bash import.sh /root/firebase-key.json [--dry-run]"; exit 1; }
+[ -n "$KEY_FILE" ] || { echo "Укажите путь к ключу Firebase: bash import.sh /root/firebase-key.json [--dry-run]"; exit 1; }
+if [ ! -f "$KEY_FILE" ]; then
+  echo "✖ Файл $KEY_FILE не найден на сервере. Загрузите ключ Firebase, например с Mac:"
+  echo "    scp ~/Downloads/<имя-ключа>.json root@<IP-сервера>:$KEY_FILE"
+  echo "  (Firebase Console → Project settings → Service accounts → Generate new private key)"
+  exit 1
+fi
+grep -q '"private_key"' "$KEY_FILE" || { echo "✖ $KEY_FILE не похож на ключ сервисного аккаунта Firebase (нет поля private_key)"; exit 1; }
 DRY_RUN=no
 for a in "$@"; do [ "$a" = "--dry-run" ] && DRY_RUN=yes; done
 
