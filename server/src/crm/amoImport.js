@@ -1,7 +1,8 @@
 // amoCRM → CRM import. Re-runnable: every row is keyed by its amo id
 // (amo_id / amo_key), so a second run updates instead of duplicating — run
 // it once for the bulk, then again right before switching amo off to pick up
-// what changed in between.
+// what changed in between. With `since` only what changed after that moment
+// is fetched: minutes instead of the hours a full pass over amo takes.
 //
 // What comes over:
 //   users      → mapped to employees by employees.amoUserId, then by name
@@ -46,10 +47,16 @@ function customField(entity, code) {
  * @param {string} p.tenantId
  * @param {{get: (path: string) => Promise<any>}} p.amo  amo REST client (see scripts/import-amo.js)
  * @param {string} [p.eventsSince]  ISO date; stage history before it is skipped
+ * @param {Date} [p.since]  only contacts, leads, history, notes and tasks changed after it
  * @param {(msg: string) => void} [p.log]
  */
-export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = () => {} }) {
+export async function importFromAmo({ pool, tenantId, amo, eventsSince, since, log = () => {} }) {
   const stats = { users: 0, mappedUsers: 0, pipelines: 0, stages: 0, contacts: 0, leads: 0, events: 0, notes: 0, tasks: 0 }
+  const sinceTs = since ? Math.floor(since.getTime() / 1000) : null
+  const changed = (path, field = 'updated_at') =>
+    sinceTs ? `${path}${path.includes('?') ? '&' : '?'}filter[${field}][from]=${sinceTs}` : path
+  // a line every `every` rows, so long silent stages still show progress
+  const progress = (label, n, every) => { if (n % every === 0) log(`${label}: ${n}`) }
 
   // ─── Users → employees ────────────────────────────────────────────────
   const { rows: emps } = await pool.query(
@@ -105,8 +112,21 @@ export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = ()
   log(`pipelines: ${stats.pipelines}, stages: ${stats.stages}`)
 
   // ─── Contacts ─────────────────────────────────────────────────────────
+  // Rows imported earlier are known up front: notes and tasks of a lead
+  // that didn't change since the last run still find their lead/contact.
   const contactMap = new Map() // amo contact id → uuid
-  for await (const batch of pages(amo, '/api/v4/contacts', 'contacts')) {
+  const leadMap = new Map()    // amo lead id → { id, contactId, created, stageId }
+  for (const r of (await pool.query('SELECT amo_id, id FROM crm_contacts WHERE tenant_id = $1 AND amo_id IS NOT NULL', [tenantId])).rows) {
+    contactMap.set(Number(r.amo_id), r.id)
+  }
+  for (const r of (await pool.query(
+    'SELECT amo_id, id, contact_id, created_at, stage_id FROM crm_leads WHERE tenant_id = $1 AND amo_id IS NOT NULL', [tenantId]
+  )).rows) {
+    leadMap.set(Number(r.amo_id), { id: r.id, contactId: r.contact_id, created: r.created_at, stageId: r.stage_id })
+  }
+  if (sinceTs) log(`changes since ${since.toISOString()}; already imported: ${leadMap.size} leads, ${contactMap.size} contacts`)
+
+  for await (const batch of pages(amo, changed('/api/v4/contacts'), 'contacts')) {
     for (const c of batch) {
       const phones = normalizePhones(customField(c, 'PHONE'))
       const email = customField(c, 'EMAIL')[0] || null
@@ -136,8 +156,8 @@ export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = ()
   )
 
   // ─── Leads ────────────────────────────────────────────────────────────
-  const leadMap = new Map() // amo lead id → { id, created, pipeline, status }
-  for await (const batch of pages(amo, '/api/v4/leads?with=contacts,loss_reason', 'leads')) {
+  const touched = new Set() // amo ids of leads imported in this run
+  for await (const batch of pages(amo, changed('/api/v4/leads?with=contacts,loss_reason'), 'leads')) {
     for (const l of batch) {
       const stage = stageMap.get(`${l.pipeline_id}:${l.status_id}`)
       if (!stage) continue // lead in a deleted pipeline/status
@@ -160,7 +180,8 @@ export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = ()
          responsible, Number(l.price) || 0, tags, custom, lossReason, created, toDate(l.updated_at) || created,
          stage.kind === 'open' ? null : (toDate(l.closed_at) || toDate(l.updated_at) || created), l.id]
       )
-      leadMap.set(l.id, { id: row.id, contactId: main ? contactMap.get(main.id) || null : null, created, stageId: stage.id, pipelineAmoId: l.pipeline_id })
+      leadMap.set(l.id, { id: row.id, contactId: main ? contactMap.get(main.id) || null : null, created, stageId: stage.id })
+      touched.add(l.id)
       stats.leads++
     }
     log(`leads: ${stats.leads}`)
@@ -168,9 +189,12 @@ export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = ()
 
   // ─── Stage history (funnel) ───────────────────────────────────────────
   const history = new Map() // amo lead id → [{ id, at, before, after }]
-  const since = eventsSince ? Math.floor(Date.parse(eventsSince) / 1000) : null
-  const eventsPath = '/api/v4/events?filter[type]=lead_status_changed' + (since ? `&filter[created_at][from]=${since}` : '')
+  const eventsFrom = sinceTs || (eventsSince ? Math.floor(Date.parse(eventsSince) / 1000) : null)
+  const eventsPath = '/api/v4/events?filter[type]=lead_status_changed' + (eventsFrom ? `&filter[created_at][from]=${eventsFrom}` : '')
+  let eventsRead = 0
   for await (const batch of pages(amo, eventsPath, 'events', 100)) { // events API caps limit at 100
+    eventsRead += batch.length
+    progress('stage history read', eventsRead, 10_000)
     for (const e of batch) {
       if (!leadMap.has(e.entity_id)) continue
       const stageOf = (v) => {
@@ -182,12 +206,14 @@ export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = ()
       history.set(e.entity_id, list)
     }
   }
-  for (const [amoId, lead] of leadMap) {
+  for (const amoId of new Set([...touched, ...history.keys()])) {
+    const lead = leadMap.get(amoId)
     const events = (history.get(amoId) || []).sort((a, b) => a.at - b.at)
     // Entry into the first stage: where the earliest change started from,
-    // or the current stage if the lead never moved.
+    // or the current stage if the lead never moved. On a `since` run only for
+    // leads created since — older ones got theirs from the earlier history.
     const first = events[0]?.before?.id || (events.length ? null : lead.stageId)
-    if (first) {
+    if (first && (!since || lead.created >= since)) {
       await upsertStageChange(pool, tenantId, lead, `created:${amoId}`, null, first, lead.created, null)
     }
     for (const ev of events) {
@@ -207,7 +233,7 @@ export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = ()
     sms_out: { type: 'message', direction: 'out', channel: 'sms' },
   }
   for (const entity of ['leads', 'contacts']) {
-    for await (const batch of pages(amo, `/api/v4/${entity}/notes`, 'notes')) {
+    for await (const batch of pages(amo, changed(`/api/v4/${entity}/notes`), 'notes')) {
       for (const n of batch) {
         const lead = entity === 'leads' ? leadMap.get(n.entity_id) : null
         const contactId = entity === 'contacts' ? contactMap.get(n.entity_id) : lead?.contactId
@@ -227,14 +253,14 @@ export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = ()
           [tenantId, lead?.id || null, contactId || null, kind.type, kind.direction, kind.channel || null,
            employeeFor(n.created_by), body, meta, `${entity}-note:${n.id}`, toDate(n.created_at) || new Date()]
         )
-        stats.notes++
+        progress('notes & calls', ++stats.notes, 10_000)
       }
     }
   }
   log(`notes & calls: ${stats.notes}`)
 
   // ─── Tasks ────────────────────────────────────────────────────────────
-  for await (const batch of pages(amo, '/api/v4/tasks', 'tasks')) {
+  for await (const batch of pages(amo, changed('/api/v4/tasks'), 'tasks')) {
     for (const t of batch) {
       const lead = t.entity_type === 'leads' ? leadMap.get(t.entity_id) : null
       const contactId = t.entity_type === 'contacts' ? contactMap.get(t.entity_id) || null : lead?.contactId || null
@@ -247,7 +273,7 @@ export async function importFromAmo({ pool, tenantId, amo, eventsSince, log = ()
         [tenantId, lead?.id || null, contactId, employeeFor(t.responsible_user_id), t.text || 'Задача', due,
          t.is_completed ? (toDate(t.updated_at) || due) : null, t.result?.text || null, t.id, toDate(t.created_at) || new Date()]
       )
-      stats.tasks++
+      progress('tasks', ++stats.tasks, 10_000)
     }
   }
   log(`tasks: ${stats.tasks}`)

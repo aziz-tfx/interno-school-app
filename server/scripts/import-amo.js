@@ -1,6 +1,12 @@
 // Import amoCRM data into the CRM tables.
 //
-//   npm run import:amo -- --tenant=default [--events-since=2025-01-01]
+//   npm run import:amo -- --tenant=default                  everything (hours on a big account)
+//   npm run import:amo -- --tenant=default --changed        only what changed since the last
+//                                                           successful run (minutes)
+//   npm run import:amo -- --tenant=default --since=2026-10-26
+//   [--events-since=2025-01-01]  full run without stage history before that date
+//
+// One import per school at a time: a second one exits (Postgres advisory lock).
 //
 // Credentials come from tenant_integrations.<tenant>.data.amocrm (imported
 // from Firestore by import:firestore — the same block the Vercel functions
@@ -121,20 +127,50 @@ function createClient(cfg) {
   return { get }
 }
 
+const RUN_KEY = `amo-import:${tenantId}`
+
+/** Where a --changed run starts: the last successful run, or (runs from before
+ *  this was recorded) a day before the newest imported change. */
+async function lastImportTime() {
+  const { rows: [run] } = await pool.query('SELECT last_date FROM scheduled_runs WHERE name = $1', [RUN_KEY])
+  if (run) return new Date(run.last_date)
+  const { rows: [r] } = await pool.query(
+    'SELECT max(stage_changed_at) AS at FROM crm_leads WHERE tenant_id = $1 AND amo_id IS NOT NULL', [tenantId])
+  return r?.at ? new Date(r.at.getTime() - 86_400_000) : null
+}
+
+const lock = await pool.connect()
 try {
   await migrate(pool, () => {})
+  const { rows: [{ ok }] } = await lock.query('SELECT pg_try_advisory_lock(hashtext($1)) AS ok', [RUN_KEY])
+  if (!ok) throw new Error('Импорт amoCRM для этой школы уже идёт — дождитесь его окончания (docker ps | grep api-run).')
+
   const cfg = await loadAmoConfig()
   if (!cfg.subdomain || !cfg.accessToken) {
     throw new Error(`No amoCRM credentials for tenant "${tenantId}" (tenant_integrations or AMO_* env vars)`)
   }
-  console.log(`importing ${cfg.subdomain}.amocrm.ru → tenant ${tenantId}`)
+  let since = args.since ? new Date(args.since) : null
+  if (since && Number.isNaN(since.getTime())) throw new Error(`--since: не дата: ${args.since}`)
+  if ('changed' in args) {
+    since = await lastImportTime()
+    if (!since) console.log('no earlier import found — importing everything')
+  }
+  const startedAt = new Date()
+  console.log(`importing ${cfg.subdomain}.amocrm.ru → tenant ${tenantId}${since ? ` (changes since ${since.toISOString()})` : ''}`)
   const stats = await importFromAmo({
-    pool, tenantId, amo: createClient(cfg), eventsSince: args['events-since'], log: (m) => console.log(m),
+    pool, tenantId, amo: createClient(cfg), since, eventsSince: args['events-since'], log: (m) => console.log(m),
   })
+  // remembered for the next --changed run; overlapping with this run is harmless (upserts)
+  await pool.query(
+    `INSERT INTO scheduled_runs (name, last_date) VALUES ($1, $2)
+     ON CONFLICT (name) DO UPDATE SET last_date = EXCLUDED.last_date, ran_at = now()`,
+    [RUN_KEY, startedAt.toISOString()]
+  )
   console.log('done', stats)
 } catch (err) {
   console.error(err.message)
   process.exitCode = 1
 } finally {
+  lock.release()
   await pool.end()
 }

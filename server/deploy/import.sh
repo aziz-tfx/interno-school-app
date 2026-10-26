@@ -42,8 +42,11 @@ if [ "$DRY_RUN" = yes ]; then
   exit 0
 fi
 
-echo "▶ amoCRM → CRM"
-docker compose run --rm -T -e FIREBASE_SERVICE_ACCOUNT_KEY="$KEY" api npm run --silent import:amo -- --tenant=default \
+# --changed: after the first full import only what changed since the last run
+# (minutes); the very first run takes everything (hours on a big account —
+# then better in the background, see README)
+echo "▶ amoCRM → CRM (изменения с прошлого импорта)"
+docker compose run --rm -T -e FIREBASE_SERVICE_ACCOUNT_KEY="$KEY" api npm run --silent import:amo -- --tenant=default --changed \
   || echo "⚠ Импорт amoCRM не прошёл (подробности выше). Данные Firestore уже перенесены; amo можно повторить этой же командой."
 
 echo "✅ Готово. Ключ Firebase больше не нужен на сервере:  shred -u $KEY_FILE"

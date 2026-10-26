@@ -121,6 +121,16 @@ shred -u /root/firebase-key.json                                              # 
 ещё раз, чтобы перенести то, что изменилось за это время. Если токен amo истёк, импорт обновит его и
 сохранит новую пару **и в Firestore, и в Postgres**, чтобы не сломать текущую интеграцию на Vercel.
 
+**amoCRM.** Доступ берётся из «Интеграций» или, для основной школы, из `AMO_SUBDOMAIN` и `AMO_ACCESS_TOKEN`
+в `.env` (те же, что на Vercel). Первый полный импорт большого аккаунта идёт часами — запускайте в фоне:
+```bash
+cd /opt/interno/server
+nohup docker compose run --rm -T api npm run --silent import:amo -- --tenant=default > /root/amo-import.log 2>&1 &
+tail -f /root/amo-import.log          # Ctrl+C — выйти из просмотра, импорт продолжится
+```
+Дальше `import.sh` догружает только изменения (`--changed`, минуты). Обрывы связи с amo импорт
+переживает сам (повторяет запрос), а второй импорт той же школы, пока идёт первый, не запустится.
+
 Аварийный вход, если войти не может никто:
 ```bash
 cd /opt/interno/server && docker compose run --rm api npm run create-owner -- --login=owner --password='…' --name='Азиз'
@@ -159,6 +169,7 @@ bash /opt/interno/server/deploy/update.sh     # свежий код ветки, 
 1. Последний перенос данных — после него новые изменения в старой версии на сервер уже не попадут:
    `bash /opt/interno/server/deploy/import.sh /root/firebase-key.json`
    (ключ удалён после первого импорта — загрузить снова, после — `shred -u`).
+   amoCRM при этом догружается только изменениями с прошлого импорта (`import:amo --changed`) — минуты, не часы.
 2. `bash /opt/interno/server/deploy/cutover.sh` — пускает `app.internoedu.uz` к API и включает ежедневные автоматизации в 14:00.
 3. Vercel → Settings → Environment Variables, **Production**: `VITE_BACKEND=server`, `VITE_API_URL=https://<домен API>`.
 4. Влить ветку в `main` — Vercel соберёт прод на сервере; cron автоматизаций на Vercel отключится этим же слиянием.

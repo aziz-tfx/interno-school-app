@@ -174,3 +174,61 @@ test('imported history feeds the funnel report', async () => {
   const reached = Object.fromEntries(r.stages.map(s => [s.name, s.reached]))
   assert.deepEqual(reached, { 'Неразобранное': 2, 'Первичный контакт': 1, 'Пробный урок': 1, 'Успешно реализовано': 1, 'Закрыто и не реализовано': 0 })
 })
+
+test('amo import with `since` fetches only changes and links them to earlier rows', async () => {
+  const since = new Date((T0 + 10_000) * 1000)
+  const f = `filter[updated_at][from]=${T0 + 10_000}`
+  const changes = {
+    '/api/v4/users': amoData['/api/v4/users'],
+    [`/api/v4/contacts?${f}`]: { contacts: [] },
+    [`/api/v4/leads?with=contacts,loss_reason&${f}`]: {
+      leads: [
+        // moved on since the last run
+        { id: 51, name: 'Без менеджера', price: 0, pipeline_id: 10, status_id: 101, responsible_user_id: 999,
+          created_at: T0, updated_at: T0 + 20_000, _embedded: {} },
+        // new
+        { id: 52, name: 'Новая заявка', price: 0, pipeline_id: 10, status_id: 100, responsible_user_id: 555,
+          created_at: T0 + 20_000, updated_at: T0 + 20_000, _embedded: { contacts: [{ id: 1, is_main: true }] } },
+      ],
+    },
+    [`/api/v4/events?filter[type]=lead_status_changed&filter[created_at][from]=${T0 + 10_000}`]: {
+      events: [{ id: 'e3', entity_id: 51, created_by: 555, created_at: T0 + 20_000,
+        value_before: [{ lead_status: { id: 100, pipeline_id: 10 } }], value_after: [{ lead_status: { id: 101, pipeline_id: 10 } }] }],
+    },
+    // a note and a task on lead 50, which itself didn't change
+    [`/api/v4/leads/notes?${f}`]: { notes: [{ id: 11, entity_id: 50, note_type: 'common', created_by: 555, created_at: T0 + 20_000, params: { text: 'Новое примечание' } }] },
+    [`/api/v4/contacts/notes?${f}`]: { notes: [] },
+    [`/api/v4/tasks?${f}`]: { tasks: [{ id: 71, entity_type: 'leads', entity_id: 50, responsible_user_id: 555, text: 'Позвонить снова',
+      complete_till: T0 + 90_000, is_completed: false, created_at: T0 + 20_000, updated_at: T0 + 20_000 }] },
+  }
+  const calls = []
+  const amo = {
+    async get(path) {
+      calls.push(path)
+      if (path === '/api/v4/leads/pipelines') return { _embedded: amoData['/api/v4/leads/pipelines'] }
+      const base = path.replace(/[?&]limit=\d+&page=(\d+)$/, '')
+      if (!changes[base]) throw new Error(`unexpected amo call ${path}`)
+      return Number(path.match(/page=(\d+)$/)[1]) > 1 ? null : { _embedded: changes[base] }
+    },
+  }
+  const stats = await importFromAmo({ pool: ctx.pool, tenantId: 'default', amo, since })
+  assert.deepEqual([stats.contacts, stats.leads, stats.events, stats.notes, stats.tasks], [0, 2, 1, 1, 1])
+  assert.ok(!calls.some(p => p.startsWith('/api/v4/contacts?limit'))) // no full contact list
+
+  const q = async (sql, params) => (await ctx.pool.query(sql, params)).rows
+  const [lead50] = await q('SELECT id FROM crm_leads WHERE amo_id = 50')
+  const [lead51] = await q('SELECT l.id, s.amo_id AS stage FROM crm_leads l JOIN crm_stages s ON s.id = l.stage_id WHERE l.amo_id = 51')
+  assert.equal(Number(lead51.stage), 101)
+  const stageAmo = async (id) => Number((await q('SELECT amo_id FROM crm_stages WHERE id = $1', [id]))[0].amo_id)
+  // the old lead keeps its original entry stage; the new one gets its own
+  const [created51] = await q("SELECT meta FROM crm_activities WHERE amo_key = 'created:51'")
+  assert.equal(await stageAmo(created51.meta.to), 100)
+  const [created52] = await q("SELECT meta FROM crm_activities WHERE amo_key = 'created:52'")
+  assert.equal(await stageAmo(created52.meta.to), 100)
+  assert.equal((await q("SELECT count(*)::int n FROM crm_activities WHERE amo_key = 'event:e3' AND lead_id = $1", [lead51.id]))[0].n, 1)
+
+  const [note] = await q("SELECT lead_id FROM crm_activities WHERE amo_key = 'leads-note:11'")
+  assert.equal(note.lead_id, lead50.id)
+  const [task] = await q('SELECT lead_id FROM crm_tasks WHERE amo_id = 71')
+  assert.equal(task.lead_id, lead50.id)
+})
