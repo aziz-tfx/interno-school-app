@@ -80,23 +80,43 @@ async function refresh(cfg) {
   return true
 }
 
+// A full import is thousands of requests over a long-distance link: a
+// dropped connection, a timeout or a 5xx mustn't end it — wait and retry.
+const RETRY_DELAYS_MS = [2000, 5000, 15000, 30000, 60000]
+
 function createClient(cfg) {
   let last = 0
-  async function get(path, retried = false) {
-    const wait = last + MIN_INTERVAL_MS - Date.now()
-    if (wait > 0) await new Promise(r => setTimeout(r, wait))
-    last = Date.now()
-    const res = await fetch(`https://${cfg.subdomain}.amocrm.ru${path}`, {
-      headers: { Authorization: `Bearer ${cfg.accessToken}` },
-    })
-    if (res.status === 401 && !retried && await refresh(cfg)) return get(path, true)
-    if (res.status === 429 && !retried) {
-      await new Promise(r => setTimeout(r, 2000))
-      return get(path, true)
+  async function get(path) {
+    let refreshed = false
+    for (let attempt = 0; ; attempt++) {
+      const wait = last + MIN_INTERVAL_MS - Date.now()
+      if (wait > 0) await new Promise(r => setTimeout(r, wait))
+      last = Date.now()
+      let res
+      let problem
+      try {
+        res = await fetch(`https://${cfg.subdomain}.amocrm.ru${path}`, {
+          headers: { Authorization: `Bearer ${cfg.accessToken}` },
+          signal: AbortSignal.timeout(60_000),
+        })
+      } catch (err) {
+        problem = err.cause?.code || (err.name === 'TimeoutError' ? 'нет ответа 60 с' : err.message) // network error or timeout
+      }
+      if (res?.status === 401 && !refreshed) {
+        refreshed = true
+        if (await refresh(cfg)) continue
+      }
+      if (res && (res.status === 429 || res.status >= 500)) problem = `HTTP ${res.status}`
+      if (problem) {
+        if (attempt >= RETRY_DELAYS_MS.length) throw new Error(`amoCRM GET ${path}: ${problem} (после ${attempt + 1} попыток)`)
+        console.log(`  amoCRM: ${problem}, повтор через ${RETRY_DELAYS_MS[attempt] / 1000} с…`)
+        await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]))
+        continue
+      }
+      if (res.status === 204) return null
+      if (!res.ok) throw new Error(`amoCRM GET ${path} → ${res.status}: ${(await res.text()).slice(0, 300)}`)
+      return res.json()
     }
-    if (res.status === 204) return null
-    if (!res.ok) throw new Error(`amoCRM GET ${path} → ${res.status}: ${(await res.text()).slice(0, 300)}`)
-    return res.json()
   }
   return { get }
 }
