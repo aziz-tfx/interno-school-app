@@ -29,6 +29,9 @@ case "$ID" in ubuntu|debian) ;; *) die "Нужна Ubuntu или Debian, а зд
 
 step "Обновление системы и базовые пакеты"
 export DEBIAN_FRONTEND=noninteractive
+# Ubuntu's needrestart would stop and ask which services to restart; only list
+# them instead — a reboot at the end (if needed) restarts everything cleanly.
+export NEEDRESTART_MODE=l
 apt-get update -q
 apt-get -yq -o Dpkg::Options::=--force-confold upgrade
 apt-get -yq install ca-certificates curl git ufw fail2ban unattended-upgrades openssl
@@ -158,3 +161,8 @@ cat <<EOF
   3. Обновление в будущем:   bash $APP_DIR/server/deploy/update.sh
 ────────────────────────────────────────────────────────────────────
 EOF
+
+if [ -f /var/run/reboot-required ]; then
+  warn "Установлено новое ядро. Перезагрузите сервер, когда удобно:  reboot"
+  warn "База, API, HTTPS и бэкапы запустятся сами после перезагрузки."
+fi
