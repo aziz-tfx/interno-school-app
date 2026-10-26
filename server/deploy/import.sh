@@ -13,6 +13,14 @@ set -euo pipefail
 KEY_FILE="${1:-}"
 shift || true
 [ -n "$KEY_FILE" ] || { echo "Укажите путь к ключу Firebase: bash import.sh /root/firebase-key.json [--dry-run]"; exit 1; }
+# `scp a.json b.json host:/root/firebase-key.json` makes a *directory* of
+# that name — take the key from inside it.
+if [ -d "$KEY_FILE" ]; then
+  INNER=$(ls "$KEY_FILE"/*.json 2>/dev/null | head -1 || true)
+  [ -n "$INNER" ] || { echo "✖ $KEY_FILE — папка, и в ней нет .json"; exit 1; }
+  echo "ℹ $KEY_FILE — это папка; беру ключ $INNER"
+  KEY_FILE="$INNER"
+fi
 if [ ! -f "$KEY_FILE" ]; then
   echo "✖ Файл $KEY_FILE не найден на сервере. Загрузите ключ Firebase, например с Mac:"
   echo "    scp ~/Downloads/<имя-ключа>.json root@<IP-сервера>:$KEY_FILE"
