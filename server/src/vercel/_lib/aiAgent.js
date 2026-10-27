@@ -30,7 +30,7 @@
 // Conversation history is stored in Firestore: aiAgentConversations/{tenantId}__lead_{leadId}
 
 import crypto from 'node:crypto'
-import { waitUntil } from '@vercel/functions'
+import { waitUntil } from './runtime.js'
 import { getDb, getTenantId, resolveAmo, resolveAiAgent, resolveTelegram, saveTenantIntegration } from './tenantConfig.js'
 import { createAmoClient } from './amoClient.js'
 

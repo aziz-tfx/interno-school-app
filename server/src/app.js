@@ -1,6 +1,8 @@
 // Builds the Fastify app. Kept separate from index.js so tests can create an
 // app against a test database without opening a port.
 
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
@@ -15,6 +17,8 @@ import crmRoutes from './routes/crm/index.js'
 import publicRoutes from './routes/public.js'
 import telegramRoutes from './routes/telegram.js'
 import adminRoutes from './routes/admin.js'
+import vercelRoutes from './routes/vercel.js'
+import { initTenantConfig } from './vercel/_lib/tenantConfig.js'
 import { sendTelegram, setTelegramWebhook } from './telegram.js'
 
 // telegram: injectable so tests don't call the real Bot API
@@ -51,11 +55,18 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
   app.addHook('onReady', () => realtime.start())
   app.addHook('preClose', () => realtime.stop()) // open SSE streams would block close()
 
+  // Also what deploy/autodeploy.sh last did and the public key to encrypt
+  // keys for this server with — so both can be checked from outside.
   app.get('/api/health', async () => {
     await pool.query('SELECT 1')
-    return { ok: true }
+    const [deploy, opsKey] = await Promise.all([
+      readFile(join(config.stateDir, 'deploy.json'), 'utf8').then(JSON.parse).catch(() => undefined),
+      readFile(join(config.stateDir, 'ops-key.pub.pem'), 'utf8').catch(() => undefined),
+    ])
+    return { ok: true, deploy, opsKey }
   })
 
+  initTenantConfig(pool) // the former Vercel functions read settings and documents through it
   const deps = { pool, config, realtime, telegram }
   await app.register(authRoutes, deps)
   await app.register(collectionRoutes, deps)
@@ -64,6 +75,7 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
   await app.register(publicRoutes, deps)
   await app.register(telegramRoutes, deps)
   await app.register(adminRoutes, deps)
+  await app.register(vercelRoutes, deps)
 
   return app
 }

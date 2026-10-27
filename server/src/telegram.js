@@ -46,7 +46,7 @@ export async function loadTelegramConfig(db, tenantId, env = process.env) {
         tashkent: env.TG_CHAT_TASHKENT || '',
         samarkand: env.TG_CHAT_SAMARKAND || '',
         fergana: env.TG_CHAT_FERGANA || '',
-        bukhara: env.TG_CHAT_BUKHARA || '',
+        bukhara: env.TG_CHAT_BUKHARA || env.TG_CHAT_FERGANA || '',
         online: env.TG_CHAT_TASHKENT || '',
       }
     }

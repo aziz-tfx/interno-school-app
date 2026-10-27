@@ -42,6 +42,8 @@ export function loadConfig(env = process.env) {
     // blocking) at 14:00 Tashkent. Off until the switch from Firebase: while
     // the old Vercel cron still runs, both would message the same people.
     automations: env.AUTOMATIONS === 'on',
+    // Written by deploy/autodeploy.sh (mounted read-only into the container)
+    stateDir: env.STATE_DIR || '/app/state',
     // Login / password attempts per minute per IP (brute-force guard)
     authRateLimit: Number(env.AUTH_RATE_LIMIT || (isTest ? 10_000 : 10)),
   }

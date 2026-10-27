@@ -17,9 +17,8 @@
 // dryRun: count what would be sent/changed, without sending or writing —
 // to preview the first run on real data.
 //
-// Payme pay-now links are left out of student reminders until the Payme
-// webhook moves to this server (payments made through it would otherwise
-// land in the old Firestore database).
+// Student reminders carry a Payme pay-now link when the school has Payme on
+// (deps.loadPayme).
 
 const DAY_MS = 86_400_000
 const RUN_HOUR_TASHKENT = 14
@@ -46,9 +45,10 @@ const daysUntil = (date, now) => Math.ceil((new Date(date) - now) / DAY_MS)
  * Run every rule for every active school.
  * @param {import('pg').Pool} pool
  * @param {{ now?: Date, send: (botToken, chatId, text) => Promise<boolean>, loadTelegram: (tenantId) => Promise<object>,
+ *           loadPayme?: (tenantId) => Promise<{ enabled, merchantId }>,
  *           dryRun?: boolean, tenantIds?: string[] }} deps   tenantIds: only these schools (default: every active one)
  */
-export async function runAutomations(pool, { now = new Date(), send: realSend, loadTelegram, dryRun = false, tenantIds: only }) {
+export async function runAutomations(pool, { now = new Date(), send: realSend, loadTelegram, loadPayme = async () => ({}), dryRun = false, tenantIds: only }) {
   const send = dryRun ? async (botToken, chatId) => Boolean(botToken && chatId) : realSend
   const todayStr = now.toISOString().slice(0, 10)
   const results = { tenants: 0, reminders: 0, studentReminders: 0, debtors: 0, blocked: 0, managerAlerts: 0, errors: [] }
@@ -108,6 +108,12 @@ export async function runAutomations(pool, { now = new Date(), send: realSend, l
 
       // ─── 2. Personal reminders to students ─────────────────────────
       if (settings.studentReminders !== false) {
+        const payme = await loadPayme(tenantId)
+        const paymeLink = (student, debt) => (payme.enabled && payme.merchantId)
+          ? `https://checkout.paycom.uz/${Buffer.from(
+            `m=${payme.merchantId};ac.student_id=${student.id};ac.tenant_id=${tenantId};a=${Math.round(debt * 100)}`
+          ).toString('base64')}`
+          : null
         for (const student of students) {
           if (!student.telegramChatId) continue
           if (student.status === 'frozen' || student.status === 'archived') continue
@@ -124,6 +130,7 @@ export async function runAutomations(pool, { now = new Date(), send: realSend, l
           const text = `${header}\n\nЗдравствуйте, ${student.name}!\n`
             + (student.course ? `📚 Курс: ${student.course}\n` : '')
             + `💰 К оплате: <b>${fmt(debt)} сум</b>\n📅 Срок: ${nextDate}\n`
+            + (paymeLink(student, debt) ? `\n💳 Оплатить онлайн: ${paymeLink(student, debt)}\n` : '')
             + '\nПосле оплаты доступ к урокам продлевается автоматически.'
           if (await send(tg.botToken, student.telegramChatId, text)) {
             results.studentReminders++

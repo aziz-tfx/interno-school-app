@@ -1,46 +1,33 @@
-// Shared helper for Vercel serverless functions.
-// Loads per-tenant integration credentials from Firestore.
-// Falls back to global env vars if the tenant hasn't configured their own.
+// Per-tenant integration credentials for the former Vercel functions, now
+// read from this server's tenant_integrations table (the document the
+// «Интеграции» page edits). Falls back to env vars for the original school.
 //
-// Firestore shape:  tenantIntegrations/{tenantId} = {
+// Shape:  tenant_integrations[tenantId].data = {
 //   telegram: { botToken, chats: { tashkent, samarkand, fergana, bukhara, online }, enabled },
 //   amocrm:   { subdomain, accessToken, refreshToken, clientId, clientSecret,
 //               redirectUri, pipelineId, statusId, enabled },
 //   onpbx:    { domain, apiKey, enabled },
-//   aiAgent:  { openaiKey, model, systemPrompt, knowledge, includeCourses,
-//               handoffStatusId, handoffTag, pauseTag, maxRepliesPerLead,
-//               webhookKey, replyFieldId, salesbotId, replyInstagram,
-//               replyComments, replyTelegram, replyOtherChannels,
-//               testMode, testTag, followUpEnabled, followUpHours,
-//               notifyChatId, notifyHandoff, notifyErrors, enabled },
+//   payme:    { merchantId, key, enabled },
+//   aiAgent:  { openaiKey, model, systemPrompt, knowledge, … , enabled },
 // }
 //
-// Required env var for Firestore access:  FIREBASE_SERVICE_ACCOUNT_KEY (JSON string)
-// If absent, Firestore lookup is skipped and env-var fallback is used.
+// Same exports as the Vercel version, so the handlers didn't change.
 
-import { initializeApp, getApps, cert } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
+import { getDb as firestoreDb, setPool } from './firestore.js'
+import { mergeDoc } from '../../lib/patch.js'
 
-let _db = null
-
-export function getDb() {
-  if (_db) return _db
-  if (!getApps().length) {
-    const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-    if (!key) return null
-    try {
-      const sa = typeof key === 'string' ? JSON.parse(key) : key
-      initializeApp({ credential: cert(sa) })
-    } catch (e) {
-      console.warn('firebase-admin init failed:', e.message)
-      return null
-    }
-  }
-  _db = getFirestore()
-  return _db
+let pool = null
+/** Called once at startup with the server's pg pool. */
+export function initTenantConfig(p) {
+  pool = p
+  setPool(p)
 }
 
-/** Extract tenantId from request (body → query → header). */
+/** Firestore-compatible handle over the server's document tables. */
+export function getDb() { return firestoreDb() }
+
+/** Extract tenantId from request (body → query → header). The server sets
+ *  all three to the signed-in user's school before calling a handler. */
 export function getTenantId(req) {
   return (
     req?.body?.tenantId ||
@@ -51,68 +38,37 @@ export function getTenantId(req) {
   ).toString().trim()
 }
 
-// ─── In-memory TTL cache for tenantIntegrations ──────────────────────────
-// Vercel serverless functions keep module state across warm invocations,
-// so caching here means the same warm instance doesn't re-read Firestore
-// on every request. Big deal for cron jobs and amoCRM sync that fire
-// every few minutes for the same tenant.
-//
-// TTL is short enough that config edits in the UI take effect quickly.
-const INTEGRATION_TTL_MS = 60 * 1000 // 60 seconds
-const _integrationCache = new Map() // tenantId → { data, expiresAt }
-
-function readCache(tenantId) {
-  const entry = _integrationCache.get(tenantId)
-  if (!entry) return null
-  if (Date.now() > entry.expiresAt) {
-    _integrationCache.delete(tenantId)
-    return null
-  }
-  return entry.data
-}
-
-function writeCache(tenantId, data) {
-  _integrationCache.set(tenantId, { data, expiresAt: Date.now() + INTEGRATION_TTL_MS })
-}
-
-/** Invalidate the cache — call after saveTenantIntegration so the next
- *  read picks up the fresh value. */
-function invalidateCache(tenantId) {
-  if (tenantId) _integrationCache.delete(tenantId)
-}
-
-/** Load one integration block for a tenant. Returns {} if nothing found.
- *  Cached in-memory for INTEGRATION_TTL_MS to reduce Firestore reads. */
-export async function loadTenantIntegration(tenantId, key /* telegram|amocrm|onpbx */) {
-  if (!tenantId) return {}
-  // Cache holds the WHOLE tenantIntegrations doc; slice out the requested key.
-  const cached = readCache(tenantId)
-  if (cached) return cached[key] || {}
-  const db = getDb()
-  if (!db) return {}
+/** Load one integration block for a tenant. Returns {} if nothing found. */
+export async function loadTenantIntegration(tenantId, key /* telegram|amocrm|onpbx|payme|aiAgent */) {
+  if (!tenantId || !pool) return {}
   try {
-    const snap = await db.collection('tenantIntegrations').doc(tenantId).get()
-    const data = snap.exists ? (snap.data() || {}) : {}
-    writeCache(tenantId, data)
-    return data[key] || {}
+    const { rows: [row] } = await pool.query('SELECT data FROM tenant_integrations WHERE id = $1', [tenantId])
+    return row?.data?.[key] || {}
   } catch (e) {
     console.warn('loadTenantIntegration failed:', e.message)
     return {}
   }
 }
 
-/** Persist refreshed tokens back to Firestore so future requests use them.
- *  Invalidates the in-memory cache so the next read picks up the new value. */
+/** Merge `patch` into one integration block (e.g. refreshed amo tokens). */
 export async function saveTenantIntegration(tenantId, key, patch) {
-  if (!tenantId) return false
-  const db = getDb()
-  if (!db) return false
+  if (!tenantId || !pool) return false
   try {
-    await db.collection('tenantIntegrations').doc(tenantId).set(
-      { [key]: patch, updatedAt: new Date().toISOString() },
-      { merge: true }
-    )
-    invalidateCache(tenantId)
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const { rows: [row] } = await client.query('SELECT data FROM tenant_integrations WHERE id = $1 FOR UPDATE', [tenantId])
+      const data = mergeDoc(row?.data || { tenantId }, { [key]: patch, updatedAt: new Date().toISOString() })
+      await client.query(
+        `INSERT INTO tenant_integrations (id, tenant_id, data) VALUES ($1, $1, $2)
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`, [tenantId, data])
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
     return true
   } catch (e) {
     console.warn('saveTenantIntegration failed:', e.message)

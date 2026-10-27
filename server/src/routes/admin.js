@@ -9,6 +9,7 @@ import { isAdmin } from '../collections.js'
 import { forbidden, badRequest } from '../lib/errors.js'
 import { runAutomations } from '../automations.js'
 import { loadTelegramConfig, webhookSecret } from '../telegram.js'
+import { resolvePayme } from '../vercel/_lib/tenantConfig.js'
 
 export default async function adminRoutes(app, { pool, config, telegram }) {
   const adminOnly = {
@@ -21,6 +22,7 @@ export default async function adminRoutes(app, { pool, config, telegram }) {
       dryRun: Boolean(req.body?.dryRun),
       send: telegram.send,
       loadTelegram: (tid) => loadTelegramConfig(pool, tid),
+      loadPayme: (tid) => resolvePayme({ query: { tenantId: tid } }),
     })
   })
 

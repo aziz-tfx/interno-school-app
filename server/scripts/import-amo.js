@@ -12,11 +12,9 @@
 // from Firestore by import:firestore — the same block the Vercel functions
 // use), or from AMO_SUBDOMAIN + AMO_ACCESS_TOKEN env vars.
 //
-// Expired token: amo invalidates the old refresh token on every refresh, so
-// refreshing here would silently break the live Vercel integration that
-// still reads Firestore. The new pair is therefore written to Firestore too
-// (needs FIREBASE_SERVICE_ACCOUNT_KEY); without it the import stops and asks
-// for a fresh access token instead.
+// Expired token: refreshed with the refresh token and saved to
+// tenant_integrations — the copy the app (amo pages, AI agent) uses too, so
+// nobody is left holding the invalidated old pair.
 //
 // Run import:firestore FIRST: leads are linked to employees (amoUserId) and
 // students (by phone) that must already be in Postgres.
@@ -24,12 +22,14 @@
 import { createPool } from '../src/db.js'
 import { migrate } from '../src/migrate.js'
 import { importFromAmo } from '../src/crm/amoImport.js'
+import { initTenantConfig, saveTenantIntegration } from '../src/vercel/_lib/tenantConfig.js'
 
 const args = Object.fromEntries(process.argv.slice(2).map(a => a.replace(/^--/, '').split('=')))
 const tenantId = args.tenant || 'default'
 const MIN_INTERVAL_MS = 160 // amo allows 7 requests/s per integration; stay under it
 
 const pool = createPool(process.env.DATABASE_URL)
+initTenantConfig(pool)
 
 async function loadAmoConfig() {
   const { rows } = await pool.query('SELECT data FROM tenant_integrations WHERE id = $1', [tenantId])
@@ -44,22 +44,8 @@ async function loadAmoConfig() {
   }
 }
 
-async function firestore() {
-  const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-  if (!key) return null
-  const { initializeApp, getApps, cert } = await import('firebase-admin/app')
-  const { getFirestore } = await import('firebase-admin/firestore')
-  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(key)) })
-  return getFirestore()
-}
-
 async function refresh(cfg) {
   if (!cfg.refreshToken || !cfg.clientId || !cfg.clientSecret) return false
-  const fs = await firestore()
-  if (!fs) {
-    throw new Error('amo access token expired. Set FIREBASE_SERVICE_ACCOUNT_KEY so the refreshed tokens can be '
-      + 'saved to Firestore as well, or pass a fresh token in AMO_ACCESS_TOKEN.')
-  }
   const res = await fetch(`https://${cfg.subdomain}.amocrm.ru/oauth2/access_token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -72,17 +58,11 @@ async function refresh(cfg) {
   const t = await res.json()
   cfg.accessToken = t.access_token
   cfg.refreshToken = t.refresh_token
-  // amo just invalidated the old refresh token: store the new pair in both
-  // places so neither the live integration nor this server loses access.
-  await fs.collection('tenantIntegrations').doc(tenantId).set({
-    amocrm: { accessToken: t.access_token, refreshToken: t.refresh_token, tokenRefreshedAt: new Date().toISOString() },
-  }, { merge: true })
-  await pool.query(
-    `UPDATE tenant_integrations SET data = jsonb_set(jsonb_set(data, '{amocrm,accessToken}', to_jsonb($2::text)),
-       '{amocrm,refreshToken}', to_jsonb($3::text)) WHERE id = $1 AND data ? 'amocrm'`,
-    [tenantId, t.access_token, t.refresh_token]
-  )
-  console.log('amo token refreshed (saved to Firestore and Postgres)')
+  // amo just invalidated the old refresh token: store the new pair where the app reads it
+  await saveTenantIntegration(tenantId, 'amocrm', {
+    accessToken: t.access_token, refreshToken: t.refresh_token, tokenRefreshedAt: new Date().toISOString(),
+  })
+  console.log('amo token refreshed (saved to tenant_integrations)')
   return true
 }
 

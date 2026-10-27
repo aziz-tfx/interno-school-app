@@ -6,6 +6,7 @@
 //                               logic lives in ../_lib/aiAgent.js)
 
 import { handleAmoAgent } from '../_lib/aiAgent.js'
+import { getTenantId, loadTenantIntegration } from '../_lib/tenantConfig.js'
 
 // Simple in-memory rate limiter (resets on cold start)
 const rateLimits = {}
@@ -35,7 +36,10 @@ export default async function handler(req, res) {
   if (req.query?.action === 'amo-agent') return handleAmoAgent(req, res)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const apiKey = process.env.GOOGLE_AI_KEY
+  // The school's key from «Интеграции → ИИ-помощник LMS»; env only for the original school
+  const tenantId = getTenantId(req) || 'default'
+  const apiKey = (await loadTenantIntegration(tenantId, 'lmsAi')).googleKey
+    || (tenantId === 'default' ? process.env.GOOGLE_AI_KEY : '')
   if (!apiKey) {
     return res.status(500).json({ ok: false, reply: 'AI-помощник временно недоступен. Обратитесь к администратору.' })
   }

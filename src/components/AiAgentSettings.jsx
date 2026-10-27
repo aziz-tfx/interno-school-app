@@ -3,6 +3,7 @@ import {
   Bot, Eye, EyeOff, Copy, CheckCircle, Send, RefreshCw,
   RotateCcw, ChevronDown, ChevronUp, Wrench, XCircle, Plus, BellRing,
 } from 'lucide-react'
+import { USE_SERVER, apiFetch } from '../backend/api'
 
 const MODEL_SUGGESTIONS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
 
@@ -56,7 +57,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
     setNotifyState('sending')
     try {
       await persist()
-      const res = await fetch('/api/ai/amo-agent?mode=setup', {
+      const res = await apiFetch('/api/ai/amo-agent?mode=setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenantId, action: 'test-notify' }),
@@ -74,7 +75,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
     setSetupError(null)
     try {
       await persist()
-      const res = await fetch('/api/ai/amo-agent?mode=setup', {
+      const res = await apiFetch('/api/ai/amo-agent?mode=setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenantId, action: 'create-contact-field' }),
@@ -106,7 +107,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
     setSending(true)
     try {
       await persist()
-      const res = await fetch('/api/ai/amo-agent?mode=test', {
+      const res = await apiFetch('/api/ai/amo-agent?mode=test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenantId, message, history, channel: testChannel }),
@@ -365,6 +366,9 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
                 <p className="text-xs text-slate-400">
                   До 3 напоминаний, только с 9:00 до 21:00. В Instagram — только в течение 24 ч после последнего сообщения клиента (правило Instagram), на комментарии напоминаний нет.
                 </p>
+                {USE_SERVER ? (
+                  <p className="text-xs text-slate-400">Сервер проверяет, кому пора напомнить, каждые 5 минут — внешний cron не нужен.</p>
+                ) : (
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Адрес для внешнего cron (необязательно)</label>
                   <div className="flex gap-2">
@@ -379,6 +383,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
                     Напоминания отправляются, когда в amoCRM приходят новые сообщения. Чтобы они уходили точно вовремя, добавьте этот адрес на cron-job.org с интервалом 15 минут.
                   </p>
                 </div>
+                )}
               </div>
             )}
           </div>

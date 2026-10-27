@@ -18,6 +18,8 @@ import { hashPassword, publicUser, tokenClaims } from '../auth.js'
 import { newDocId } from '../lib/ids.js'
 import { badRequest, notFound, HttpError } from '../lib/errors.js'
 import { createLead } from '../crm/service.js'
+import { callHandler } from '../vercel/_lib/call.js'
+import amoPushSale from '../vercel/amo/push-sale.js'
 
 const DEFAULT_TENANT = 'default'
 const COMPANY_WIDE_ROLES = ['accountant', 'financier', 'hr', 'smm']
@@ -262,6 +264,16 @@ export default async function publicRoutes(app, { pool, config }) {
     if (result.existing) {
       return reply.code(409).send({ existing: true, error: 'Этот номер уже зарегистрирован — войдите со своим логином и паролем' })
     }
+    // Sales still work in amoCRM: copy the lead there too, as the landing did
+    // before. In the background — the student shouldn't wait for amo.
+    callHandler(amoPushSale, {
+      tenantId,
+      body: {
+        clientName: name, phone, course: course.data.name || '', amount: 0, managerName: 'Landing (avto)',
+        comment: `🎯 Lid landingdan (bepul 1-modul) — kurs «${course.data.name || ''}». Manba: reklama → ochiq kurs sahifasi.`,
+      },
+    }).then(r => { if (r.status >= 300) req.log.warn({ amo: r.body }, 'landing lead not copied to amo') })
+      .catch(err => req.log.warn({ err }, 'landing lead not copied to amo'))
     return reply.code(201).send({ ...session(result.emp), credentials: { login, password: result.password } })
   })
 

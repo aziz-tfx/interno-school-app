@@ -69,3 +69,18 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
   }
   return data
 }
+
+/**
+ * fetch() for the endpoints that used to be Vercel functions (/api/amo/…,
+ * /api/onpbx/…, /api/telegram/notify, /api/ai/…, /api/pay/payme). In server
+ * mode they live on the INTERNO server and need the login token; the server
+ * takes the school from the token, not from the request. Returns the plain
+ * Response, like fetch().
+ */
+export function apiFetch(path, init = {}) {
+  if (!USE_SERVER) return fetch(path, init)
+  const headers = { ...(init.headers || {}) }
+  const token = getToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+  return fetch(API_URL + path, { ...init, headers })
+}
