@@ -16,7 +16,7 @@ import { getCollection, canRead, TABLE_TO_COLLECTION, isStudent } from './collec
 
 const TICKET_TTL_MS = 60_000
 const HEARTBEAT_MS = 25_000 // keep proxies from closing idle streams
-const CRM_TABLES = new Set(['crm_leads', 'crm_tasks', 'crm_activities', 'crm_stages'])
+const CRM_TABLES = new Set(['crm_leads', 'crm_tasks', 'crm_activities', 'crm_stages', 'crm_files'])
 
 export function createRealtime({ databaseUrl, log }) {
   const tickets = new Map()     // ticket → { user, expiresAt }

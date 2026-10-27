@@ -14,6 +14,8 @@ git log --oneline -1
 
 echo "▶ Сборка и перезапуск"
 cd server
+# files attached to CRM deals: the API container runs as uid 1000 (node)
+mkdir -p files && chown 1000:1000 files
 docker compose up -d --build
 docker image prune -f >/dev/null
 

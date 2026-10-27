@@ -61,6 +61,8 @@ services:
     volumes:
       # deploy/autodeploy.sh writes its result here; /api/health shows it
       - ./state:/app/state:ro
+      # files attached to CRM deals
+      - ./files:/app/files
     depends_on:
       db:
         condition: service_healthy

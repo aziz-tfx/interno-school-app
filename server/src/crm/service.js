@@ -62,6 +62,7 @@ export const mapLead = (r) => ({
   stageChangedAt: r.stage_changed_at, closedAt: r.closed_at, firstResponseAt: r.first_response_at,
   lastActivityAt: r.last_activity_at, createdBy: r.created_by, createdAt: r.created_at, updatedAt: r.updated_at,
   ...(r.contact_name !== undefined && { contact: { name: r.contact_name, phones: r.contact_phones } }),
+  ...(r.next_task_at !== undefined && { nextTaskAt: r.next_task_at }),
 })
 
 export const mapActivity = (r) => ({
@@ -263,6 +264,11 @@ export async function createLead(db, tenantId, input, authorId = null) {
   if (input.pipelineId && input.pipelineId !== stage.pipeline_id) throw badRequest('Этап из другой воронки')
 
   const title = input.title || input.contact?.name || 'Новая сделка'
+  const custom = { ...(input.custom || {}) }
+  if (input.fields) {
+    const values = Object.fromEntries(Object.entries(await cleanFieldValues(db, tenantId, 'lead', input.fields)).filter(([, v]) => v !== null))
+    custom.fields = { ...(custom.fields || {}), ...values }
+  }
   const { rows: [lead] } = await db.query(
     `INSERT INTO crm_leads (tenant_id, title, contact_id, pipeline_id, stage_id, responsible_id, source,
                             branch_id, course_id, amount, tags, custom, created_by, closed_at, amo_id,
@@ -272,7 +278,7 @@ export async function createLead(db, tenantId, input, authorId = null) {
      RETURNING *`,
     [tenantId, title, contactId, stage.pipeline_id, stage.id, input.responsibleId || null, input.source || null,
      input.branchId || null, input.courseId || null, Number(input.amount) || 0, input.tags || [],
-     input.custom || {}, authorId, stage.kind !== 'open', input.amoId || null, input.createdAt || null]
+     custom, authorId, stage.kind !== 'open', input.amoId || null, input.createdAt || null]
   )
   // The funnel report counts entries into stages from these rows.
   await addActivity(db, tenantId, {
@@ -283,6 +289,55 @@ export async function createLead(db, tenantId, input, authorId = null) {
     await addActivity(db, tenantId, { leadId: lead.id, contactId, type: 'note', authorId, body: input.note })
   }
   return lead
+}
+
+// ─── Custom fields ───────────────────────────────────────────────────────
+
+export const FIELD_TYPES = ['text', 'textarea', 'number', 'date', 'select', 'multiselect', 'checkbox', 'url']
+
+export const mapField = (r) => ({
+  id: r.id, entity: r.entity, key: r.key, label: r.label, type: r.type, options: r.options, sort: r.sort,
+})
+
+/**
+ * Validate values for the school's custom fields ({ key: value }) and coerce
+ * them to the field type. Empty values become null, which removes the value.
+ */
+export async function cleanFieldValues(db, tenantId, entity, values) {
+  if (!values || typeof values !== 'object' || Array.isArray(values)) throw badRequest('fields: ожидается объект')
+  const { rows } = await db.query('SELECT * FROM crm_fields WHERE tenant_id = $1 AND entity = $2', [tenantId, entity])
+  const defs = Object.fromEntries(rows.map(r => [r.key, r]))
+  const out = {}
+  for (const [key, raw] of Object.entries(values)) {
+    const def = defs[key]
+    if (!def) throw badRequest(`Поле «${key}» не найдено`)
+    const empty = raw === null || raw === undefined || raw === '' || (Array.isArray(raw) && !raw.length)
+    if (empty) { out[key] = null; continue }
+    let v
+    switch (def.type) {
+      case 'number':
+        v = Number(String(raw).replace(/\s/g, '').replace(',', '.'))
+        if (!Number.isFinite(v)) throw badRequest(`«${def.label}»: нужно число`)
+        break
+      case 'checkbox': v = raw === true || raw === 'true'; break
+      case 'date':
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) throw badRequest(`«${def.label}»: дата YYYY-MM-DD`)
+        v = String(raw)
+        break
+      case 'select':
+        v = String(raw)
+        if (def.options.length && !def.options.includes(v)) throw badRequest(`«${def.label}»: нет такого варианта`)
+        break
+      case 'multiselect':
+        v = (Array.isArray(raw) ? raw : [raw]).map(String)
+        if (def.options.length && v.some(x => !def.options.includes(x))) throw badRequest(`«${def.label}»: нет такого варианта`)
+        break
+      default:
+        v = String(raw).trim().slice(0, 5000)
+    }
+    out[key] = v
+  }
+  return out
 }
 
 const LEAD_FIELDS = {
@@ -301,9 +356,16 @@ export async function updateLead(db, tenantId, id, patch, authorId = null) {
   const sets = []
   const params = [id]
   for (const [key, col] of Object.entries(LEAD_FIELDS)) {
-    if (patch[key] === undefined) continue
+    if (patch[key] === undefined || (key === 'custom' && patch.fields !== undefined)) continue
     params.push(key === 'amount' ? Number(patch[key]) || 0 : patch[key])
     sets.push(`${col} = $${params.length}`)
+  }
+  // Custom field values merge into custom.fields; null removes a value.
+  if (patch.fields !== undefined) {
+    const values = await cleanFieldValues(db, tenantId, 'lead', patch.fields)
+    params.push(patch.custom !== undefined ? patch.custom : null, values)
+    const base = `coalesce($${params.length - 1}::jsonb, custom)`
+    sets.push(`custom = jsonb_set(${base}, '{fields}', jsonb_strip_nulls(coalesce(${base}->'fields', '{}'::jsonb) || $${params.length}::jsonb))`)
   }
 
   if (patch.stageId && patch.stageId !== lead.stage_id) {

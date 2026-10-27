@@ -42,6 +42,8 @@ export function loadConfig(env = process.env) {
     // blocking) at 14:00 Tashkent. Off until the switch from Firebase: while
     // the old Vercel cron still runs, both would message the same people.
     automations: env.AUTOMATIONS === 'on',
+    // Files attached to CRM deals (a Docker volume, see docker-compose.yml)
+    filesDir: env.FILES_DIR || '/app/files',
     // Written by deploy/autodeploy.sh (mounted read-only into the container)
     stateDir: env.STATE_DIR || '/app/state',
     // Login / password attempts per minute per IP (brute-force guard)

@@ -20,8 +20,7 @@ import {
   createContact, findContactByPhone, addActivity, createTask, updateTask,
 } from '../../crm/service.js'
 import { funnelReport } from '../../crm/analytics.js'
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+import { isUuid, DATE_RE, leadFilters, leadWhere, leadOrder } from '../../crm/leadQuery.js'
 
 // Body schemas: wrong types become a 400 with a message instead of a 500
 // from Postgres. Unknown keys are ignored by the service layer.
@@ -34,6 +33,7 @@ const LEAD_PROPS = {
   amount: { type: ['number', 'string'] },
   tags: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 50 },
   custom: { type: 'object' },
+  fields: { type: 'object' },
   lossReason: { type: ['string', 'null'], maxLength: 500 },
   note: { type: ['string', 'null'], maxLength: 5000 },
 }
@@ -67,31 +67,6 @@ const taskSchema = (required = []) => ({
     },
   },
 })
-const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v))
-
-/**
- * Lead filters shared by the board and the list. `l` = crm_leads,
- * `c` = crm_contacts (LEFT JOINed).
- */
-function leadFilters(q, params) {
-  const p = (v) => { params.push(v); return `$${params.length}` }
-  const where = []
-  if (q.responsibleId) where.push(`l.responsible_id = ${p(q.responsibleId)}`)
-  if (q.source) where.push(`l.source = ${p(q.source)}`)
-  if (q.tag) where.push(`l.tags @> ARRAY[${p(q.tag)}]`)
-  if (q.q) {
-    const text = String(q.q).trim()
-    const digits = text.replace(/\D/g, '')
-    if (digits.length >= 5) {
-      where.push(`EXISTS (SELECT 1 FROM unnest(c.phones) ph WHERE ph LIKE ${p(`%${digits}%`)})`)
-    } else {
-      const like = p(`%${text}%`)
-      where.push(`(l.title ILIKE ${like} OR c.name ILIKE ${like})`)
-    }
-  }
-  return where
-}
-
 export default async function crmRoutes(app, { pool }) {
   // Everyone in a sales-side role works in the CRM; teachers, accountants
   // and students don't see it.
@@ -207,22 +182,17 @@ export default async function crmRoutes(app, { pool }) {
   // ─── Leads ─────────────────────────────────────────────────────────────
 
   app.get('/api/crm/leads', crm, async (req) => {
-    const params = [T(req)]
-    const where = ['l.tenant_id = $1', 'l.deleted_at IS NULL', ...leadFilters(req.query, params)]
-    for (const [key, col] of [['pipelineId', 'pipeline_id'], ['stageId', 'stage_id'], ['contactId', 'contact_id']]) {
-      if (!req.query[key]) continue
-      if (!isUuid(req.query[key])) throw badRequest(`${key}: неверный id`)
-      params.push(req.query[key])
-      where.push(`l.${col} = $${params.length}`)
-    }
+    const params = []
+    const where = leadWhere(T(req), req.query, params)
     const limit = Math.min(Number(req.query.limit) || 50, 500)
     const offset = Math.max(Number(req.query.offset) || 0, 0)
     const { rows } = await pool.query(`
-      SELECT l.*, c.name AS contact_name, c.phones AS contact_phones, count(*) OVER () AS total
+      SELECT l.*, c.name AS contact_name, c.phones AS contact_phones, count(*) OVER () AS total,
+             (SELECT min(t.due_at) FROM crm_tasks t WHERE t.lead_id = l.id AND t.done_at IS NULL) AS next_task_at
         FROM crm_leads l LEFT JOIN crm_contacts c ON c.id = l.contact_id
-       WHERE ${where.join(' AND ')}
-       ORDER BY l.updated_at DESC LIMIT ${limit} OFFSET ${offset}`, params)
-    return { total: rows[0]?.total || 0, items: rows.map(mapLead) }
+       WHERE ${where}
+       ORDER BY ${leadOrder(req.query)} LIMIT ${limit} OFFSET ${offset}`, params)
+    return { total: Number(rows[0]?.total || 0), items: rows.map(mapLead) }
   })
 
   app.get('/api/crm/leads/:id', crm, async (req) => {
