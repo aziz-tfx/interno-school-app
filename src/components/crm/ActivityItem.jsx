@@ -1,10 +1,11 @@
 // One line of a CRM timeline (deal card, contact card): note, call,
 // message, stage move, finished task, sale or system event.
 
+import { useState } from 'react'
 import {
-  PhoneIncoming, PhoneOutgoing, MessageCircle, StickyNote, ArrowRight, CheckSquare, DollarSign, Info,
+  PhoneIncoming, PhoneOutgoing, MessageCircle, StickyNote, ArrowRight, CheckSquare, DollarSign, Info, Play, Loader,
 } from 'lucide-react'
-import { formatDateTime } from '../../backend/crm'
+import { crm, formatDateTime } from '../../backend/crm'
 
 export default function ActivityItem({ a, allStages, people, showLead = false, onOpenLead }) {
   const author = people[a.authorId]?.name
@@ -39,9 +40,7 @@ export default function ActivityItem({ a, allStages, people, showLead = false, o
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}><Icon size={15} /></div>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{text}</p>
-        {a.type === 'call' && a.meta?.link && (
-          <audio controls preload="none" src={a.meta.link} className="mt-1 h-8 w-full max-w-xs" />
-        )}
+        {a.type === 'call' && (a.meta?.link || a.meta?.uuid) && a.meta?.answered !== false && <CallRecord id={a.id} />}
         <p className="text-[11px] text-slate-400 mt-0.5">
           {formatDateTime(a.createdAt)}{author ? ` · ${author}` : ''}
           {showLead && a.leadTitle && (
@@ -50,5 +49,22 @@ export default function ActivityItem({ a, allStages, people, showLead = false, o
         </p>
       </div>
     </div>
+  )
+}
+
+// The recording is asked from OnlinePBX only when someone wants to listen.
+function CallRecord({ id }) {
+  const [state, setState] = useState(null) // null | 'loading' | { url } | { error }
+  if (state?.url) return <audio controls autoPlay src={state.url} className="mt-1 h-8 w-full max-w-xs" />
+  if (state?.error) return <p className="text-[11px] text-slate-400 mt-1">{state.error}</p>
+  return (
+    <button disabled={state === 'loading'}
+      onClick={async () => {
+        setState('loading')
+        try { setState(await crm.callRecord(id)) } catch (err) { setState({ error: err.message }) }
+      }}
+      className="mt-1 text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 disabled:opacity-50">
+      {state === 'loading' ? <Loader size={12} className="animate-spin" /> : <Play size={12} />} Запись
+    </button>
   )
 }

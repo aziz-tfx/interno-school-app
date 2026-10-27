@@ -7,7 +7,7 @@
 
 import { resolveOnpbx } from '../_lib/tenantConfig.js'
 
-const API_BASE = 'https://api.onlinepbx.ru'
+export const API_BASE = 'https://api.onlinepbx.ru'
 const TIMEOUT_MS = 20000
 const WEEK_SEC = 7 * 24 * 3600
 
@@ -26,7 +26,7 @@ function toForm(obj) {
   return form.toString()
 }
 
-async function postForm(url, headers, body) {
+export async function postForm(url, headers, body) {
   const res = await withTimeout(
     fetch(url, {
       method: 'POST',
@@ -57,7 +57,7 @@ async function postForm(url, headers, body) {
 }
 
 // Шаг 1: получить key_id + key по api_key
-async function authenticate(domain, apiKey) {
+export async function authenticate(domain, apiKey) {
   const url = `${API_BASE}/${domain}/auth.json`
   const resp = await postForm(url, {}, { auth_key: apiKey })
   const data = resp?.data
@@ -67,7 +67,21 @@ async function authenticate(domain, apiKey) {
   return { keyId: data.key_id, key: data.key }
 }
 
-function classifyCall(call) {
+/** Raw call history between two unix timestamps (chunked by week, the API's limit). */
+export async function fetchHistory(domain, apiKey, fromTs, toTs) {
+  const { keyId, key } = await authenticate(domain, apiKey)
+  const headers = { 'x-pbx-authentication': `${keyId}:${key}` }
+  const calls = []
+  for (let start = fromTs; start < toTs; start += WEEK_SEC) {
+    const resp = await postForm(`${API_BASE}/${domain}/mongo_history/search.json`, headers, {
+      start_stamp_from: start, start_stamp_to: Math.min(start + WEEK_SEC - 1, toTs),
+    })
+    if (Array.isArray(resp?.data)) calls.push(...resp.data)
+  }
+  return { calls, headers }
+}
+
+export function classifyCall(call) {
   // OnlinePBX mongo_history формат:
   //   accountcode: 'inbound' | 'outbound' | 'local' | 'missed' (missed хранится как inbound с duration=0)
   //   duration: длительность звонка

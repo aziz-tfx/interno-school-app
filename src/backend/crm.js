@@ -66,6 +66,9 @@ export const crm = {
   },
   downloadFile: (file) => download(`/api/crm/files/${file.id}`, file.name),
   deleteFile: (id) => api(`/api/crm/files/${id}`, { method: 'DELETE' }),
+
+  callRecord: (activityId) => api(`/api/crm/activities/${activityId}/record`),
+  syncCalls: () => api('/api/crm/calls/sync', { method: 'POST' }),
 }
 
 /** Fetch with the login token and hand the result to the browser as a file. */
