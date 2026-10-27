@@ -1,35 +1,23 @@
 // Kanban board of one pipeline: a column per stage, deals as cards. Cards
 // are dragged between columns on desktop; on phones the stage is changed
-// from the deal card. Updates from other managers arrive live.
+// from the deal card. Updates from other managers arrive live. Filters are
+// set above the board (CrmFilters), shared with the list view.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Filter, Loader, Clock, AlertCircle } from 'lucide-react'
-import { crm, watchCrm, sourceMeta, formatPhone, formatSum, ago, SOURCES } from '../../backend/crm'
+import { Loader, Clock, AlertCircle } from 'lucide-react'
+import { crm, watchCrm, sourceMeta, formatPhone, formatSum, ago } from '../../backend/crm'
 import { toast } from '../Toaster'
 
 const PAGE = 50
 const NO_RESPONSE_ALERT_MIN = 15 // a new lead nobody answered for this long gets a red mark
 
-export default function CrmBoard({ pipeline, me, staff, people, refreshKey, onOpenLead, onMove }) {
-  const [q, setQ] = useState('')
-  const [search, setSearch] = useState('') // debounced q
-  const [responsible, setResponsible] = useState('')
-  const [source, setSource] = useState('')
+export default function CrmBoard({ pipeline, query, people, refreshKey, onOpenLead, onMove }) {
   const [columns, setColumns] = useState(null)
   const [dragOver, setDragOver] = useState(null)
   const [loadingMore, setLoadingMore] = useState(null)
 
-  useEffect(() => {
-    const t = setTimeout(() => setSearch(q.trim()), 300)
-    return () => clearTimeout(t)
-  }, [q])
-
-  const filters = {
-    pipelineId: pipeline.id,
-    q: search,
-    responsibleId: responsible === 'me' ? me : responsible,
-    source,
-  }
+  // filters come from the page (shared with the list view, see CrmFilters)
+  const filters = { pipelineId: pipeline.id, ...query }
   const filtersKey = JSON.stringify(filters)
 
   const load = useCallback(async () => {
@@ -82,28 +70,6 @@ export default function CrmBoard({ pipeline, me, staff, people, refreshKey, onOp
 
   return (
     <div className="space-y-4">
-      <div className="glass-card rounded-2xl p-3 md:p-4 flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Поиск по имени, названию или телефону"
-            className="w-full pl-10 pr-4 py-2 bg-white/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Filter size={16} className="text-slate-400" />
-          <select value={responsible} onChange={e => setResponsible(e.target.value)}
-            className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">Все менеджеры</option>
-            <option value="me">Мои сделки</option>
-            {staff.map(e => <option key={e._docId} value={e._docId}>{e.name}</option>)}
-          </select>
-          <select value={source} onChange={e => setSource(e.target.value)}
-            className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="">Все источники</option>
-            {Object.entries(SOURCES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
-        </div>
-      </div>
-
       {columns === null ? (
         <div className="flex items-center justify-center py-20"><Loader size={24} className="animate-spin text-slate-400" /></div>
       ) : (
@@ -174,6 +140,12 @@ function LeadCard({ lead, stage, people, onOpen }) {
         <p className="text-xs text-slate-500 mt-0.5 truncate">{lead.contact.name}</p>
       )}
       {phone && <p className="text-xs text-slate-500 mt-0.5">{formatPhone(phone)}</p>}
+      {lead.tags?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {lead.tags.slice(0, 3).map(t => <span key={t} className="text-[10px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5">{t}</span>)}
+          {lead.tags.length > 3 && <span className="text-[10px] text-slate-400">+{lead.tags.length - 3}</span>}
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 mt-2">
         <span className={`text-[10px] font-medium rounded-full px-2 py-0.5 ${src.color}`}>{src.label}</span>
         {lead.amount > 0 && <span className="text-xs font-semibold text-slate-700">{formatSum(lead.amount)}</span>}

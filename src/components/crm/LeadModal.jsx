@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Phone, PhoneIncoming, PhoneOutgoing, MessageCircle, StickyNote, ArrowRight, CheckSquare, Square,
-  DollarSign, Info, Trash2, CreditCard, Loader, Plus, User, GraduationCap, Copy,
+  DollarSign, Info, Trash2, CreditCard, Loader, Plus, User, GraduationCap, Copy, X, Paperclip, Download, FileText,
 } from 'lucide-react'
 import Modal from '../Modal'
 import { toast } from '../Toaster'
@@ -21,9 +21,13 @@ function tomorrowAt10() {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
-export default function LeadModal({ leadId, me, isManager, pipelines, allStages, staff, people, courses, onClose, onMove, onSale, onChanged }) {
+export default function LeadModal({ leadId, me, isManager, pipelines, allStages, staff, people, courses, fields = [], tags = [], onClose, onMove, onSale, onChanged }) {
   const [lead, setLead] = useState(null)
   const [activities, setActivities] = useState([])
+  const [files, setFiles] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [tagInput, setTagInput] = useState('')
+  const fileInput = useRef(null)
   const [missing, setMissing] = useState(false)
   const [draft, setDraft] = useState({ title: '', amount: '' })
   const [note, setNote] = useState('')
@@ -32,9 +36,10 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
 
   const load = useCallback(async () => {
     try {
-      const [l, acts] = await Promise.all([crm.lead(leadId), crm.activities(leadId)])
+      const [l, acts, fls] = await Promise.all([crm.lead(leadId), crm.activities(leadId), crm.files(leadId)])
       setLead(l)
       setActivities(acts)
+      setFiles(fls)
       // A live reload must not overwrite the field being typed in
       const editing = document.activeElement?.dataset?.leadDraft
       setDraft(d => ({
@@ -51,7 +56,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
 
   // Other managers' notes, moves and tasks on this deal appear live
   const timer = useRef(null)
-  useEffect(() => watchCrm(['crm_leads', 'crm_activities', 'crm_tasks'], () => {
+  useEffect(() => watchCrm(['crm_leads', 'crm_activities', 'crm_tasks', 'crm_files'], () => {
     clearTimeout(timer.current)
     timer.current = setTimeout(load, 300)
   }), [load])
@@ -122,6 +127,35 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
     } catch (err) {
       toast(err.message, 'error')
     }
+  }
+
+  const addTag = (raw) => {
+    const t = raw.trim()
+    setTagInput('')
+    if (!t || lead.tags?.includes(t)) return
+    save({ tags: [...(lead.tags || []), t] })
+  }
+  const removeTag = (t) => save({ tags: (lead.tags || []).filter(x => x !== t) })
+
+  const saveField = (key, value) => {
+    const current = lead.custom?.fields?.[key] ?? null
+    if (JSON.stringify(current) === JSON.stringify(value === '' ? null : value)) return
+    save({ fields: { [key]: value === '' ? null : value } })
+  }
+
+  const upload = async (list) => {
+    setUploading(true)
+    for (const file of list) {
+      try { await crm.uploadFile(lead.id, file) } catch (err) { toast(`${file.name}: ${err.message}`, 'error') }
+    }
+    setUploading(false)
+    if (fileInput.current) fileInput.current.value = ''
+    load()
+  }
+
+  const removeFile = async (f) => {
+    if (!window.confirm(`Удалить файл «${f.name}»?`)) return
+    try { await crm.deleteFile(f.id); load() } catch (err) { toast(err.message, 'error') }
   }
 
   const copy = (text) => {
@@ -197,6 +231,27 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
               </select>
             </label>
           </div>
+
+          {/* Tags */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(lead.tags || []).map(t => (
+              <span key={t} className="flex items-center gap-1 text-xs bg-slate-100 text-slate-700 rounded-full pl-2.5 pr-1.5 py-1">
+                {t} <button onClick={() => removeTag(t)} className="text-slate-400 hover:text-slate-700"><X size={12} /></button>
+              </span>
+            ))}
+            <input value={tagInput} onChange={e => setTagInput(e.target.value)} list="crm-tag-suggestions"
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput) } }}
+              onBlur={() => tagInput.trim() && addTag(tagInput)}
+              placeholder="+ тег" className="text-xs bg-transparent border-b border-dashed border-slate-300 focus:border-blue-500 focus:outline-none py-1 w-24" />
+            <datalist id="crm-tag-suggestions">{tags.map(t => <option key={t.name} value={t.name} />)}</datalist>
+          </div>
+
+          {/* The school's own fields */}
+          {fields.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {fields.map(renderField)}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <span className={`font-medium rounded-full px-2 py-0.5 ${src.color}`}>{src.label}</span>
@@ -275,6 +330,31 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
             })}
           </div>
 
+          {/* Files */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-800">Файлы</p>
+              <button onClick={() => fileInput.current?.click()} disabled={uploading}
+                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 disabled:opacity-50">
+                {uploading ? <Loader size={14} className="animate-spin" /> : <Paperclip size={14} />} Прикрепить
+              </button>
+              <input ref={fileInput} type="file" multiple hidden onChange={e => upload([...e.target.files])} />
+            </div>
+            {files.length === 0 && <p className="text-xs text-slate-400">Файлов нет (до 25 МБ каждый)</p>}
+            {files.map(f => (
+              <div key={f.id} className="flex items-center gap-2 text-sm">
+                <FileText size={15} className="text-slate-400 flex-shrink-0" />
+                <button onClick={() => crm.downloadFile(f).catch(err => toast(err.message, 'error'))}
+                  className="flex-1 min-w-0 text-left truncate text-blue-600 hover:underline">{f.name}</button>
+                <span className="text-xs text-slate-400 flex-shrink-0">{f.size > 1048576 ? `${(f.size / 1048576).toFixed(1)} МБ` : `${Math.max(1, Math.round(f.size / 1024))} КБ`}</span>
+                <button onClick={() => crm.downloadFile(f).catch(err => toast(err.message, 'error'))} className="text-slate-400 hover:text-slate-700"><Download size={14} /></button>
+                {(isManager || f.uploadedBy === me) && (
+                  <button onClick={() => removeFile(f)} className="text-slate-400 hover:text-red-600"><Trash2 size={14} /></button>
+                )}
+              </div>
+            ))}
+          </div>
+
           <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
             <button onClick={() => onSale({ ...lead })}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700">
@@ -310,6 +390,55 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
           </div>
         </div>
       </div>
+    )
+  }
+
+  // One input per custom field; text-like ones save on blur. The key includes
+  // the saved value, so a change made by someone else re-renders the input.
+  function renderField(f) {
+    const value = lead.custom?.fields?.[f.key]
+    const k = `${f.key}:${JSON.stringify(value ?? null)}`
+    const wide = f.type === 'textarea' || f.type === 'multiselect'
+    let input
+    if (f.type === 'select') {
+      input = (
+        <select key={k} className={inputCls + ' mt-1'} defaultValue={value ?? ''} onChange={e => saveField(f.key, e.target.value)}>
+          <option value="">—</option>
+          {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      )
+    } else if (f.type === 'multiselect') {
+      const chosen = Array.isArray(value) ? value : []
+      input = (
+        <div className="flex flex-wrap gap-1.5 mt-1">
+          {f.options.map(o => {
+            const on = chosen.includes(o)
+            return (
+              <button key={o} onClick={() => saveField(f.key, on ? chosen.filter(x => x !== o) : [...chosen, o])}
+                className={`text-xs px-2.5 py-1 rounded-lg border ${on ? 'bg-blue-600 text-white border-transparent' : 'bg-white/60 border-slate-200 text-slate-600'}`}>{o}</button>
+            )
+          })}
+        </div>
+      )
+    } else if (f.type === 'checkbox') {
+      input = (
+        <input key={k} type="checkbox" className="mt-2 block" defaultChecked={!!value} onChange={e => saveField(f.key, e.target.checked || null)} />
+      )
+    } else if (f.type === 'textarea') {
+      input = <textarea key={k} rows={2} className={inputCls + ' mt-1'} defaultValue={value ?? ''} data-lead-draft={f.key} onBlur={e => saveField(f.key, e.target.value.trim())} />
+    } else {
+      const type = { number: 'text', date: 'date', url: 'url' }[f.type] || 'text'
+      input = (
+        <input key={k} type={type} inputMode={f.type === 'number' ? 'decimal' : undefined} className={inputCls + ' mt-1'}
+          defaultValue={value ?? ''} data-lead-draft={f.key} onBlur={e => saveField(f.key, e.target.value.trim())} />
+      )
+    }
+    return (
+      <label key={f.id} className={`text-xs text-slate-500 ${wide ? 'col-span-2' : ''}`}>
+        {f.label}
+        {f.type === 'url' && value && <a href={value} target="_blank" rel="noreferrer" className="ml-1 text-blue-600">открыть</a>}
+        {input}
+      </label>
     )
   }
 
