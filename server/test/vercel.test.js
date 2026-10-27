@@ -161,3 +161,12 @@ test('Payme: create → perform writes the payment, cancel rolls it back', async
   const statement = await rpc('GetStatement', { from: 0, to: Date.now() + 1000 })
   assert.deepEqual(statement.result.transactions.map(t => [t.id, t.state]), [['tx1', -2]])
 })
+
+test('LMS helper uses the school\'s Google AI key from the Integrations page', async () => {
+  const ask = () => ctx.as('student').post('/api/ai/chat', { message: 'Что такое композиция?' })
+  assert.equal((await ask()).statusCode, 500) // no key yet: the friendly "unavailable" reply
+  await ctx.pool.query(`UPDATE tenant_integrations SET data = data || '{"lmsAi": {"googleKey": "g-key-a"}}' WHERE id = 'school-a'`)
+  outbound.length = 0
+  await ask()
+  assert.match(outbound[0].url, /generativelanguage\.googleapis\.com.*key=g-key-a$/)
+})

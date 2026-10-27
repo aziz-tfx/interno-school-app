@@ -35,6 +35,10 @@ const EMPTY = {
     apiKey: '',
     enabled: false,
   },
+  // Google AI (Gemini) key of the LMS helper students chat with
+  lmsAi: {
+    googleKey: '',
+  },
   aiAgent: {
     openaiKey: '',
     model: 'gpt-4o-mini',

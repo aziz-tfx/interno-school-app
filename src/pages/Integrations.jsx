@@ -669,6 +669,30 @@ export default function Integrations() {
       </Link>
 
 
+      {/* ═══════ LMS helper (Google AI) ═══════ */}
+      <div className="glass rounded-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-indigo-500 to-violet-500 p-5 flex items-center gap-3">
+          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+            <Zap size={24} className="text-white" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-white">ИИ-помощник в LMS</h3>
+            <p className="text-white/80 text-sm">Отвечает ученикам на вопросы по урокам (Google AI)</p>
+          </div>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Ключ Google AI (Gemini)</label>
+            <input type="password" value={cfg.lmsAi?.googleKey || ''}
+              onChange={(e) => updateSection('lmsAi', { googleKey: e.target.value.trim() })}
+              placeholder="AIza…"
+              className="w-full md:w-2/3 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <p className="text-xs text-slate-400 mt-1">aistudio.google.com → Get API key (тот же, что GOOGLE_AI_KEY в Vercel)</p>
+          </div>
+          <div className="flex justify-end">{saveBtn('lmsAi', 'indigo')}</div>
+        </div>
+      </div>
+
       {/* ═══════ OnlinePBX ═══════ */}
       <div className="glass rounded-2xl overflow-hidden">
         <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-5 flex items-center justify-between">
