@@ -31,6 +31,7 @@ import telegramNotify from '../vercel/telegram/notify.js'
 import aiChat from '../vercel/ai/chat.js'
 import payme from '../vercel/pay/payme.js'
 import { handleAmoAgent } from '../vercel/_lib/aiAgent.js'
+import { agentTraffic } from '../vercel/_lib/runtime.js'
 import { loadTelegramConfig, webhookSecret } from '../telegram.js'
 
 /** Vercel-style (req, res) on top of a Fastify request/reply. */
@@ -120,7 +121,10 @@ export default async function vercelRoutes(app, { pool, config, telegram }) {
       // amo HTML-escapes saved URLs: "&mode=" may arrive as "amp;mode"
       const q = req.query || {}
       const mode = q.mode || q['amp;mode'] || req.body?.mode
-      if (mode === 'webhook' || mode === 'followups') return runVercel(handleAmoAgent, req, reply)
+      if (mode === 'webhook' || mode === 'followups') {
+        agentTraffic.seen = true
+        return runVercel(handleAmoAgent, req, reply)
+      }
       await app.authenticate(req, reply)
       if (reply.sent) return reply
       if (isStudent(req.user)) throw forbidden()

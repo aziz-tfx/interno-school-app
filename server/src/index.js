@@ -5,6 +5,7 @@ import { buildApp } from './app.js'
 import { startAutomationScheduler } from './automations.js'
 import { loadTelegramConfig, sendTelegram } from './telegram.js'
 import { runFollowUps } from './vercel/_lib/aiAgent.js'
+import { agentTraffic } from './vercel/_lib/runtime.js'
 import { resolvePayme } from './vercel/_lib/tenantConfig.js'
 
 const config = loadConfig()
@@ -26,7 +27,10 @@ if (config.automations) {
 
 // AI sales agent: nudge clients who went silent (on Vercel this needed an
 // external cron). Each due conversation is claimed, so overlaps are harmless.
+// Only once amo's webhooks arrive here — before that the agent still runs on
+// Vercel and these would duplicate its follow-ups.
 setInterval(() => {
+  if (!agentTraffic.seen) return
   runFollowUps().catch((err) => app.log.error({ err }, 'AI agent follow-ups failed'))
 }, 5 * 60_000).unref()
 
