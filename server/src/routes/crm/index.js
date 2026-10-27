@@ -6,22 +6,20 @@
 //   Leads       GET/POST /api/crm/leads, GET/PATCH/DELETE /api/crm/leads/:id
 //   Timeline    GET /api/crm/leads/:id/activities, POST /api/crm/leads/:id/notes,
 //               POST /api/crm/leads/:id/activities (calls / messages)
-//   Contacts    GET/POST /api/crm/contacts, GET/PATCH /api/crm/contacts/:id
+//   Contacts    see contacts.js
 //   Tasks       GET/POST /api/crm/tasks, PATCH /api/crm/tasks/:id
 //   Reports     GET /api/crm/analytics/funnel?pipelineId=&from=&to=
 //   Public      POST /api/public/leads?tenantId=   (landing form, no login)
 
 import { tx } from '../../db.js'
 import { forbidden, notFound, badRequest } from '../../lib/errors.js'
-import { normalizePhone } from '../../lib/phone.js'
 import {
-  CRM_ROLES, CRM_MANAGER_ROLES, assertRefs, listPipelines, createPipeline, addStage, mapStage,
+  CRM_ROLES, CRM_MANAGER_ROLES, listPipelines, createPipeline, addStage, mapStage,
   mapLead, mapContact, mapActivity, mapTask, getLeadRow, createLead, updateLead, softDeleteLead,
-  createContact, findContactByPhone, addActivity, createTask, updateTask,
+  addActivity, createTask, updateTask,
 } from '../../crm/service.js'
 import { funnelReport } from '../../crm/analytics.js'
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+import { isUuid, DATE_RE, leadFilters, leadWhere, leadOrder } from '../../crm/leadQuery.js'
 
 // Body schemas: wrong types become a 400 with a message instead of a 500
 // from Postgres. Unknown keys are ignored by the service layer.
@@ -34,6 +32,7 @@ const LEAD_PROPS = {
   amount: { type: ['number', 'string'] },
   tags: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 50 },
   custom: { type: 'object' },
+  fields: { type: 'object' },
   lossReason: { type: ['string', 'null'], maxLength: 500 },
   note: { type: ['string', 'null'], maxLength: 5000 },
 }
@@ -67,31 +66,6 @@ const taskSchema = (required = []) => ({
     },
   },
 })
-const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v))
-
-/**
- * Lead filters shared by the board and the list. `l` = crm_leads,
- * `c` = crm_contacts (LEFT JOINed).
- */
-function leadFilters(q, params) {
-  const p = (v) => { params.push(v); return `$${params.length}` }
-  const where = []
-  if (q.responsibleId) where.push(`l.responsible_id = ${p(q.responsibleId)}`)
-  if (q.source) where.push(`l.source = ${p(q.source)}`)
-  if (q.tag) where.push(`l.tags @> ARRAY[${p(q.tag)}]`)
-  if (q.q) {
-    const text = String(q.q).trim()
-    const digits = text.replace(/\D/g, '')
-    if (digits.length >= 5) {
-      where.push(`EXISTS (SELECT 1 FROM unnest(c.phones) ph WHERE ph LIKE ${p(`%${digits}%`)})`)
-    } else {
-      const like = p(`%${text}%`)
-      where.push(`(l.title ILIKE ${like} OR c.name ILIKE ${like})`)
-    }
-  }
-  return where
-}
-
 export default async function crmRoutes(app, { pool }) {
   // Everyone in a sales-side role works in the CRM; teachers, accountants
   // and students don't see it.
@@ -207,22 +181,17 @@ export default async function crmRoutes(app, { pool }) {
   // ─── Leads ─────────────────────────────────────────────────────────────
 
   app.get('/api/crm/leads', crm, async (req) => {
-    const params = [T(req)]
-    const where = ['l.tenant_id = $1', 'l.deleted_at IS NULL', ...leadFilters(req.query, params)]
-    for (const [key, col] of [['pipelineId', 'pipeline_id'], ['stageId', 'stage_id'], ['contactId', 'contact_id']]) {
-      if (!req.query[key]) continue
-      if (!isUuid(req.query[key])) throw badRequest(`${key}: неверный id`)
-      params.push(req.query[key])
-      where.push(`l.${col} = $${params.length}`)
-    }
+    const params = []
+    const where = leadWhere(T(req), req.query, params)
     const limit = Math.min(Number(req.query.limit) || 50, 500)
     const offset = Math.max(Number(req.query.offset) || 0, 0)
     const { rows } = await pool.query(`
-      SELECT l.*, c.name AS contact_name, c.phones AS contact_phones, count(*) OVER () AS total
+      SELECT l.*, c.name AS contact_name, c.phones AS contact_phones, count(*) OVER () AS total,
+             (SELECT min(t.due_at) FROM crm_tasks t WHERE t.lead_id = l.id AND t.done_at IS NULL) AS next_task_at
         FROM crm_leads l LEFT JOIN crm_contacts c ON c.id = l.contact_id
-       WHERE ${where.join(' AND ')}
-       ORDER BY l.updated_at DESC LIMIT ${limit} OFFSET ${offset}`, params)
-    return { total: rows[0]?.total || 0, items: rows.map(mapLead) }
+       WHERE ${where}
+       ORDER BY ${leadOrder(req.query)} LIMIT ${limit} OFFSET ${offset}`, params)
+    return { total: Number(rows[0]?.total || 0), items: rows.map(mapLead) }
   })
 
   app.get('/api/crm/leads/:id', crm, async (req) => {
@@ -290,72 +259,7 @@ export default async function crmRoutes(app, { pool }) {
     return reply.code(201).send(mapActivity(a))
   })
 
-  // ─── Contacts ──────────────────────────────────────────────────────────
-
-  app.get('/api/crm/contacts', crm, async (req) => {
-    const params = [T(req)]
-    const where = ['tenant_id = $1', 'deleted_at IS NULL']
-    const text = String(req.query.q || '').trim()
-    if (text) {
-      const digits = text.replace(/\D/g, '')
-      if (digits.length >= 5) {
-        params.push(`%${digits}%`)
-        where.push(`EXISTS (SELECT 1 FROM unnest(phones) ph WHERE ph LIKE $${params.length})`)
-      } else {
-        params.push(`%${text}%`)
-        where.push(`name ILIKE $${params.length}`)
-      }
-    }
-    const limit = Math.min(Number(req.query.limit) || 50, 500)
-    const offset = Math.max(Number(req.query.offset) || 0, 0)
-    const { rows } = await pool.query(
-      `SELECT *, count(*) OVER () AS total FROM crm_contacts WHERE ${where.join(' AND ')}
-        ORDER BY updated_at DESC LIMIT ${limit} OFFSET ${offset}`, params
-    )
-    return { total: rows[0]?.total || 0, items: rows.map(mapContact) }
-  })
-
-  app.get('/api/crm/contacts/:id', crm, async (req) => {
-    const { rows: [c] } = await pool.query(
-      'SELECT * FROM crm_contacts WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL', [uuidParam(req), T(req)]
-    )
-    if (!c) throw notFound('Контакт не найден')
-    const { rows: leads } = await pool.query(
-      'SELECT * FROM crm_leads WHERE contact_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC', [c.id]
-    )
-    return { ...mapContact(c), leads: leads.map(mapLead) }
-  })
-
-  // 409 + the existing contact when the phone is already in the base —
-  // the UI offers "open existing" instead of silently creating a duplicate.
-  app.post('/api/crm/contacts', crm, async (req, reply) => {
-    const input = req.body || {}
-    for (const phone of [input.phone, ...(input.phones || [])].filter(Boolean)) {
-      const dup = await findContactByPhone(pool, T(req), phone)
-      if (dup) return reply.code(409).send({ error: 'Контакт с таким телефоном уже есть', existing: mapContact(dup) })
-    }
-    const c = await createContact(pool, T(req), input, me(req))
-    return reply.code(201).send(mapContact(c))
-  })
-
-  app.patch('/api/crm/contacts/:id', crm, async (req) => {
-    const id = uuidParam(req)
-    const b = req.body || {}
-    await assertRefs(pool, T(req), { studentId: b.studentId, responsibleId: b.responsibleId })
-    const phones = b.phones ? [...new Set(b.phones.map(normalizePhone).filter(Boolean))] : null
-    const { rows: [c] } = await pool.query(
-      `UPDATE crm_contacts SET
-         name = coalesce($3, name), phones = coalesce($4, phones), email = coalesce($5, email),
-         instagram = coalesce($6, instagram), telegram_username = coalesce($7, telegram_username),
-         student_id = coalesce($8, student_id), responsible_id = coalesce($9, responsible_id),
-         custom = coalesce($10, custom)
-       WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL RETURNING *`,
-      [id, T(req), b.name ?? null, phones, b.email ?? null, b.instagram ?? null, b.telegramUsername ?? null,
-       b.studentId ?? null, b.responsibleId ?? null, b.custom ?? null]
-    )
-    if (!c) throw notFound('Контакт не найден')
-    return mapContact(c)
-  })
+  // Contacts: see contacts.js
 
   // ─── Tasks ─────────────────────────────────────────────────────────────
 

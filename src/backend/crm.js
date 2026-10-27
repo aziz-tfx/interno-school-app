@@ -1,6 +1,6 @@
 // CRM API client (server backend only — see server/src/routes/crm).
 
-import { api } from './api'
+import { api, apiFetch, ApiError } from './api'
 import { live } from './serverStore'
 
 const qs = (params) => {
@@ -30,13 +30,59 @@ export const crm = {
   addNote: (leadId, body) => api(`/api/crm/leads/${leadId}/notes`, json('POST', { body })),
   logActivity: (leadId, body) => api(`/api/crm/leads/${leadId}/activities`, json('POST', body)),
 
+  contacts: (params) => api(`/api/crm/contacts${qs(params)}`),
+  contact: (id) => api(`/api/crm/contacts/${id}`),
+  contactActivities: (id) => api(`/api/crm/contacts/${id}/activities`),
+  createContact: (body) => api('/api/crm/contacts', json('POST', body)),
   updateContact: (id, body) => api(`/api/crm/contacts/${id}`, json('PATCH', body)),
+  deleteContact: (id) => api(`/api/crm/contacts/${id}`, { method: 'DELETE' }),
+  duplicates: () => api('/api/crm/contacts/duplicates'),
+  mergeContacts: (id, ids) => api(`/api/crm/contacts/${id}/merge`, json('POST', { ids })),
 
   tasks: (params) => api(`/api/crm/tasks${qs(params)}`),
   createTask: (body) => api('/api/crm/tasks', json('POST', body)),
   updateTask: (id, body) => api(`/api/crm/tasks/${id}`, json('PATCH', body)),
 
   funnel: (params) => api(`/api/crm/analytics/funnel${qs(params)}`),
+
+  leadIds: (params) => api(`/api/crm/leads/ids${qs(params)}`),
+  bulk: (body) => api('/api/crm/leads/bulk', json('POST', body)),
+  exportLeads: (params) => download(`/api/crm/leads/export${qs(params)}`, `crm-${new Date().toISOString().slice(0, 10)}.csv`),
+  tags: () => api('/api/crm/tags'),
+
+  fields: () => api('/api/crm/fields'),
+  createField: (body) => api('/api/crm/fields', json('POST', body)),
+  updateField: (id, body) => api(`/api/crm/fields/${id}`, json('PATCH', body)),
+  deleteField: (id) => api(`/api/crm/fields/${id}`, { method: 'DELETE' }),
+
+  files: (leadId) => api(`/api/crm/leads/${leadId}/files`),
+  uploadFile: async (leadId, file) => {
+    const res = await apiFetch(`/api/crm/leads/${leadId}/files${qs({ name: file.name, type: file.type })}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file,
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) throw new ApiError(res.status, res.status === 413 ? 'Файл больше 25 МБ' : (data?.error || 'Не удалось загрузить файл'), data)
+    return data
+  },
+  downloadFile: (file) => download(`/api/crm/files/${file.id}`, file.name),
+  deleteFile: (id) => api(`/api/crm/files/${id}`, { method: 'DELETE' }),
+}
+
+/** Fetch with the login token and hand the result to the browser as a file. */
+async function download(path, filename) {
+  const res = await apiFetch(path)
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(res.status, data?.error || 'Не удалось скачать', data)
+  }
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 /** Live CRM changes: calls onChange(evt) for each event on the given tables. */

@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Settings2, SquareKanban, ListTodo, BarChart3, Loader } from 'lucide-react'
+import { Plus, Settings2, SquareKanban, ListTodo, BarChart3, Loader, Rows3, Columns3, SlidersHorizontal, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { crm, watchCrm, formatPhone } from '../backend/crm'
@@ -14,6 +14,11 @@ import { toast } from '../components/Toaster'
 import Modal from '../components/Modal'
 import PaymentForm from '../components/PaymentForm'
 import CrmBoard from '../components/crm/CrmBoard'
+import CrmList from '../components/crm/CrmList'
+import CrmFilters, { EMPTY_FILTERS, toQuery } from '../components/crm/CrmFilters'
+import FieldSettings from '../components/crm/FieldSettings'
+import CrmContacts from '../components/crm/CrmContacts'
+import ContactModal from '../components/crm/ContactModal'
 import LeadModal from '../components/crm/LeadModal'
 import NewLeadForm from '../components/crm/NewLeadForm'
 import CrmTasks from '../components/crm/CrmTasks'
@@ -25,9 +30,11 @@ import { LossReasonDialog, WonDialog } from '../components/crm/StageDialogs'
 export const CRM_ROLES = ['owner', 'admin', 'branch_director', 'branch_admin', 'rop', 'sales', 'smm']
 const MANAGER_ROLES = ['owner', 'admin', 'branch_director', 'rop']
 const PIPELINE_KEY = 'interno_crm_pipeline'
+const VIEW_KEY = 'interno_crm_view'
 
 const TABS = [
   { id: 'board', label: 'Сделки', icon: SquareKanban },
+  { id: 'contacts', label: 'Контакты', icon: Users },
   { id: 'tasks', label: 'Задачи', icon: ListTodo },
   { id: 'analytics', label: 'Аналитика', icon: BarChart3 },
 ]
@@ -38,6 +45,7 @@ export default function Crm() {
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') || 'board'
   const openLeadId = params.get('lead')
+  const openContactId = params.get('contact')
 
   const [pipelines, setPipelines] = useState(null)
   const [pipelineId, setPipelineId] = useState(() => {
@@ -45,6 +53,13 @@ export default function Crm() {
   })
   const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [fieldsOpen, setFieldsOpen] = useState(false)
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem(VIEW_KEY) || 'board' } catch { return 'board' }
+  })
+  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [fields, setFields] = useState([])
+  const [tags, setTags] = useState([])
   // Stage moves that need a question first (lost → reason, won → payment?)
   const [pendingMove, setPendingMove] = useState(null) // { lead, stage }
   const [saleFor, setSaleFor] = useState(null) // { lead, stage? }
@@ -72,6 +87,17 @@ export default function Crm() {
   }, [])
 
   useEffect(() => { loadPipelines() }, [loadPipelines])
+
+  const loadFields = useCallback(() => crm.fields().then(setFields).catch(() => {}), [])
+  useEffect(() => { loadFields() }, [loadFields])
+  // tag list for filters and suggestions; refreshed after changes made here
+  useEffect(() => { crm.tags().then(setTags).catch(() => {}) }, [refreshKey])
+
+  const switchView = (v) => {
+    setView(v)
+    try { localStorage.setItem(VIEW_KEY, v) } catch { /* not critical */ }
+  }
+  const query = useMemo(() => toQuery(filters, user?._docId), [filters, user?._docId])
 
   // Stage edits by another manager show up live
   const reloadTimer = useRef(null)
@@ -102,6 +128,7 @@ export default function Crm() {
     setParams(next, { replace: key === 'tab' })
   }
   const openLead = (id) => setParam('lead', id)
+  const openContact = (id) => setParam('contact', id)
 
   // ─── Stage moves (board drag & drop and the deal card share this) ─────
   const applyMove = async (lead, stage, extra = {}) => {
@@ -170,6 +197,12 @@ export default function Crm() {
             </select>
           )}
           {isManager && (
+            <button onClick={() => setFieldsOpen(true)} title="Поля карточки"
+              className="p-2.5 rounded-xl bg-white/70 border border-slate-200 text-slate-600 hover:bg-white transition-colors">
+              <SlidersHorizontal size={18} />
+            </button>
+          )}
+          {isManager && (
             <button onClick={() => setSettingsOpen(true)} title="Настроить воронку"
               className="p-2.5 rounded-xl bg-white/70 border border-slate-200 text-slate-600 hover:bg-white transition-colors">
               <Settings2 size={18} />
@@ -195,14 +228,48 @@ export default function Crm() {
 
       {!pipeline ? (
         <div className="glass-card rounded-2xl p-10 text-center text-slate-500">Воронок пока нет.</div>
+      ) : tab === 'contacts' ? (
+        <CrmContacts staff={staff} people={people} onOpenContact={openContact} />
       ) : tab === 'tasks' ? (
         <CrmTasks me={me} isManager={isManager} people={people} onOpenLead={openLead} />
       ) : tab === 'analytics' ? (
         <CrmAnalytics pipeline={pipeline} people={people} />
       ) : (
-        <CrmBoard
-          pipeline={pipeline} me={me} staff={staff} people={people}
-          refreshKey={refreshKey} onOpenLead={openLead} onMove={moveLead}
+        <div className="space-y-4">
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <CrmFilters value={filters} onChange={setFilters} staff={staff} tags={tags} />
+            </div>
+            <div className="flex flex-col gap-1 glass rounded-xl p-1">
+              <button onClick={() => switchView('board')} title="Канбан"
+                className={`p-2 rounded-lg ${view === 'board' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}><Columns3 size={18} /></button>
+              <button onClick={() => switchView('list')} title="Список"
+                className={`p-2 rounded-lg ${view === 'list' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}><Rows3 size={18} /></button>
+            </div>
+          </div>
+          {view === 'list' ? (
+            <CrmList
+              pipeline={pipeline} query={query} me={me} staff={staff} people={people} allStages={allStages}
+              isManager={isManager} refreshKey={refreshKey} onOpenLead={openLead}
+              onChanged={() => setRefreshKey(k => k + 1)}
+            />
+          ) : (
+            <CrmBoard
+              pipeline={pipeline} query={query} people={people}
+              refreshKey={refreshKey} onOpenLead={openLead} onMove={moveLead}
+            />
+          )}
+        </div>
+      )}
+
+      {openContactId && (
+        <ContactModal
+          contactId={openContactId} isManager={isManager}
+          pipelines={pipelines} allStages={allStages} staff={staff} people={people}
+          fields={fields.filter(f => f.entity === 'contact')}
+          onClose={() => setParam('contact', '')}
+          onOpenLead={openLead}
+          onOpenContact={openContact}
         />
       )}
 
@@ -210,7 +277,9 @@ export default function Crm() {
         <LeadModal
           leadId={openLeadId} me={me} isManager={isManager}
           pipelines={pipelines} allStages={allStages} staff={staff} people={people} courses={courses}
+          fields={fields.filter(f => f.entity === 'lead')} tags={tags}
           onClose={() => setParam('lead', '')}
+          onOpenContact={openContact}
           onMove={moveLead}
           onSale={(lead) => setSaleFor({ lead })}
           onChanged={() => setRefreshKey(k => k + 1)}
@@ -224,6 +293,10 @@ export default function Crm() {
           onCreated={(lead) => { setNewLeadOpen(false); setRefreshKey(k => k + 1); openLead(lead.id) }}
         />
       </Modal>
+
+      {fieldsOpen && (
+        <FieldSettings fields={fields} onClose={() => setFieldsOpen(false)} onChanged={loadFields} />
+      )}
 
       {settingsOpen && pipeline && (
         <PipelineSettings
