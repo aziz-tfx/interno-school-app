@@ -1,0 +1,176 @@
+// Import amoCRM data into the CRM tables.
+//
+//   npm run import:amo -- --tenant=default                  everything (hours on a big account)
+//   npm run import:amo -- --tenant=default --changed        only what changed since the last
+//                                                           successful run (minutes)
+//   npm run import:amo -- --tenant=default --since=2026-10-26
+//   [--events-since=2025-01-01]  full run without stage history before that date
+//
+// One import per school at a time: a second one exits (Postgres advisory lock).
+//
+// Credentials come from tenant_integrations.<tenant>.data.amocrm (imported
+// from Firestore by import:firestore — the same block the Vercel functions
+// use), or from AMO_SUBDOMAIN + AMO_ACCESS_TOKEN env vars.
+//
+// Expired token: amo invalidates the old refresh token on every refresh, so
+// refreshing here would silently break the live Vercel integration that
+// still reads Firestore. The new pair is therefore written to Firestore too
+// (needs FIREBASE_SERVICE_ACCOUNT_KEY); without it the import stops and asks
+// for a fresh access token instead.
+//
+// Run import:firestore FIRST: leads are linked to employees (amoUserId) and
+// students (by phone) that must already be in Postgres.
+
+import { createPool } from '../src/db.js'
+import { migrate } from '../src/migrate.js'
+import { importFromAmo } from '../src/crm/amoImport.js'
+
+const args = Object.fromEntries(process.argv.slice(2).map(a => a.replace(/^--/, '').split('=')))
+const tenantId = args.tenant || 'default'
+const MIN_INTERVAL_MS = 160 // amo allows 7 requests/s per integration; stay under it
+
+const pool = createPool(process.env.DATABASE_URL)
+
+async function loadAmoConfig() {
+  const { rows } = await pool.query('SELECT data FROM tenant_integrations WHERE id = $1', [tenantId])
+  const cfg = rows[0]?.data?.amocrm || {}
+  return {
+    subdomain: cfg.subdomain || process.env.AMO_SUBDOMAIN,
+    accessToken: cfg.accessToken || process.env.AMO_ACCESS_TOKEN,
+    refreshToken: cfg.refreshToken || process.env.AMO_REFRESH_TOKEN,
+    clientId: cfg.clientId || process.env.AMO_CLIENT_ID,
+    clientSecret: cfg.clientSecret || process.env.AMO_CLIENT_SECRET,
+    redirectUri: cfg.redirectUri || process.env.AMO_REDIRECT_URI,
+  }
+}
+
+async function firestore() {
+  const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+  if (!key) return null
+  const { initializeApp, getApps, cert } = await import('firebase-admin/app')
+  const { getFirestore } = await import('firebase-admin/firestore')
+  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(key)) })
+  return getFirestore()
+}
+
+async function refresh(cfg) {
+  if (!cfg.refreshToken || !cfg.clientId || !cfg.clientSecret) return false
+  const fs = await firestore()
+  if (!fs) {
+    throw new Error('amo access token expired. Set FIREBASE_SERVICE_ACCOUNT_KEY so the refreshed tokens can be '
+      + 'saved to Firestore as well, or pass a fresh token in AMO_ACCESS_TOKEN.')
+  }
+  const res = await fetch(`https://${cfg.subdomain}.amocrm.ru/oauth2/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: cfg.clientId, client_secret: cfg.clientSecret, grant_type: 'refresh_token',
+      refresh_token: cfg.refreshToken, redirect_uri: cfg.redirectUri || `https://${cfg.subdomain}.amocrm.ru`,
+    }),
+  })
+  if (!res.ok) return false
+  const t = await res.json()
+  cfg.accessToken = t.access_token
+  cfg.refreshToken = t.refresh_token
+  // amo just invalidated the old refresh token: store the new pair in both
+  // places so neither the live integration nor this server loses access.
+  await fs.collection('tenantIntegrations').doc(tenantId).set({
+    amocrm: { accessToken: t.access_token, refreshToken: t.refresh_token, tokenRefreshedAt: new Date().toISOString() },
+  }, { merge: true })
+  await pool.query(
+    `UPDATE tenant_integrations SET data = jsonb_set(jsonb_set(data, '{amocrm,accessToken}', to_jsonb($2::text)),
+       '{amocrm,refreshToken}', to_jsonb($3::text)) WHERE id = $1 AND data ? 'amocrm'`,
+    [tenantId, t.access_token, t.refresh_token]
+  )
+  console.log('amo token refreshed (saved to Firestore and Postgres)')
+  return true
+}
+
+// A full import is thousands of requests over a long-distance link: a
+// dropped connection, a timeout or a 5xx mustn't end it — wait and retry.
+const RETRY_DELAYS_MS = [2000, 5000, 15000, 30000, 60000]
+
+function createClient(cfg) {
+  let last = 0
+  async function get(path) {
+    let refreshed = false
+    for (let attempt = 0; ; attempt++) {
+      const wait = last + MIN_INTERVAL_MS - Date.now()
+      if (wait > 0) await new Promise(r => setTimeout(r, wait))
+      last = Date.now()
+      let res
+      let problem
+      try {
+        res = await fetch(`https://${cfg.subdomain}.amocrm.ru${path}`, {
+          headers: { Authorization: `Bearer ${cfg.accessToken}` },
+          signal: AbortSignal.timeout(60_000),
+        })
+      } catch (err) {
+        problem = err.cause?.code || (err.name === 'TimeoutError' ? 'нет ответа 60 с' : err.message) // network error or timeout
+      }
+      if (res?.status === 401 && !refreshed) {
+        refreshed = true
+        if (await refresh(cfg)) continue
+      }
+      if (res && (res.status === 429 || res.status >= 500)) problem = `HTTP ${res.status}`
+      if (problem) {
+        if (attempt >= RETRY_DELAYS_MS.length) throw new Error(`amoCRM GET ${path}: ${problem} (после ${attempt + 1} попыток)`)
+        console.log(`  amoCRM: ${problem}, повтор через ${RETRY_DELAYS_MS[attempt] / 1000} с…`)
+        await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]))
+        continue
+      }
+      if (res.status === 204) return null
+      if (!res.ok) throw new Error(`amoCRM GET ${path} → ${res.status}: ${(await res.text()).slice(0, 300)}`)
+      return res.json()
+    }
+  }
+  return { get }
+}
+
+const RUN_KEY = `amo-import:${tenantId}`
+
+/** Where a --changed run starts: the last successful run, or (runs from before
+ *  this was recorded) a day before the newest imported change. */
+async function lastImportTime() {
+  const { rows: [run] } = await pool.query('SELECT last_date FROM scheduled_runs WHERE name = $1', [RUN_KEY])
+  if (run) return new Date(run.last_date)
+  const { rows: [r] } = await pool.query(
+    'SELECT max(stage_changed_at) AS at FROM crm_leads WHERE tenant_id = $1 AND amo_id IS NOT NULL', [tenantId])
+  return r?.at ? new Date(r.at.getTime() - 86_400_000) : null
+}
+
+const lock = await pool.connect()
+try {
+  await migrate(pool, () => {})
+  const { rows: [{ ok }] } = await lock.query('SELECT pg_try_advisory_lock(hashtext($1)) AS ok', [RUN_KEY])
+  if (!ok) throw new Error('Импорт amoCRM для этой школы уже идёт — дождитесь его окончания (docker ps | grep api-run).')
+
+  const cfg = await loadAmoConfig()
+  if (!cfg.subdomain || !cfg.accessToken) {
+    throw new Error(`No amoCRM credentials for tenant "${tenantId}" (tenant_integrations or AMO_* env vars)`)
+  }
+  let since = args.since ? new Date(args.since) : null
+  if (since && Number.isNaN(since.getTime())) throw new Error(`--since: не дата: ${args.since}`)
+  if ('changed' in args) {
+    since = await lastImportTime()
+    if (!since) console.log('no earlier import found — importing everything')
+  }
+  const startedAt = new Date()
+  console.log(`importing ${cfg.subdomain}.amocrm.ru → tenant ${tenantId}${since ? ` (changes since ${since.toISOString()})` : ''}`)
+  const stats = await importFromAmo({
+    pool, tenantId, amo: createClient(cfg), since, eventsSince: args['events-since'], log: (m) => console.log(m),
+  })
+  // remembered for the next --changed run; overlapping with this run is harmless (upserts)
+  await pool.query(
+    `INSERT INTO scheduled_runs (name, last_date) VALUES ($1, $2)
+     ON CONFLICT (name) DO UPDATE SET last_date = EXCLUDED.last_date, ran_at = now()`,
+    [RUN_KEY, startedAt.toISOString()]
+  )
+  console.log('done', stats)
+} catch (err) {
+  console.error(err.message)
+  process.exitCode = 1
+} finally {
+  lock.release()
+  await pool.end()
+}

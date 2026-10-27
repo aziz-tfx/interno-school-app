@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { db } from '../firebase'
-import { collection, doc, onSnapshot } from 'firebase/firestore'
+import { collection, doc, onSnapshot } from '../backend/firestore'
+import { USE_SERVER, api, getToken, setToken } from '../backend/api'
+import { live } from '../backend/serverStore'
 import {
   BookOpen, Play, CheckCircle2, Lock, Clock, ChevronRight,
   ArrowLeft, FileText, Link2, Download, AlertCircle, Shield,
@@ -62,7 +64,11 @@ export default function TelegramApp() {
   const [selectedLesson, setSelectedLesson] = useState(null)
   const [tgUser, setTgUser] = useState(null)
   const [phoneInput, setPhoneInput] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
   const [authError, setAuthError] = useState('')
+  // Server backend: the student's id once the session is confirmed. Data
+  // subscriptions start only then — the API serves nothing anonymously.
+  const [sessionStudentId, setSessionStudentId] = useState(null)
 
   // ─── Telegram WebApp SDK ───────────────────────────────────────
   useEffect(() => {
@@ -79,8 +85,60 @@ export default function TelegramApp() {
     }
   }, [])
 
+  // ─── Server backend: who is this? ─────────────────────────────
+  // 1) an existing student session, 2) Telegram's signed initData for a
+  // student who linked this Telegram via the bot, 3) otherwise the login
+  // form (LMS login + password). Phone number alone is no longer enough.
+  useEffect(() => {
+    if (!USE_SERVER) return
+    let cancelled = false
+    ;(async () => {
+      if (getToken()) {
+        try {
+          const { user } = await api('/api/auth/me')
+          if (user.role === 'student' && user.studentId) {
+            if (!cancelled) setSessionStudentId(user.studentId)
+            return
+          }
+        } catch { /* expired — fall through */ }
+      }
+      const initData = window.Telegram?.WebApp?.initData
+      if (initData) {
+        try {
+          const tenantId = new URLSearchParams(window.location.search).get('tenantId') || 'default'
+          const { token, user } = await api('/api/public/telegram-login', { method: 'POST', auth: false, body: { initData, tenantId } })
+          setToken(token)
+          live.reset()
+          if (!cancelled) setSessionStudentId(user.studentId)
+          return
+        } catch { /* not linked — show the form */ }
+      }
+      if (!cancelled) setScreen('auth')
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const handleServerLogin = async () => {
+    setAuthError('')
+    try {
+      const { token, user } = await api('/api/auth/login', {
+        method: 'POST', auth: false, body: { login: phoneInput.trim(), password: passwordInput.trim() },
+      })
+      if (user.role !== 'student' || !user.studentId) {
+        setAuthError('Это вход для учеников. Используйте логин из личного кабинета ученика.')
+        return
+      }
+      setToken(token)
+      live.reset()
+      setSessionStudentId(user.studentId)
+    } catch (err) {
+      setAuthError(err.status === 0 ? 'Нет связи с сервером' : err.message)
+    }
+  }
+
   // ─── Firestore subscriptions ───────────────────────────────────
   useEffect(() => {
+    if (USE_SERVER && !sessionStudentId) return
     const unsubs = []
     unsubs.push(onSnapshot(collection(db, 'students'), snap => {
       setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
@@ -113,10 +171,21 @@ export default function TelegramApp() {
       if (snap.exists()) setAttendance(snap.data().data || [])
     }))
     return () => unsubs.forEach(u => u())
-  }, [])
+  }, [sessionStudentId])
 
   // ─── Auto-auth by Telegram phone ──────────────────────────────
   useEffect(() => {
+    if (USE_SERVER) {
+      // The API returns only this student's own record.
+      if (!sessionStudentId) return
+      const found = students.find(s => String(s.id) === String(sessionStudentId))
+      if (!found) return
+      if (found.lmsAccess !== true) { setAuthError('Доступ к LMS не активирован. Обратитесь к администратору.'); setScreen('auth'); return }
+      if (found.lmsExpiresAt && new Date(found.lmsExpiresAt) < new Date()) { setAuthError('Срок доступа истёк. Обратитесь к администратору для продления.'); setScreen('auth'); return }
+      setStudent(found)
+      setScreen(prev => (prev === 'loading' || prev === 'auth' ? 'home' : prev))
+      return
+    }
     if (students.length === 0) return
 
     // Try to find student by Telegram user phone
@@ -339,10 +408,34 @@ export default function TelegramApp() {
               <GraduationCap size={32} className="text-white" />
             </div>
             <h1 className="text-xl font-bold text-slate-900">INTERNO LMS</h1>
-            <p className="text-sm text-slate-500 mt-1">Введите номер телефона для входа</p>
+            <p className="text-sm text-slate-500 mt-1">{USE_SERVER ? 'Войдите с логином и паролем ученика' : 'Введите номер телефона для входа'}</p>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-sm">
+            {USE_SERVER ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Логин</label>
+                  <input
+                    value={phoneInput}
+                    onChange={e => { setPhoneInput(e.target.value); setAuthError('') }}
+                    placeholder="998901234567"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Пароль</label>
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={e => { setPasswordInput(e.target.value); setAuthError('') }}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <p className="text-xs text-slate-500">Чтобы входить без пароля, подключите Telegram в личном кабинете ученика.</p>
+              </>
+            ) : (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Номер телефона</label>
               <div className="flex gap-2">
@@ -357,6 +450,7 @@ export default function TelegramApp() {
                 />
               </div>
             </div>
+            )}
 
             {authError && (
               <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
@@ -365,7 +459,7 @@ export default function TelegramApp() {
               </div>
             )}
 
-            <button onClick={handlePhoneAuth}
+            <button onClick={USE_SERVER ? handleServerLogin : handlePhoneAuth}
               className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 active:scale-[0.98] transition-all shadow-lg shadow-blue-500/25">
               Войти
             </button>

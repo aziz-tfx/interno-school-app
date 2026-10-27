@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { fetchAmoPerformanceV2, fetchAmoResponseTimes, fetchOnpbxCalls } from '../utils/amocrm'
 import { db } from '../firebase'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc } from '../backend/firestore'
 import { useAuth } from '../contexts/AuthContext'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import AmoPlanEditor from '../components/AmoPlanEditor'

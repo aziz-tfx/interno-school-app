@@ -13,7 +13,7 @@ import { isMyStudent, studentIdsWithMyPayments } from '../utils/studentAccess'
 import { getPromoCourses } from '../utils/lessonAccess'
 import { crossesThreshold, computeCountedSaleIds } from '../utils/countedSales'
 import { db, storage } from '../firebase'
-import { doc, setDoc, getDoc, increment } from 'firebase/firestore'
+import { doc, setDoc, getDoc, increment } from '../backend/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Logo from './Logo'
 import Modal from './Modal'
@@ -58,7 +58,9 @@ const FORMAT_OPTIONS = [
   { value: 'Онлайн', tKey: 'paymentForm.format_online' },
 ]
 
-export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new' }) {
+// prefill: { clientName, phone, course } — e.g. from a CRM deal.
+// onSaved({ paymentId, studentId }) — called once the payment is stored.
+export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new', prefill, onSaved }) {
   const isDoplata = mode === 'doplata'
   const { branches, students, payments, addPayment, updatePayment, addStudent, updateStudent, groups, courses, getSalesPlan } = useData()
   const { user, hasPermission, employees } = useAuth()
@@ -84,10 +86,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const [form, setForm] = useState({
     type: 'income',
     studentId: preselectedStudentId ? String(preselectedStudentId) : '',
-    clientName: '',
-    phone: '',
+    clientName: prefill?.clientName || '',
+    phone: prefill?.phone || '',
     groupId: '',
-    course: '',
+    course: prefill?.course || '',
     paymentDate: new Date().toISOString().split('T')[0],
     courseStartDate: '',
     method: 'Наличные',
@@ -675,6 +677,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     // spinning through a multi-MB Storage upload read as "app hangs".
     setSavedPayment({ ...paymentData, id: saved.id, lmsCredentials, files: [] })
     setShowReceipt(true)
+    if (form.type === 'income') onSaved?.({ paymentId: saved.id, studentId: studentId ? String(studentId) : null })
 
     // Auto-update reports (background, best-effort)
     if (form.type === 'income') {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { collection, query, where, getDocs } from 'firebase/firestore'
+import { collection, query, where, getDocs } from '../backend/firestore'
 import {
   TrendingUp, Target, Receipt, Percent, AlertTriangle, Flame, Trophy,
   Filter, Moon, CreditCard, ArrowUpRight, ArrowDownRight, Building2,

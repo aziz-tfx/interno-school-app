@@ -11,10 +11,12 @@ import {
   query,
   where,
   getDoc,
-} from 'firebase/firestore'
+} from '../backend/firestore'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { setApiTenantId as setAmoTenantId } from '../utils/amocrm'
 import { setApiTenantId as setTgTenantId } from '../utils/telegram'
+import { USE_SERVER, api, getToken, setToken } from '../backend/api'
+import { live } from '../backend/serverStore'
 
 const AuthContext = createContext(null)
 
@@ -63,6 +65,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: true },
     audit:     true,
     settings: true,
+    crm: true,
   },
   admin: {
     dashboard: true, branches: true,
@@ -76,6 +79,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: true },
     audit:     true,
     settings: true,
+    crm: true,
   },
   branch_director: {
     dashboard: true, branches: true,
@@ -89,6 +93,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: true },
     audit:     false,
     settings: false,
+    crm: true,
   },
   branch_admin: {
     dashboard: true, branches: false,
@@ -102,6 +107,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: false },
     audit:     false,
     settings: false,
+    crm: true,
   },
   rop: {
     dashboard: true, branches: false,
@@ -115,6 +121,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: false },
     audit:     false,
     settings: false,
+    crm: true,
   },
   sales: {
     dashboard: true, branches: false,
@@ -128,6 +135,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: true,
   },
   accountant: {
     dashboard: true, branches: false,
@@ -141,6 +149,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: false,
   },
   financier: {
     dashboard: true, branches: false,
@@ -154,6 +163,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: false,
   },
   hr: {
     dashboard: true, branches: false,
@@ -167,6 +177,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: false,
   },
   smm: {
     dashboard: true, branches: false,
@@ -180,6 +191,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  false,
     audit:     false,
     settings: false,
+    crm: true,
   },
   teacher: {
     dashboard: false, branches: false,
@@ -193,6 +205,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: false },
     audit:     false,
     settings: false,
+    crm: false,
   },
   student: {
     dashboard: false, branches: false,
@@ -206,6 +219,7 @@ export const DEFAULT_PERMISSIONS = {
     schedule:  { view: true, edit: false },
     audit:     false,
     settings: false,
+    crm: false,
   },
 }
 
@@ -253,6 +267,8 @@ const permissionsDocRef = doc(db, 'settings', 'permissions')
 // ─── Provider ──────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
+    // Server backend: a saved user without its session token is not a session.
+    if (USE_SERVER && !getToken()) return null
     const saved = localStorage.getItem('interno_user')
     return saved ? JSON.parse(saved) : null
   })
@@ -271,9 +287,27 @@ export function AuthProvider({ children }) {
     setTgTenantId(tid)
   }, [user])
 
+  // ─── Server backend: session lifecycle ────────────────────────────────
+  // Re-validate the saved session on load (fired employee, changed
+  // password…) and drop it whenever the API answers 401.
+  useEffect(() => {
+    if (!USE_SERVER) return
+    const onUnauthorized = () => { live.reset(); setUser(null) }
+    window.addEventListener('interno:unauthorized', onUnauthorized)
+    if (getToken()) {
+      api('/api/auth/me')
+        .then(({ user: fresh }) => setUser(fresh))
+        .catch(() => { /* 401 is handled by the event; offline keeps the saved user */ })
+    }
+    return () => window.removeEventListener('interno:unauthorized', onUnauthorized)
+  }, [])
+
   // Real-time sync for permissions from Firestore (tenant-scoped)
   const userTenantId = user?.tenantId || DEFAULT_TENANT_ID
+  const signedIn = !!user
   useEffect(() => {
+    // Server backend: settings are readable only after login.
+    if (USE_SERVER && !signedIn) return
     const permDocRef = doc(db, 'settings', `permissions_${userTenantId}`)
     const unsubscribe = onSnapshot(permDocRef, (snapshot) => {
       if (snapshot.exists()) {
@@ -314,7 +348,7 @@ export function AuthProvider({ children }) {
       }
     })
     return () => unsubscribe()
-  }, [userTenantId])
+  }, [userTenantId, signedIn])
 
   // Real-time sync with Firestore + seed ONCE (guarded by bootstrap flag)
   // Loads ALL employees for login lookup, then filters by tenantId for the UI
@@ -324,6 +358,9 @@ export function AuthProvider({ children }) {
   // throttling, network blip) during page load left `employees` empty for
   // the whole session — login rejected every password until a full refresh.
   useEffect(() => {
+    // The server backend never hands out the employee list before login
+    // (it held everyone's passwords); see the effect below.
+    if (USE_SERVER) return
     const bootstrapRef = doc(db, 'settings', 'bootstrap')
     let cancelled = false
     let currentUnsub = null
@@ -400,6 +437,34 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true; currentUnsub?.() }
   }, [])
 
+  // Server backend: the school's employees, once logged in. Students don't
+  // get the list (the API refuses it).
+  const sessionKey = user ? `${user._docId}:${user.role}` : ''
+  useEffect(() => {
+    if (!USE_SERVER) return
+    if (!user || user.role === 'student') {
+      setEmployees([])
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    let unsub = null
+    const subscribe = (attempt = 0) => {
+      if (cancelled) return
+      unsub = onSnapshot(employeesRef, (snapshot) => {
+        attempt = 0
+        setEmployees(snapshot.docs.map(d => ({ ...d.data(), _docId: d.id })).filter(e => !e.deleted))
+        setLoading(false)
+      }, (err) => {
+        console.error('employees listener error:', err)
+        setLoading(false)
+        setTimeout(() => subscribe(attempt + 1), Math.min(15000, 1000 * 2 ** attempt))
+      })
+    }
+    subscribe()
+    return () => { cancelled = true; unsub?.() }
+  }, [sessionKey])
+
   // Employees filtered by current user's tenantId (for UI display)
   const tenantEmployees = user
     ? employees.filter(e => {
@@ -409,7 +474,35 @@ export function AuthProvider({ children }) {
       })
     : employees
 
+  // Server backend: credentials are checked by the API (bcrypt hashes) —
+  // nothing about other accounts ever reaches the browser. Returns a
+  // Promise<boolean>; callers `await login(...)` in both modes.
+  const loginViaServer = async (loginStr, password) => {
+    const savedSession = (() => { try { return JSON.parse(localStorage.getItem('interno_user')) } catch { return null } })()
+    try {
+      const { token, user: u } = await api('/api/auth/login', {
+        method: 'POST',
+        auth: false,
+        body: { login: String(loginStr ?? '').trim(), password: String(password ?? '').trim(), ...(savedSession?.tenantId && { tenantId: savedSession.tenantId }) },
+      })
+      adoptSession(token, u)
+      return true
+    } catch (err) {
+      setError(err.status === 0 ? 'Нет связи с сервером. Проверьте интернет.' : err.message)
+      return false
+    }
+  }
+
+  /** Start a session from a token the API issued (login, school or landing signup). */
+  const adoptSession = (token, u) => {
+    setToken(token)
+    live.reset()
+    setUser(u)
+    setError('')
+  }
+
   const login = (loginStr, password) => {
+    if (USE_SERVER) return loginViaServer(loginStr, password)
     const rawLogin = (loginStr ?? '').toString().trim()
     const rawPass = (password ?? '').toString().trim()
 
@@ -462,7 +555,13 @@ export function AuthProvider({ children }) {
     return false
   }
 
-  const logout = () => setUser(null)
+  const logout = () => {
+    if (USE_SERVER) {
+      setToken('')
+      live.reset()
+    }
+    setUser(null)
+  }
 
   const hasPermission = (section, action) => {
     if (!user) return false
@@ -553,6 +652,8 @@ export function AuthProvider({ children }) {
   }
 
   const resetEmployees = async () => {
+    // Would wipe real accounts and re-create demo logins with known passwords.
+    if (USE_SERVER) throw new Error('Сброс сотрудников недоступен на сервере')
     // Delete all existing employees
     const batch = writeBatch(db)
     employees.forEach((emp) => {
@@ -592,7 +693,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, login, logout, error, setError,
+      user, login, logout, error, setError, adoptSession,
       hasPermission, getRoleLabel,
       employees: tenantEmployees, addEmployee, updateEmployee, deleteEmployee, fireEmployee, restoreEmployee, resetEmployees,
       getSalesStaff, loading,

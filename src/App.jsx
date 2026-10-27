@@ -22,6 +22,7 @@ import Integrations from './pages/Integrations'
 import AiAgent from './pages/AiAgent'
 import ContractTemplates from './pages/ContractTemplates'
 import AmoPerformance from './pages/AmoPerformance'
+import Crm from './pages/Crm'
 import Schedule from './pages/Schedule'
 import AuditLog from './pages/AuditLog'
 import Automations from './pages/Automations'
@@ -32,6 +33,7 @@ import Register from './pages/Register'
 import RegisterSchool from './pages/RegisterSchool'
 import CourseLanding from './pages/CourseLanding'
 import TelegramApp from './pages/TelegramApp'
+import { USE_SERVER } from './backend/api'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -128,6 +130,11 @@ export default function App() {
         <Route path="contract-templates" element={
           <ProtectedRoute permission="settings"><ContractTemplates /></ProtectedRoute>
         } />
+        {USE_SERVER && (
+          <Route path="crm" element={
+            <ProtectedRoute permission="crm"><Crm /></ProtectedRoute>
+          } />
+        )}
         <Route path="amo" element={
           <ProtectedRoute permission="finance"><AmoPerformance /></ProtectedRoute>
         } />

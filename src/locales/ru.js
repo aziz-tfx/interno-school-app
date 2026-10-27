@@ -463,6 +463,7 @@ export default {
   "access.section_attendance": "Посещаемость",
   "access.section_lms": "LMS",
   "access.section_settings": "Настройки",
+  "access.section_crm": "CRM (сделки и задачи)",
   "access.action_view": "Просмотр",
   "access.action_add": "Добавление",
   "access.action_edit": "Редактирование",

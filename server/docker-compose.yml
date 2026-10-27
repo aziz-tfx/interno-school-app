@@ -1,0 +1,102 @@
+# Production stack for the Eskiz VPS:  docker compose up -d --build
+#
+#   caddy   — HTTPS (Let's Encrypt, automatic) → api
+#   api     — Node.js backend (runs DB migrations on start)
+#   db      — PostgreSQL 16, reachable only inside this network
+#   backup  — nightly pg_dump into ./backups, keeps 14 days
+#
+# Secrets live in .env next to this file (see .env.example).
+#
+# Sized for Eskiz VPS 3 (2 cores, 4 GB RAM, 80 GB NVMe). On a bigger server
+# raise shared_buffers / effective_cache_size (≈25% / 50% of RAM).
+
+# Docker keeps container logs forever by default — on an 80 GB disk that
+# eventually fills it. Cap every service at 3 × 10 MB.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *logging
+    # ~1 GB of the 4 GB goes to Postgres; the rest stays for the API, the OS
+    # page cache and the imports. random_page_cost 1.1: NVMe, not spinning disk.
+    command: >
+      postgres
+      -c shared_buffers=768MB
+      -c effective_cache_size=2GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=128MB
+      -c max_connections=40
+      -c random_page_cost=1.1
+    # Docker's default 64 MB /dev/shm is too small for parallel queries
+    shm_size: 256mb
+    environment:
+      POSTGRES_DB: interno
+      POSTGRES_USER: interno
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U interno -d interno"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # no ports: the database is never exposed to the internet
+
+  api:
+    build: .
+    restart: unless-stopped
+    logging: *logging
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://interno:${POSTGRES_PASSWORD}@db:5432/interno
+      PORT: 3000
+      # keep the heap bounded so a runaway request can't starve Postgres
+      NODE_OPTIONS: --max-old-space-size=768
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      PGHOST: db
+      PGUSER: interno
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: interno
+      BACKUP_KEEP_DAYS: 14
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/backup.sh:ro
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

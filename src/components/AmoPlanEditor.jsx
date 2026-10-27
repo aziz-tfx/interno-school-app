@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Save, Loader, Copy } from 'lucide-react'
 import { db } from '../firebase'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp } from '../backend/firestore'
 import { useAuth } from '../contexts/AuthContext'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 

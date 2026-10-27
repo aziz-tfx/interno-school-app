@@ -13,6 +13,7 @@ import { loadIntegrations, saveIntegrationSection } from '../utils/tenantIntegra
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { branchToSlug } from '../utils/branchSlug'
 import { toast } from '../components/Toaster'
+import { USE_SERVER, api } from '../backend/api'
 import { Link } from 'react-router-dom'
 
 const BRANCH_LABELS = {
@@ -170,6 +171,19 @@ export default function Integrations() {
   }
 
   // ─── Checks / tests ───
+  // Own server: Telegram must post bot updates (/start links) there
+  const [tgHooking, setTgHooking] = useState(false)
+  const connectTgWebhook = async () => {
+    setTgHooking(true)
+    try {
+      await api('/api/admin/telegram/webhook', { method: 'POST' })
+      toast.success('Бот подключён к серверу: привязка учеников работает')
+    } catch (e) {
+      toast.error(e.message)
+    }
+    setTgHooking(false)
+  }
+
   const checkTgBot = async () => {
     const token = cfg?.telegram?.botToken
     if (!token) return
@@ -369,8 +383,14 @@ export default function Integrations() {
               className="w-full md:w-1/2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
             <p className="text-xs text-slate-400 mt-1">
               Студенты подключают личные напоминания об оплате по ссылке t.me/&lt;username&gt; из кабинета.
-              Не забудьте зарегистрировать webhook: <code className="font-mono">/api/telegram/notify?tenantId={tenantId}</code>
+              {!USE_SERVER && <> Не забудьте зарегистрировать webhook: <code className="font-mono">/api/telegram/notify?tenantId={tenantId}</code></>}
             </p>
+            {USE_SERVER && (
+              <button onClick={connectTgWebhook} disabled={tgHooking}
+                className="mt-2 px-4 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl text-sm font-medium hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5">
+                <Plug size={14} /> {tgHooking ? 'Подключение...' : 'Подключить бота к серверу'}
+              </button>
+            )}
           </div>
 
           <div>
@@ -709,6 +729,8 @@ export default function Integrations() {
       </div>
 
       {/* ═══════ Payme ═══════ */}
+      {/* still books payments into Firebase — hidden on the own server until it moves there */}
+      {!USE_SERVER && (
       <div className="glass rounded-2xl overflow-hidden">
         <div className="bg-gradient-to-r from-cyan-500 to-blue-500 p-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -757,6 +779,7 @@ export default function Integrations() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Future */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

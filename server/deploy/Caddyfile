@@ -1,0 +1,15 @@
+# HTTPS for the API. Caddy obtains and renews the Let's Encrypt certificate
+# by itself — the domain's A record must point at this server first.
+{$API_DOMAIN} {
+	encode gzip
+
+	reverse_proxy api:3000 {
+		# Server-Sent Events (/api/realtime): pass each event through at once
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

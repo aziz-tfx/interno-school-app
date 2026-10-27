@@ -7,6 +7,8 @@ import {
 } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
+import { USE_SERVER } from './backend/api'
+import { serverDb } from './backend/serverStore'
 
 const firebaseConfig = {
   apiKey: "AIzaSyDyp-GtBlf6Dt1FmpZV5QD4d8wV7yRE6DU",
@@ -51,14 +53,22 @@ if (recaptchaKey) {
 //
 // If persistence can't initialize (private mode, storage disabled, or the
 // SDK was already initialized), fall back to the default in-memory Firestore.
+//
+// With VITE_BACKEND=server the data lives in our PostgreSQL API instead and
+// Firestore is never started; `db` is then a token the backend/ functions
+// recognise. Storage (file uploads) stays on Firebase for now.
 let _db
-try {
-  _db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  })
-} catch (err) {
-  console.warn('Firestore persistent cache unavailable, using default:', err)
-  _db = getFirestore(app)
+if (USE_SERVER) {
+  _db = serverDb
+} else {
+  try {
+    _db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    })
+  } catch (err) {
+    console.warn('Firestore persistent cache unavailable, using default:', err)
+    _db = getFirestore(app)
+  }
 }
 
 export const db = _db
