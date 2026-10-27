@@ -4,6 +4,7 @@ import {
   UserCheck, Phone, Wrench, ArrowLeft,
 } from 'lucide-react'
 import { toast } from './Toaster'
+import { apiFetch } from '../backend/api'
 
 const API = '/api/ai/amo-agent'
 
@@ -31,7 +32,7 @@ export default function AiAgentLog({ tenantId, amoSubdomain }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(q(`&days=${days}`))
+      const res = await apiFetch(q(`&days=${days}`))
       const json = await res.json().catch(() => ({}))
       if (!json.ok) throw new Error(json.error || `HTTP ${res.status}`)
       setData(json)
@@ -48,7 +49,7 @@ export default function AiAgentLog({ tenantId, amoSubdomain }) {
     setDetail(null)
     setDetailLoading(true)
     try {
-      const res = await fetch(q(`&id=${encodeURIComponent(id)}`))
+      const res = await apiFetch(q(`&id=${encodeURIComponent(id)}`))
       const json = await res.json().catch(() => ({}))
       if (!json.ok) throw new Error(json.error || `HTTP ${res.status}`)
       setDetail(json.conversation)
@@ -63,7 +64,7 @@ export default function AiAgentLog({ tenantId, amoSubdomain }) {
     if (!detail) return
     setToggling(true)
     try {
-      const res = await fetch(`${API}?mode=log`, {
+      const res = await apiFetch(`${API}?mode=log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenantId, id: detail.id, paused: !detail.paused }),

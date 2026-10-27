@@ -1,6 +1,8 @@
 // Telegram sales notification
-// Server-side API (/api/telegram/notify) loads per-tenant credentials from
-// Firestore based on tenantId attached to each request.
+// Server-side API (/api/telegram/notify) loads the school's bot token and
+// branch chats from its integration settings.
+
+import { apiFetch } from '../backend/api'
 
 // Module-level tenant — set by AuthContext after login
 let _tenantId = ''
@@ -68,7 +70,7 @@ function buildMessage(saleData) {
 
 export async function pushSaleToTelegram(saleData) {
   try {
-    const res = await fetch('/api/telegram/notify', {
+    const res = await apiFetch('/api/telegram/notify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

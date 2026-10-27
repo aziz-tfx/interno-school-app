@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Send, Bot, User, Sparkles } from 'lucide-react'
+import { apiFetch } from '../backend/api'
 
 // Simple markdown-like renderer for code blocks and inline code
 function renderMessageText(text) {
@@ -61,7 +62,7 @@ export default function AIChat({ isOpen, onClose, context, mode = 'floating' }) 
     setLoading(true)
 
     try {
-      const res = await fetch('/api/ai/chat', {
+      const res = await apiFetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

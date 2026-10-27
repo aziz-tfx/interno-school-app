@@ -1,7 +1,8 @@
 // amoCRM integration — client-side helper
-// Calls our Vercel serverless API which forwards to amoCRM
-// Every request is tagged with the current tenantId so the server can
-// load the right school's credentials from Firestore.
+// Calls our server API (/api/amo/*, /api/onpbx/*), which forwards to amoCRM /
+// OnlinePBX with the school's credentials from its integration settings.
+
+import { apiFetch } from '../backend/api'
 
 const API_BASE = '/api/amo'
 
@@ -28,7 +29,7 @@ function withTenant(url) {
  */
 export async function pushSaleToAmo(saleData) {
   try {
-    const res = await fetch(`${API_BASE}/push-sale`, {
+    const res = await apiFetch(`${API_BASE}/push-sale`, {
       method: 'POST',
       headers: tenantHeaders(),
       body: JSON.stringify({ ...saleData, tenantId: _tenantId }),
@@ -54,7 +55,7 @@ export async function pushSaleToAmo(saleData) {
  */
 export async function checkAmoStatus() {
   try {
-    const res = await fetch(withTenant(`${API_BASE}/status`), { headers: tenantHeaders() })
+    const res = await apiFetch(withTenant(`${API_BASE}/status`), { headers: tenantHeaders() })
     return await res.json()
   } catch (err) {
     return { connected: false, message: err.message }
@@ -67,7 +68,7 @@ export async function checkAmoStatus() {
  */
 export async function fetchAmoCalls({ from, to }) {
   try {
-    const res = await fetch(withTenant(`${API_BASE}/calls?from=${from}&to=${to}`), {
+    const res = await apiFetch(withTenant(`${API_BASE}/calls?from=${from}&to=${to}`), {
       headers: tenantHeaders(),
     })
     const data = await res.json()
@@ -84,7 +85,7 @@ export async function fetchAmoCalls({ from, to }) {
  */
 export async function fetchAmoUsers() {
   try {
-    const res = await fetch(withTenant(`${API_BASE}/users`), { headers: tenantHeaders() })
+    const res = await apiFetch(withTenant(`${API_BASE}/users`), { headers: tenantHeaders() })
     const data = await res.json()
     if (!res.ok) return { success: false, error: data.error || 'Unknown error', users: [] }
     return { success: true, users: data.users || [] }
@@ -99,7 +100,7 @@ export async function fetchAmoUsers() {
 export async function fetchAmoPerformance({ from, to }) {
   try {
     const month = (from || '').slice(0, 7) || new Date().toISOString().slice(0, 7)
-    const res = await fetch(withTenant(`${API_BASE}/performance-v2?month=${month}`), {
+    const res = await apiFetch(withTenant(`${API_BASE}/performance-v2?month=${month}`), {
       headers: tenantHeaders(),
     })
     const data = await res.json()
@@ -117,7 +118,7 @@ export async function fetchAmoPerformance({ from, to }) {
  */
 export async function fetchAmoPerformanceV2({ month }) {
   try {
-    const res = await fetch(withTenant(`${API_BASE}/performance-v2?month=${month}`), {
+    const res = await apiFetch(withTenant(`${API_BASE}/performance-v2?month=${month}`), {
       headers: tenantHeaders(),
     })
     const data = await res.json()
@@ -135,7 +136,7 @@ export async function fetchAmoPerformanceV2({ month }) {
  */
 export async function fetchAmoResponseTimes({ month }) {
   try {
-    const res = await fetch(withTenant(`${API_BASE}/response-times?month=${month}`), {
+    const res = await apiFetch(withTenant(`${API_BASE}/response-times?month=${month}`), {
       headers: tenantHeaders(),
     })
     const data = await res.json()
@@ -153,7 +154,7 @@ export async function fetchAmoResponseTimes({ month }) {
  */
 export async function fetchOnpbxCalls({ from, to }) {
   try {
-    const res = await fetch(withTenant(`/api/onpbx/calls?from=${from}&to=${to}`), {
+    const res = await apiFetch(withTenant(`/api/onpbx/calls?from=${from}&to=${to}`), {
       headers: tenantHeaders(),
     })
     const data = await res.json()
@@ -173,7 +174,7 @@ export async function fetchOnpbxCalls({ from, to }) {
 // exchanges it for the first token pair instead of refreshing.
 export async function refreshAmoToken(code) {
   try {
-    const res = await fetch(`${API_BASE}/token-refresh`, {
+    const res = await apiFetch(`${API_BASE}/token-refresh`, {
       method: 'POST',
       headers: tenantHeaders(),
       body: JSON.stringify({ tenantId: _tenantId, ...(code ? { code } : {}) }),
@@ -189,7 +190,7 @@ export async function refreshAmoToken(code) {
  */
 export async function checkOnpbxStatus() {
   try {
-    const res = await fetch(withTenant('/api/onpbx/calls?status=1'), { headers: tenantHeaders() })
+    const res = await apiFetch(withTenant('/api/onpbx/calls?status=1'), { headers: tenantHeaders() })
     return await res.json()
   } catch (err) {
     return { connected: false, message: err.message }

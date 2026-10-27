@@ -15,6 +15,8 @@ import crmRoutes from './routes/crm/index.js'
 import publicRoutes from './routes/public.js'
 import telegramRoutes from './routes/telegram.js'
 import adminRoutes from './routes/admin.js'
+import vercelRoutes from './routes/vercel.js'
+import { initTenantConfig } from './vercel/_lib/tenantConfig.js'
 import { sendTelegram, setTelegramWebhook } from './telegram.js'
 
 // telegram: injectable so tests don't call the real Bot API
@@ -56,6 +58,7 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
     return { ok: true }
   })
 
+  initTenantConfig(pool) // the former Vercel functions read settings and documents through it
   const deps = { pool, config, realtime, telegram }
   await app.register(authRoutes, deps)
   await app.register(collectionRoutes, deps)
@@ -64,6 +67,7 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
   await app.register(publicRoutes, deps)
   await app.register(telegramRoutes, deps)
   await app.register(adminRoutes, deps)
+  await app.register(vercelRoutes, deps)
 
   return app
 }

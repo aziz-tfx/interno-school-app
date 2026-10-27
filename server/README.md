@@ -49,20 +49,24 @@
 - [x] Публичные страницы без прямого доступа к базе: регистрация, лендинг курса, подписание договора, Telegram-приложение
 - [x] **Интерфейс CRM** в приложении (этап 3, раздел «CRM» в меню серверной сборки)
 - [x] Ежедневные автоматизации (напоминания об оплате, должники, блокировка LMS, списки доплат менеджерам) и Telegram-бот (привязка учеников по `/start`) — на сервере
-- [x] 55 автотестов на настоящем PostgreSQL + проверка в браузере
+- [x] **Бывшие функции Vercel** — на сервере: уведомления о продажах в Telegram, amoCRM-отчёты и выгрузка продаж,
+  OnlinePBX, ИИ-агент для Instagram/Telegram (с напоминаниями клиентам каждые 5 минут), ИИ-помощник в LMS, Payme.
+  Код перенесён почти без изменений (`src/vercel/`) поверх слоя, повторяющего Firestore на наших таблицах
+  (`src/vercel/_lib/firestore.js`). Заявки с лендинга дублируются в amoCRM, пока продажи работают там.
+- [x] 63 автотеста на настоящем PostgreSQL + проверка в браузере
+
+**Работает и с Vercel, и без него.** Сайт по-прежнему отдаёт Vercel, а все адреса `app.internoedu.uz/api/…` он
+пересылает на сервер (`vercel.json`). Поэтому вебхуки, прописанные в amoCRM (ИИ-агент), Payme и Telegram, менять
+не нужно. Приложение само обращается к серверу напрямую, со входом; школа берётся из входа, а не из запроса —
+на Vercel любой мог вызвать эти функции с чужим `tenantId`.
 
 Дальше:
 
-1. **Параллельная работа:** превью-сборка на сервере, сверка цифр со старой версией.
-3. **Перенос остальных `api/*` с Vercel на сервер:** Payme (в серверной сборке пока скрыт), OnlinePBX, ИИ-агент. Каналы будут писать сразу в CRM.
-4. **Instagram через Meta API** (нужно пройти App Review), затем отключение amoCRM.
-5. **Переключение:** последний импорт, перевод Firestore в режим «только чтение», переключение фронтенда.
+1. **Instagram и Telegram напрямую в CRM** (Meta API, нужно пройти App Review), затем отключение amoCRM.
+2. Домен `api.internoedu.uz` вместо sslip.io.
 
 Пока не сделано, учесть на следующих этапах:
 - кросс-школьный доступ суперадмина (страница SuperAdmin видит только свою школу);
-- функции на Vercel (`/api/amo/*`, уведомления о продажах `/api/telegram/notify`, `/api/ai/*`) по-прежнему читают Firestore
-  (настройки Telegram для уведомлений о продажах берутся оттуда — меняя чаты, поменяйте их и в старой версии);
-- Payme: оплаты через него пишутся в Firestore, поэтому в серверной сборке кнопка оплаты и настройки Payme скрыты;
 - пароли LMS в документах студентов (`lmsPassword`) пока лежат открытым текстом, как и в Firestore;
 - загрузка файлов: Firebase Storage пока остаётся.
 
@@ -156,6 +160,14 @@ docker compose exec -T db pg_restore --clean --if-exists -U interno -d interno <
 ```bash
 bash /opt/interno/server/deploy/update.sh     # свежий код ветки, пересборка, проверка
 ```
+
+### 6а. Ключи интеграций
+Для основной школы часть ключей хранится не в «Интеграциях», а в переменных Vercel. Перенести их на сервер
+(ввод скрыт, Enter — оставить как есть):
+```bash
+bash /opt/interno/server/deploy/secrets.sh
+```
+Telegram-бот и чаты, amoCRM, OnlinePBX, ключ ИИ-помощника LMS (`GOOGLE_AI_KEY`). Значения из «Интеграций» важнее.
 
 ### 7. Переключение app.internoedu.uz на сервер
 
@@ -256,6 +268,12 @@ DATABASE_URL=postgres://localhost/interno JWT_SECRET=$(openssl rand -base64 48) 
 | `POST /api/admin/automations/run` `{dryRun?}` | автоматизации своей школы сейчас (владелец/админ); `dryRun` — только посчитать |
 | `POST /api/admin/telegram/webhook` | направить бота школы на этот сервер |
 | `POST /api/telegram/webhook?tenantId=` | обновления от Telegram (проверяется секрет `X-Telegram-Bot-Api-Secret-Token`) |
+| `POST /api/telegram/notify` | продажа → чат филиала (со входом) |
+| `GET /api/amo/{status,users,calls,performance-v2,response-times}`, `POST /api/amo/{push-sale,token-refresh}` | amoCRM (со входом) |
+| `GET /api/onpbx/calls?from=&to=` (`?status=1` — проверка) | OnlinePBX (со входом) |
+| `POST /api/ai/chat` | ИИ-помощник в LMS |
+| `/api/ai/amo-agent?mode=webhook\|followups&key=` | ИИ-агент: вебхук из amo (по ключу школы); `mode=log\|setup\|test` — со входом |
+| `GET/POST /api/pay/payme?tenantId=` | Payme: публичная настройка для кабинета / Merchant API (Basic-авторизация Payme) |
 
 Роли в CRM: работают `owner`, `admin`, `branch_director`, `branch_admin`, `rop`, `sales`, `smm`;
 воронки настраивают и сделки удаляют `owner`, `admin`, `branch_director`, `rop`.

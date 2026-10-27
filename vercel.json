@@ -1,10 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/ai/amo-agent", "destination": "/api/ai/chat?action=amo-agent" },
-    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/api/:path*", "destination": "https://45-92-173-35.sslip.io/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "functions": {
-    "api/ai/chat.js": { "maxDuration": 60 }
-  }
+  ]
 }

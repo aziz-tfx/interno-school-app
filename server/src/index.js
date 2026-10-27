@@ -4,6 +4,8 @@ import { migrate } from './migrate.js'
 import { buildApp } from './app.js'
 import { startAutomationScheduler } from './automations.js'
 import { loadTelegramConfig, sendTelegram } from './telegram.js'
+import { runFollowUps } from './vercel/_lib/aiAgent.js'
+import { resolvePayme } from './vercel/_lib/tenantConfig.js'
 
 const config = loadConfig()
 const pool = createPool(config.databaseUrl)
@@ -17,9 +19,16 @@ if (config.automations) {
   startAutomationScheduler(pool, {
     send: sendTelegram,
     loadTelegram: (tenantId) => loadTelegramConfig(pool, tenantId),
+    loadPayme: (tenantId) => resolvePayme({ query: { tenantId } }),
   }, app.log)
   app.log.info('daily automations: on (14:00 Asia/Tashkent)')
 }
+
+// AI sales agent: nudge clients who went silent (on Vercel this needed an
+// external cron). Each due conversation is claimed, so overlaps are harmless.
+setInterval(() => {
+  runFollowUps().catch((err) => app.log.error({ err }, 'AI agent follow-ups failed'))
+}, 5 * 60_000).unref()
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, async () => {

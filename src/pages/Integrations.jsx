@@ -729,8 +729,6 @@ export default function Integrations() {
       </div>
 
       {/* ═══════ Payme ═══════ */}
-      {/* still books payments into Firebase — hidden on the own server until it moves there */}
-      {!USE_SERVER && (
       <div className="glass rounded-2xl overflow-hidden">
         <div className="bg-gradient-to-r from-cyan-500 to-blue-500 p-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -779,7 +777,6 @@ export default function Integrations() {
           </div>
         </div>
       </div>
-      )}
 
       {/* Future */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
