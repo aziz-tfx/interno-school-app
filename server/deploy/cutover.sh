@@ -23,6 +23,14 @@ else
     *",$FRONTEND,"*) ;;
     *) set_env CORS_ORIGINS "${CORS:+$CORS,}$FRONTEND" ;;
   esac
+  # After 14:00 today's run already happened on the old Vercel cron: mark it
+  # done, or the server would repeat every reminder within a minute.
+  if [ "$((10#$(TZ=Asia/Tashkent date +%H)))" -ge 14 ]; then
+    docker compose exec -T db psql -U interno -d interno -qc \
+      "INSERT INTO scheduled_runs (name, last_date) VALUES ('automations', '$(TZ=Asia/Tashkent date +%F)')
+       ON CONFLICT (name) DO UPDATE SET last_date = EXCLUDED.last_date"
+    echo "▶ сегодняшние напоминания уже отправила старая система — сервер начнёт с завтрашнего дня"
+  fi
   set_env AUTOMATIONS on
   echo "▶ $FRONTEND допущен к API, ежедневные автоматизации (14:00) включены"
 fi
