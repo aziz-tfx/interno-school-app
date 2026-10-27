@@ -7,6 +7,7 @@ import { loadTelegramConfig, sendTelegram } from './telegram.js'
 import { runFollowUps } from './vercel/_lib/aiAgent.js'
 import { agentTraffic } from './vercel/_lib/runtime.js'
 import { resolvePayme } from './vercel/_lib/tenantConfig.js'
+import { syncAllCalls } from './routes/crm/telephony.js'
 
 const config = loadConfig()
 const pool = createPool(config.databaseUrl)
@@ -32,6 +33,14 @@ if (config.automations) {
 setInterval(() => {
   if (!agentTraffic.seen) return
   runFollowUps().catch((err) => app.log.error({ err }, 'AI agent follow-ups failed'))
+}, 5 * 60_000).unref()
+
+// OnlinePBX calls into the CRM timeline (schools without OnlinePBX are skipped)
+let syncingCalls = false
+setInterval(async () => {
+  if (syncingCalls) return
+  syncingCalls = true
+  try { await syncAllCalls(pool, app.log) } finally { syncingCalls = false }
 }, 5 * 60_000).unref()
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

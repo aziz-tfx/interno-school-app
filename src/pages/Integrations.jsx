@@ -14,6 +14,7 @@ import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { branchToSlug } from '../utils/branchSlug'
 import { toast } from '../components/Toaster'
 import { USE_SERVER, api } from '../backend/api'
+import { crm } from '../backend/crm'
 import { Link } from 'react-router-dom'
 
 const BRANCH_LABELS = {
@@ -269,6 +270,19 @@ export default function Integrations() {
         ? 'Код авторизации истёк или уже использован. Обновите его в amoCRM и попробуйте снова.'
         : 'Не удалось получить токены: ' + (result.error || 'Unknown') + (details ? ` (${details.slice(0, 200)})` : ''))
     }
+  }
+
+  const [pbxSyncing, setPbxSyncing] = useState(false)
+  const syncCallsNow = async () => {
+    setPbxSyncing(true)
+    try {
+      await saveIntegrationSection(tenantId, 'onpbx', cfg.onpbx)
+      const r = await crm.syncCalls()
+      toast.success(r.busy ? 'Звонки уже загружаются' : `Звонков в истории: ${r.calls}, добавлено в CRM: ${r.stored}${r.leadsCreated ? `, новых сделок: ${r.leadsCreated}` : ''}`)
+    } catch (err) {
+      toast.error(err.message)
+    }
+    setPbxSyncing(false)
   }
 
   const checkPbx = async () => {
@@ -738,6 +752,25 @@ export default function Integrations() {
               </div>
             </div>
           </div>
+
+          {USE_SERVER && (
+            <div className="rounded-xl bg-emerald-50/60 border border-emerald-100 p-3 space-y-2">
+              <p className="text-sm font-medium text-slate-700">Звонки в CRM</p>
+              <p className="text-xs text-slate-500">
+                Каждые 5 минут звонки клиентам попадают в историю их сделок. Менеджер определяется по добавочному
+                номеру из карточки сотрудника.
+              </p>
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <input type="checkbox" checked={!!cfg.onpbx.autoLeads}
+                  onChange={(e) => updateSection('onpbx', { autoLeads: e.target.checked })} className="w-4 h-4 rounded" />
+                Создавать сделку в «Неразобранном», когда звонит новый номер
+              </label>
+              <button onClick={syncCallsNow} disabled={pbxSyncing}
+                className="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-1.5 disabled:opacity-50">
+                <RefreshCw size={12} className={pbxSyncing ? 'animate-spin' : ''} /> Загрузить звонки сейчас
+              </button>
+            </div>
+          )}
 
           {pbxStatus === 'ok' && <div className="text-sm text-emerald-600 flex items-center gap-1.5"><CheckCircle size={14} /> Подключено</div>}
           {pbxStatus === 'error' && <div className="text-sm text-red-500 flex items-center gap-1.5"><XCircle size={14} /> Ошибка подключения</div>}

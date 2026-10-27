@@ -37,6 +37,7 @@ export default function EmployeeForm({ employee, onClose }) {
     salary: '',
     amoUserId: '',
     amoUserName: '',
+    pbxExt: '',
   })
 
   // amoCRM users for the dropdown picker
@@ -79,6 +80,7 @@ export default function EmployeeForm({ employee, onClose }) {
         salary,
         amoUserId: employee.amoUserId != null ? String(employee.amoUserId) : '',
         amoUserName: employee.amoUserName || '',
+        pbxExt: employee.pbxExt || '',
       })
       // Load individual custom permissions if they exist
       if (employee.customPermissions) {
@@ -101,6 +103,8 @@ export default function EmployeeForm({ employee, onClose }) {
       // compare it against the integer id amoCRM returns. Empty input → null.
       amoUserId: amoUserId !== '' && !Number.isNaN(Number(amoUserId)) ? Number(amoUserId) : null,
       amoUserName: (amoUserName || '').trim() || null,
+      // OnlinePBX extension: CRM calls are attributed to this employee
+      pbxExt: String(rest.pbxExt || '').trim() || null,
     }
 
     // Attach individual permissions if customized
@@ -284,6 +288,11 @@ export default function EmployeeForm({ employee, onClose }) {
               Можно загрузить список пользователей из amoCRM и выбрать, либо ввести имя или ID вручную.
               Имя сравнивается без учёта регистра.
             </p>
+            <label className="block text-sm font-medium text-slate-700 mt-3 mb-1">Добавочный номер в OnlinePBX</label>
+            <input type="text" inputMode="numeric" value={form.pbxExt} onChange={e => set('pbxExt', e.target.value.replace(/\D/g, ''))}
+              placeholder="например, 101"
+              className="w-full md:w-1/2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            <p className="text-[11px] text-slate-500 mt-1">Звонки с этого добавочного попадут в CRM от имени сотрудника.</p>
           </div>
         )}
 
