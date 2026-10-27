@@ -81,3 +81,98 @@ export async function funnelReport(db, tenantId, { pipelineId, from, to }) {
 function camel(row) {
   return Object.fromEntries(Object.entries(row).map(([k, v]) => [k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()), v]))
 }
+
+/**
+ * The rest of the sales reports for a period (Tashkent dates):
+ *   now       — open deals, overdue tasks, inbound leads nobody answered, new today
+ *   daily     — new leads, sales and losses per day
+ *   sources   — leads, sales, conversion and revenue per source (cohort = created in period)
+ *   lossReasons — deals lost in the period, by reason
+ *   activity  — per employee: calls (in/out, talk time), notes, tasks done, stage moves, sales
+ */
+export async function insightsReport(db, tenantId, { pipelineId, from, to }) {
+  const params = [tenantId, pipelineId, from, to]
+  const inRange = (col) => `${col} >= ($3::date)::timestamp AT TIME ZONE '${TZ}' AND ${col} < ($4::date + 1)::timestamp AT TIME ZONE '${TZ}'`
+
+  const [now, daily, sources, lossReasons, activity] = await Promise.all([
+    db.query(`
+      SELECT
+        (SELECT count(*) FROM crm_leads l JOIN crm_stages s ON s.id = l.stage_id
+          WHERE l.tenant_id = $1 AND l.pipeline_id = $2 AND l.deleted_at IS NULL AND s.kind = 'open')::int AS open_leads,
+        (SELECT coalesce(sum(l.amount), 0) FROM crm_leads l JOIN crm_stages s ON s.id = l.stage_id
+          WHERE l.tenant_id = $1 AND l.pipeline_id = $2 AND l.deleted_at IS NULL AND s.kind = 'open') AS open_amount,
+        (SELECT count(*) FROM crm_tasks t WHERE t.tenant_id = $1 AND t.done_at IS NULL AND t.due_at < now())::int AS overdue_tasks,
+        (SELECT count(*) FROM crm_leads l JOIN crm_stages s ON s.id = l.stage_id
+          WHERE l.tenant_id = $1 AND l.pipeline_id = $2 AND l.deleted_at IS NULL AND s.kind = 'open'
+            AND l.created_by IS NULL AND l.first_response_at IS NULL)::int AS unanswered,
+        (SELECT count(*) FROM crm_leads l
+          WHERE l.tenant_id = $1 AND l.pipeline_id = $2 AND l.deleted_at IS NULL
+            AND l.created_at >= (now() AT TIME ZONE '${TZ}')::date::timestamp AT TIME ZONE '${TZ}')::int AS new_today`,
+      [tenantId, pipelineId]),
+    db.query(`
+      WITH days AS (SELECT g::date AS d FROM generate_series($3::date, $4::date, interval '1 day') g),
+      created AS (
+        SELECT (l.created_at AT TIME ZONE '${TZ}')::date AS d, count(*)::int AS n
+          FROM crm_leads l
+         WHERE l.tenant_id = $1 AND l.pipeline_id = $2 AND l.deleted_at IS NULL AND ${inRange('l.created_at')}
+         GROUP BY 1),
+      closed AS (
+        SELECT (l.closed_at AT TIME ZONE '${TZ}')::date AS d,
+               count(*) FILTER (WHERE s.kind = 'won')::int AS won,
+               count(*) FILTER (WHERE s.kind = 'lost')::int AS lost
+          FROM crm_leads l JOIN crm_stages s ON s.id = l.stage_id
+         WHERE l.tenant_id = $1 AND l.pipeline_id = $2 AND l.deleted_at IS NULL AND ${inRange('l.closed_at')}
+         GROUP BY 1)
+      SELECT to_char(days.d, 'YYYY-MM-DD') AS date, coalesce(created.n, 0) AS created,
+             coalesce(closed.won, 0) AS won, coalesce(closed.lost, 0) AS lost
+        FROM days LEFT JOIN created USING (d) LEFT JOIN closed USING (d)
+       ORDER BY days.d`, params),
+    db.query(`
+      SELECT coalesce(l.source, '') AS source, count(*)::int AS created,
+             count(*) FILTER (WHERE s.kind = 'won')::int AS won,
+             count(*) FILTER (WHERE s.kind = 'lost')::int AS lost,
+             coalesce(sum(l.amount) FILTER (WHERE s.kind = 'won'), 0) AS won_amount
+        FROM crm_leads l JOIN crm_stages s ON s.id = l.stage_id
+       WHERE l.tenant_id = $1 AND l.pipeline_id = $2 AND l.deleted_at IS NULL AND ${inRange('l.created_at')}
+       GROUP BY 1 ORDER BY created DESC`, params),
+    db.query(`
+      SELECT coalesce(nullif(btrim(l.loss_reason), ''), 'Без причины') AS reason, count(*)::int AS count
+        FROM crm_leads l JOIN crm_stages s ON s.id = l.stage_id
+       WHERE l.tenant_id = $1 AND l.pipeline_id = $2 AND l.deleted_at IS NULL AND s.kind = 'lost' AND ${inRange('l.closed_at')}
+       GROUP BY 1 ORDER BY count DESC LIMIT 20`, params),
+    db.query(`
+      SELECT a.author_id AS employee_id, e.data->>'name' AS name,
+             count(*) FILTER (WHERE a.type = 'call' AND a.direction = 'out')::int AS calls_out,
+             count(*) FILTER (WHERE a.type = 'call' AND a.direction = 'in')::int AS calls_in,
+             coalesce(sum(safe_numeric(a.meta->>'duration')) FILTER (WHERE a.type = 'call'), 0)::int AS talk_sec,
+             count(*) FILTER (WHERE a.type = 'note')::int AS notes,
+             count(*) FILTER (WHERE a.type = 'task')::int AS tasks_done,
+             count(*) FILTER (WHERE a.type = 'stage_change' AND a.meta->>'from' IS NOT NULL)::int AS stage_moves,
+             count(*) FILTER (WHERE a.type = 'stage_change' AND st.kind = 'won')::int AS wins
+        FROM crm_activities a
+        LEFT JOIN employees e ON e.id = a.author_id
+        LEFT JOIN crm_stages st ON a.type = 'stage_change' AND st.id = (a.meta->>'to')::uuid
+       WHERE a.tenant_id = $1 AND a.author_id IS NOT NULL AND ${inRange('a.created_at')}
+         -- this pipeline's deals (contact-only rows, e.g. a merge, count everywhere)
+         AND (a.lead_id IS NULL OR EXISTS (SELECT 1 FROM crm_leads l WHERE l.id = a.lead_id AND l.pipeline_id = $2))
+       GROUP BY a.author_id, e.data->>'name'
+       ORDER BY wins DESC, calls_out DESC`, [tenantId, pipelineId, from, to]),
+  ])
+
+  // overdue tasks per person, next to their activity
+  const { rows: overdue } = await db.query(
+    `SELECT assignee_id, count(*)::int AS n FROM crm_tasks
+      WHERE tenant_id = $1 AND done_at IS NULL AND due_at < now() AND assignee_id IS NOT NULL GROUP BY assignee_id`, [tenantId]
+  )
+  const overdueBy = Object.fromEntries(overdue.map(r => [r.assignee_id, r.n]))
+  const conv = (won, created) => (created ? Math.round((won / created) * 1000) / 10 : 0)
+
+  return {
+    period: { from, to },
+    now: camel(now.rows[0]),
+    daily: daily.rows,
+    sources: sources.rows.map(r => ({ ...camel(r), conversion: conv(r.won, r.created) })),
+    lossReasons: lossReasons.rows,
+    activity: activity.rows.map(r => ({ ...camel(r), overdueTasks: overdueBy[r.employee_id] || 0 })),
+  }
+}

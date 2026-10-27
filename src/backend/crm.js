@@ -44,6 +44,7 @@ export const crm = {
   updateTask: (id, body) => api(`/api/crm/tasks/${id}`, json('PATCH', body)),
 
   funnel: (params) => api(`/api/crm/analytics/funnel${qs(params)}`),
+  insights: (params) => api(`/api/crm/analytics/insights${qs(params)}`),
 
   leadIds: (params) => api(`/api/crm/leads/ids${qs(params)}`),
   bulk: (body) => api('/api/crm/leads/bulk', json('POST', body)),

@@ -8,7 +8,7 @@
 //               POST /api/crm/leads/:id/activities (calls / messages)
 //   Contacts    see contacts.js
 //   Tasks       GET/POST /api/crm/tasks, PATCH /api/crm/tasks/:id
-//   Reports     GET /api/crm/analytics/funnel?pipelineId=&from=&to=
+//   Reports     GET /api/crm/analytics/funnel|insights?pipelineId=&from=&to=
 //   Public      POST /api/public/leads?tenantId=   (landing form, no login)
 
 import { tx } from '../../db.js'
@@ -18,7 +18,7 @@ import {
   mapLead, mapContact, mapActivity, mapTask, getLeadRow, createLead, updateLead, softDeleteLead,
   addActivity, createTask, updateTask,
 } from '../../crm/service.js'
-import { funnelReport } from '../../crm/analytics.js'
+import { funnelReport, insightsReport } from '../../crm/analytics.js'
 import { isUuid, DATE_RE, leadFilters, leadWhere, leadOrder } from '../../crm/leadQuery.js'
 
 // Body schemas: wrong types become a 400 with a message instead of a 500
@@ -304,6 +304,14 @@ export default async function crmRoutes(app, { pool }) {
     if (!isUuid(pipelineId)) throw badRequest('Укажите pipelineId')
     if (!DATE_RE.test(from || '') || !DATE_RE.test(to || '')) throw badRequest('from/to: YYYY-MM-DD')
     return funnelReport(pool, T(req), { pipelineId, from, to })
+  })
+
+  app.get('/api/crm/analytics/insights', crm, async (req) => {
+    const { pipelineId, from, to } = req.query
+    if (!isUuid(pipelineId)) throw badRequest('Укажите pipelineId')
+    if (!DATE_RE.test(from || '') || !DATE_RE.test(to || '')) throw badRequest('from/to: YYYY-MM-DD')
+    if ((Date.parse(to) - Date.parse(from)) / 86400_000 > 400) throw badRequest('Период больше 400 дней')
+    return insightsReport(pool, T(req), { pipelineId, from, to })
   })
 
   // ─── Public: landing form ──────────────────────────────────────────────
