@@ -63,7 +63,6 @@
 Дальше:
 
 1. **Instagram и Telegram напрямую в CRM** (Meta API, нужно пройти App Review), затем отключение amoCRM.
-2. Домен `api.internoedu.uz` вместо sslip.io.
 
 Пока не сделано, учесть на следующих этапах:
 - кросс-школьный доступ суперадмина (страница SuperAdmin видит только свою школу);
@@ -161,7 +160,15 @@ docker compose exec -T db pg_restore --clean --if-exists -U interno -d interno <
 bash /opt/interno/server/deploy/update.sh     # свежий код ветки, пересборка, проверка
 ```
 
-### 6а. Ключи интеграций
+### 6а. Домен API
+DNS `internoedu.uz` ведётся в Vercel: запись `api` → IP сервера. Перевести API на домен (старый адрес продолжает
+работать, пока фронтенд не переключён):
+```bash
+bash /opt/interno/server/deploy/domain.sh api.internoedu.uz
+```
+Затем в Vercel `VITE_API_URL=https://api.internoedu.uz` и тот же адрес в `vercel.json` (пересылка `/api/*`).
+
+### 6б. Ключи интеграций
 Для основной школы часть ключей хранится не в «Интеграциях», а в переменных Vercel. Перенести их на сервер
 (ввод скрыт, Enter — оставить как есть):
 ```bash

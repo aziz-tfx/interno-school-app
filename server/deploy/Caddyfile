@@ -1,6 +1,7 @@
 # HTTPS for the API. Caddy obtains and renews the Let's Encrypt certificate
 # by itself — the domain's A record must point at this server first.
-{$API_DOMAIN} {
+# API_ALIASES: older addresses still served after a domain change (deploy/domain.sh).
+{$API_DOMAIN} {$API_ALIASES} {
 	encode gzip
 
 	reverse_proxy api:3000 {
