@@ -30,7 +30,14 @@ export const crm = {
   addNote: (leadId, body) => api(`/api/crm/leads/${leadId}/notes`, json('POST', { body })),
   logActivity: (leadId, body) => api(`/api/crm/leads/${leadId}/activities`, json('POST', body)),
 
+  contacts: (params) => api(`/api/crm/contacts${qs(params)}`),
+  contact: (id) => api(`/api/crm/contacts/${id}`),
+  contactActivities: (id) => api(`/api/crm/contacts/${id}/activities`),
+  createContact: (body) => api('/api/crm/contacts', json('POST', body)),
   updateContact: (id, body) => api(`/api/crm/contacts/${id}`, json('PATCH', body)),
+  deleteContact: (id) => api(`/api/crm/contacts/${id}`, { method: 'DELETE' }),
+  duplicates: () => api('/api/crm/contacts/duplicates'),
+  mergeContacts: (id, ids) => api(`/api/crm/contacts/${id}/merge`, json('POST', { ids })),
 
   tasks: (params) => api(`/api/crm/tasks${qs(params)}`),
   createTask: (body) => api('/api/crm/tasks', json('POST', body)),

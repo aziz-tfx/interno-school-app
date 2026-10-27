@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Settings2, SquareKanban, ListTodo, BarChart3, Loader, Rows3, Columns3, SlidersHorizontal } from 'lucide-react'
+import { Plus, Settings2, SquareKanban, ListTodo, BarChart3, Loader, Rows3, Columns3, SlidersHorizontal, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { crm, watchCrm, formatPhone } from '../backend/crm'
@@ -17,6 +17,8 @@ import CrmBoard from '../components/crm/CrmBoard'
 import CrmList from '../components/crm/CrmList'
 import CrmFilters, { EMPTY_FILTERS, toQuery } from '../components/crm/CrmFilters'
 import FieldSettings from '../components/crm/FieldSettings'
+import CrmContacts from '../components/crm/CrmContacts'
+import ContactModal from '../components/crm/ContactModal'
 import LeadModal from '../components/crm/LeadModal'
 import NewLeadForm from '../components/crm/NewLeadForm'
 import CrmTasks from '../components/crm/CrmTasks'
@@ -32,6 +34,7 @@ const VIEW_KEY = 'interno_crm_view'
 
 const TABS = [
   { id: 'board', label: 'Сделки', icon: SquareKanban },
+  { id: 'contacts', label: 'Контакты', icon: Users },
   { id: 'tasks', label: 'Задачи', icon: ListTodo },
   { id: 'analytics', label: 'Аналитика', icon: BarChart3 },
 ]
@@ -42,6 +45,7 @@ export default function Crm() {
   const [params, setParams] = useSearchParams()
   const tab = params.get('tab') || 'board'
   const openLeadId = params.get('lead')
+  const openContactId = params.get('contact')
 
   const [pipelines, setPipelines] = useState(null)
   const [pipelineId, setPipelineId] = useState(() => {
@@ -124,6 +128,7 @@ export default function Crm() {
     setParams(next, { replace: key === 'tab' })
   }
   const openLead = (id) => setParam('lead', id)
+  const openContact = (id) => setParam('contact', id)
 
   // ─── Stage moves (board drag & drop and the deal card share this) ─────
   const applyMove = async (lead, stage, extra = {}) => {
@@ -223,6 +228,8 @@ export default function Crm() {
 
       {!pipeline ? (
         <div className="glass-card rounded-2xl p-10 text-center text-slate-500">Воронок пока нет.</div>
+      ) : tab === 'contacts' ? (
+        <CrmContacts staff={staff} people={people} onOpenContact={openContact} />
       ) : tab === 'tasks' ? (
         <CrmTasks me={me} isManager={isManager} people={people} onOpenLead={openLead} />
       ) : tab === 'analytics' ? (
@@ -255,12 +262,24 @@ export default function Crm() {
         </div>
       )}
 
+      {openContactId && (
+        <ContactModal
+          contactId={openContactId} isManager={isManager}
+          pipelines={pipelines} allStages={allStages} staff={staff} people={people}
+          fields={fields.filter(f => f.entity === 'contact')}
+          onClose={() => setParam('contact', '')}
+          onOpenLead={openLead}
+          onOpenContact={openContact}
+        />
+      )}
+
       {openLeadId && (
         <LeadModal
           leadId={openLeadId} me={me} isManager={isManager}
           pipelines={pipelines} allStages={allStages} staff={staff} people={people} courses={courses}
           fields={fields.filter(f => f.entity === 'lead')} tags={tags}
           onClose={() => setParam('lead', '')}
+          onOpenContact={openContact}
           onMove={moveLead}
           onSale={(lead) => setSaleFor({ lead })}
           onChanged={() => setRefreshKey(k => k + 1)}

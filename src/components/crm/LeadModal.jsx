@@ -4,12 +4,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Phone, PhoneIncoming, PhoneOutgoing, MessageCircle, StickyNote, ArrowRight, CheckSquare, Square,
-  DollarSign, Info, Trash2, CreditCard, Loader, Plus, User, GraduationCap, Copy, X, Paperclip, Download, FileText,
+  PhoneOutgoing, StickyNote, CheckSquare, Square,
+  Trash2, CreditCard, Loader, Plus, User, GraduationCap, Copy, X, Paperclip, Download, FileText,
 } from 'lucide-react'
 import Modal from '../Modal'
 import { toast } from '../Toaster'
 import { crm, watchCrm, sourceMeta, formatPhone, formatSum, formatDateTime } from '../../backend/crm'
+import ActivityItem from './ActivityItem'
 
 const inputCls = 'w-full px-3 py-2 bg-white/70 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
@@ -21,7 +22,7 @@ function tomorrowAt10() {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
-export default function LeadModal({ leadId, me, isManager, pipelines, allStages, staff, people, courses, fields = [], tags = [], onClose, onMove, onSale, onChanged }) {
+export default function LeadModal({ leadId, me, isManager, pipelines, allStages, staff, people, courses, fields = [], tags = [], onClose, onOpenContact, onMove, onSale, onChanged }) {
   const [lead, setLead] = useState(null)
   const [activities, setActivities] = useState([])
   const [files, setFiles] = useState([])
@@ -265,7 +266,13 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
           <div className="rounded-2xl bg-white/60 border border-slate-100 p-4 space-y-2">
             <div className="flex items-center gap-2">
               <User size={16} className="text-slate-400" />
-              <p className="text-sm font-semibold text-slate-800">{contact?.name || 'Контакт не указан'}</p>
+              {contact && onOpenContact ? (
+                <button onClick={() => onOpenContact(contact.id)} className="text-sm font-semibold text-slate-800 hover:text-blue-700 hover:underline">
+                  {contact.name || 'Без имени'}
+                </button>
+              ) : (
+                <p className="text-sm font-semibold text-slate-800">{contact?.name || 'Контакт не указан'}</p>
+              )}
               {(lead.studentId || contact?.studentId) && (
                 <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5">
                   <GraduationCap size={12} /> Ученик
@@ -443,41 +450,6 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
   }
 
   function renderActivity(a) {
-    const author = people[a.authorId]?.name
-    let Icon = Info
-    let color = 'bg-slate-100 text-slate-500'
-    let text = a.body
-    if (a.type === 'note') { Icon = StickyNote; color = 'bg-amber-100 text-amber-600' }
-    else if (a.type === 'call') {
-      Icon = a.direction === 'in' ? PhoneIncoming : PhoneOutgoing
-      color = 'bg-sky-100 text-sky-600'
-      const dur = a.meta?.duration ? ` · ${Math.round(a.meta.duration / 60)} мин` : ''
-      text = `${a.direction === 'in' ? 'Входящий звонок' : 'Исходящий звонок'}${dur}${a.body ? ` — ${a.body}` : ''}`
-    } else if (a.type === 'message') {
-      Icon = MessageCircle
-      color = 'bg-violet-100 text-violet-600'
-    } else if (a.type === 'stage_change') {
-      Icon = ArrowRight
-      color = 'bg-indigo-100 text-indigo-600'
-      const from = allStages[a.meta?.from]?.name
-      const to = allStages[a.meta?.to]?.name || '—'
-      text = from ? `${from} → ${to}` : `Сделка создана · ${to}`
-    } else if (a.type === 'task') {
-      Icon = CheckSquare
-      color = 'bg-emerald-100 text-emerald-600'
-      text = `Задача выполнена: ${a.body}${a.meta?.result ? ` — ${a.meta.result}` : ''}`
-    } else if (a.type === 'sale') {
-      Icon = DollarSign
-      color = 'bg-emerald-100 text-emerald-600'
-    }
-    return (
-      <div key={a.id} className="flex gap-3">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}><Icon size={15} /></div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{text}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">{formatDateTime(a.createdAt)}{author ? ` · ${author}` : ''}</p>
-        </div>
-      </div>
-    )
+    return <ActivityItem key={a.id} a={a} allStages={allStages} people={people} />
   }
 }
