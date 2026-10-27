@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js'
 import collectionRoutes from './routes/collections.js'
 import crmRoutes from './routes/crm/index.js'
 import crmExtraRoutes from './routes/crm/extra.js'
+import crmContactRoutes from './routes/crm/contacts.js'
 import publicRoutes from './routes/public.js'
 import telegramRoutes from './routes/telegram.js'
 import adminRoutes from './routes/admin.js'
@@ -74,6 +75,7 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
   await app.register(realtimeRoutes, deps)
   await app.register(crmRoutes, deps)
   await app.register(crmExtraRoutes, deps)
+  await app.register(crmContactRoutes, deps)
   await app.register(publicRoutes, deps)
   await app.register(telegramRoutes, deps)
   await app.register(adminRoutes, deps)

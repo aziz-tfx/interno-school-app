@@ -86,6 +86,9 @@ run() {
   fi
   if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$branch")" ]; then
     log "update $(git rev-parse --short HEAD) → $(git rev-parse --short "origin/$branch")"
+    # Check out first, so update.sh runs as the new version from start to
+    # end (its own `git checkout` would otherwise rewrite it mid-run).
+    git checkout -q -B "$branch" "origin/$branch"
     if bash "$SRV/deploy/update.sh" >> "$LOG" 2>&1; then update=ok; else update=failed; log "update failed"; fi
   fi
 
