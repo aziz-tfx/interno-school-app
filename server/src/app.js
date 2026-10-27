@@ -1,6 +1,8 @@
 // Builds the Fastify app. Kept separate from index.js so tests can create an
 // app against a test database without opening a port.
 
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
@@ -53,9 +55,15 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
   app.addHook('onReady', () => realtime.start())
   app.addHook('preClose', () => realtime.stop()) // open SSE streams would block close()
 
+  // Also what deploy/autodeploy.sh last did and the public key to encrypt
+  // keys for this server with — so both can be checked from outside.
   app.get('/api/health', async () => {
     await pool.query('SELECT 1')
-    return { ok: true }
+    const [deploy, opsKey] = await Promise.all([
+      readFile(join(config.stateDir, 'deploy.json'), 'utf8').then(JSON.parse).catch(() => undefined),
+      readFile(join(config.stateDir, 'ops-key.pub.pem'), 'utf8').catch(() => undefined),
+    ])
+    return { ok: true, deploy, opsKey }
   })
 
   initTenantConfig(pool) // the former Vercel functions read settings and documents through it

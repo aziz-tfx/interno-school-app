@@ -160,6 +160,21 @@ docker compose exec -T db pg_restore --clean --if-exists -U interno -d interno <
 bash /opt/interno/server/deploy/update.sh     # свежий код ветки, пересборка, проверка
 ```
 
+### Автообновление (без терминала)
+Один раз:
+```bash
+bash /opt/interno/server/deploy/autodeploy.sh install
+```
+Дальше сервер каждые 2 минуты сам проверяет GitHub: новые коммиты ветки → `update.sh`, затем каждая новая
+разовая задача из `deploy/ops/*.sh` выполняется один раз (смена домена, новые ключи — всё приходит кодом).
+Итог виден снаружи в `GET /api/health` (`deploy`: коммит, результат обновления, задачи с кодом выхода);
+журнал — `/var/log/interno-autodeploy.log`. Ключи передаются зашифрованными открытым ключом сервера
+(`opsKey` в `/api/health`); расшифровать их может только сервер (`deploy/apply-secrets.sh`).
+
+**Важно:** всё, что попадает в отслеживаемую ветку, выполняется на сервере от root. Держите доступ к
+репозиторию закрытым, включите двухфакторный вход в GitHub; выключить —
+`systemctl disable --now interno-autodeploy.timer`.
+
 ### 6а. Домен API
 DNS `internoedu.uz` ведётся в Vercel: запись `api` → IP сервера. Перевести API на домен (старый адрес продолжает
 работать, пока фронтенд не переключён):
