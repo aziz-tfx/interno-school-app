@@ -42,6 +42,8 @@ After=docker.service network-online.target
 
 [Service]
 Type=oneshot
+# a hung run would hold the timer forever (it waits for the run to end)
+TimeoutStartSec=45min
 ExecStart=/bin/bash -c 'cp $SRV/deploy/autodeploy.sh /run/interno-autodeploy.sh && exec /bin/bash /run/interno-autodeploy.sh run'
 EOF
   cat > /etc/systemd/system/interno-autodeploy.timer <<'EOF'
@@ -79,7 +81,7 @@ run() {
   cd "$APP"
   local branch update=unchanged
   branch=$(git rev-parse --abbrev-ref HEAD)
-  if ! git fetch -q origin "$branch" 2>>"$LOG"; then
+  if ! timeout 120 git fetch -q origin "$branch" 2>>"$LOG"; then
     log "fetch failed"
     write_state "fetch-failed"
     exit 0
@@ -89,7 +91,7 @@ run() {
     # Check out first, so update.sh runs as the new version from start to
     # end (its own `git checkout` would otherwise rewrite it mid-run).
     git checkout -q -B "$branch" "origin/$branch"
-    if bash "$SRV/deploy/update.sh" >> "$LOG" 2>&1; then update=ok; else update=failed; log "update failed"; fi
+    if timeout 30m bash "$SRV/deploy/update.sh" >> "$LOG" 2>&1; then update=ok; else update=failed; log "update failed"; fi
   fi
 
   # One-off tasks: each runs once. A failed one is not retried — a fix
@@ -101,7 +103,7 @@ run() {
     echo "$name" >> "$OPS_DONE"
     log "op $name: start"
     set +e
-    (cd "$SRV" && bash "$op") >> "$LOG" 2>&1
+    (cd "$SRV" && timeout 10m bash "$op") >> "$LOG" 2>&1
     code=$?
     set -e
     log "op $name: exit $code"
