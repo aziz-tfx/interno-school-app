@@ -62,11 +62,13 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
   // keys for this server with — so both can be checked from outside.
   app.get('/api/health', async () => {
     await pool.query('SELECT 1')
-    const [deploy, opsKey] = await Promise.all([
+    const [deploy, opsKey, diag] = await Promise.all([
       readFile(join(config.stateDir, 'deploy.json'), 'utf8').then(JSON.parse).catch(() => undefined),
       readFile(join(config.stateDir, 'ops-key.pub.pem'), 'utf8').catch(() => undefined),
+      // written by a deploy/ops task: only set/not set, statuses and counts
+      readFile(join(config.stateDir, 'diag.json'), 'utf8').then(JSON.parse).catch(() => undefined),
     ])
-    return { ok: true, deploy, opsKey }
+    return { ok: true, deploy, opsKey, diag }
   })
 
   initTenantConfig(pool) // the former Vercel functions read settings and documents through it
