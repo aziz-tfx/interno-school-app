@@ -1227,7 +1227,7 @@ export default function LMSGroupView() {
 
       {activeTab === 'students' && canEdit && (
         <div className="glass-card rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="table-cards w-full text-sm">
             <thead>
               <tr className="bg-white/40 border-b border-white/30">
                 <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('lms.table_student')}</th>
@@ -1239,8 +1239,8 @@ export default function LMSGroupView() {
             <tbody>
               {groupStudents.map(s => (
                 <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="py-3 px-4 font-medium text-slate-900">{s.name}</td>
-                  <td className="py-3 px-4 text-slate-500">{s.phone || '—'}</td>
+                  <td data-card="title" className="py-3 px-4 font-medium text-slate-900">{s.name}</td>
+                  <td data-card="wide" className="py-3 px-4 text-slate-500">{s.phone || '—'}</td>
                   <td className="py-3 px-4 text-center">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${s.learningFormat === 'Онлайн' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
                       {s.learningFormat || t('lms.format_offline')}

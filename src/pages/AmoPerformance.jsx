@@ -160,7 +160,7 @@ function ResponseTimesBlock({ data, prevData }) {
       {/* Таблица по менеджерам */}
       {usersSorted.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="table-cards table-cards-3 table-cards-flush w-full text-xs">
             <thead>
               <tr className="text-slate-500 border-b border-slate-100">
                 <th className="text-left px-2 py-2 font-medium">Менеджер</th>
@@ -176,7 +176,7 @@ function ResponseTimesBlock({ data, prevData }) {
             <tbody>
               {usersSorted.map(u => (
                 <tr key={u.userId} className="border-b border-slate-50 hover:bg-slate-50/40">
-                  <td className="text-left px-2 py-2 font-medium text-slate-800">{u.userName}</td>
+                  <td data-card="title" className="text-left px-2 py-2 font-medium text-slate-800">{u.userName}</td>
                   <td className="text-right px-2 py-2 text-slate-600">{u.totalLeads}</td>
                   <td className={`text-right px-2 py-2 font-semibold ${responseTimeColor(u.avgMinutes)}`}>
                     {formatMinutes(u.avgMinutes)}
@@ -332,7 +332,7 @@ function TelephonyBlock({ data }) {
 
       {rows.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="table-cards table-cards-3 table-cards-flush w-full text-xs">
             <thead>
               <tr className="text-slate-500 border-b border-slate-100">
                 <th className="text-left px-2 py-2 font-medium">Добавочный</th>
@@ -349,7 +349,7 @@ function TelephonyBlock({ data }) {
             <tbody>
               {rows.map(b => (
                 <tr key={b.ext} className="border-b border-slate-50 hover:bg-slate-50/40">
-                  <td className="text-left px-2 py-2 font-semibold text-slate-800">{b.ext}</td>
+                  <td data-card="title" className="text-left px-2 py-2 font-semibold text-slate-800">{b.ext}</td>
                   <td className="text-right px-2 py-2 text-slate-700">{b.totalCalls}</td>
                   <td className="text-right px-2 py-2 text-blue-700">{b.incoming}</td>
                   <td className="text-right px-2 py-2 text-emerald-700">{b.outgoing}</td>
@@ -1016,7 +1016,7 @@ export default function AmoPerformance() {
             {isOpen && (
               <div className="p-4">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="table-cards table-cards-3 table-cards-flush w-full text-xs">
                     <thead>
                       <tr className="text-slate-500 border-b border-slate-100">
                         <th className="text-left px-2 py-2 font-medium sticky left-0 bg-white min-w-[260px]">Показатель</th>
@@ -1045,7 +1045,7 @@ export default function AmoPerformance() {
 
                         return (
                           <tr key={row.key} className={`border-b border-slate-50 ${row.derived ? 'bg-slate-50/40' : 'hover:bg-slate-50/40'}`}>
-                            <td className={`text-left px-2 py-2 sticky left-0 bg-white ${row.derived ? 'text-slate-500 italic pl-4' : 'text-slate-700 font-medium'}`}>
+                            <td data-card="title" className={`text-left px-2 py-2 sticky left-0 bg-white ${row.derived ? 'text-slate-500 italic pl-4' : 'text-slate-700 font-medium'}`}>
                               {row.label}
                             </td>
                             <td className="text-right px-2 py-2 text-slate-500">{fv(planVal)}</td>

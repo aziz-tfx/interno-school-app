@@ -1,13 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import MobileTabBar from './MobileTabBar'
 import StaffOnboarding from './StaffOnboarding'
+import { useTableCardLabels } from '../utils/tableCards'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
+  const mainRef = useRef(null)
+  // .table-cards tables turn into cards on phones; captions come from <thead>
+  useTableCardLabels(mainRef)
 
   // Floating UI (toasts, banners, chat buttons) sits above the bottom tab
   // bar on phones — see --tabbar-h in index.css.
@@ -24,7 +28,7 @@ export default function Layout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <Header />
-        <main className="app-main flex-1 min-w-0 overflow-y-auto overscroll-contain px-3 pt-3 sm:px-4 sm:pt-4 md:p-6">
+        <main ref={mainRef} className="app-main flex-1 min-w-0 overflow-y-auto overscroll-contain px-3 pt-3 sm:px-4 sm:pt-4 md:p-6">
           {/* key forces remount on route change → page-in animation */}
           <div key={location.pathname} className="page-transition">
             <Outlet />

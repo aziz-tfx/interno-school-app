@@ -99,7 +99,7 @@ export default function CrmContacts({ staff, people, onOpenContact }) {
         <>
           <p className="text-sm text-slate-500 px-1">Найдено: {total}</p>
           <div className="glass-card rounded-2xl overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="table-cards w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-slate-500 border-b border-slate-100">
                   {th('Имя', 'name')}{th('Телефон')}{th('Сделки')}{th('Ответственный')}{th('Активность', 'activity')}{th('Добавлен', 'created')}
@@ -109,7 +109,7 @@ export default function CrmContacts({ staff, people, onOpenContact }) {
                 {items.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-400">Контактов не найдено</td></tr>}
                 {items.map(c => (
                   <tr key={c.id} onClick={() => onOpenContact(c.id)} className="border-b border-slate-50 hover:bg-white/60 cursor-pointer">
-                    <td className="p-3">
+                    <td data-card="title" className="p-3">
                       <span className="font-medium text-slate-800">{c.name || 'Без имени'}</span>
                       {c.studentId && (
                         <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5 align-middle">

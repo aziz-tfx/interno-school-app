@@ -135,7 +135,7 @@ export default function CrmAnalytics({ pipeline, people }) {
             {report.byResponsible.length === 0 ? (
               <p className="text-sm text-slate-400">Заявок за период нет</p>
             ) : (
-              <table className="w-full text-sm min-w-[520px]">
+              <table className="table-cards table-cards-3 table-cards-flush w-full text-sm min-w-[520px]">
                 <thead>
                   <tr className="text-xs text-slate-400 text-left">
                     <th className="font-medium pb-2">Менеджер</th>
@@ -149,7 +149,7 @@ export default function CrmAnalytics({ pipeline, people }) {
                 <tbody className="divide-y divide-slate-100">
                   {report.byResponsible.map(r => (
                     <tr key={r.responsibleId || 'none'}>
-                      <td className="py-2 text-slate-800">{r.name || people[r.responsibleId]?.name || 'Не назначен'}</td>
+                      <td data-card="title" className="py-2 text-slate-800">{r.name || people[r.responsibleId]?.name || 'Не назначен'}</td>
                       <td className="py-2 text-right tabular-nums">{r.created}</td>
                       <td className="py-2 text-right tabular-nums">{r.won}</td>
                       <td className="py-2 text-right tabular-nums">{r.created ? Math.round((r.won / r.created) * 1000) / 10 : 0}%</td>
@@ -167,7 +167,7 @@ export default function CrmAnalytics({ pipeline, people }) {
               <div className="glass-card rounded-2xl p-4 md:p-5 overflow-x-auto">
                 <p className="text-sm font-semibold text-slate-800 mb-3">Источники</p>
                 {insights.sources.length === 0 ? <p className="text-sm text-slate-400">Заявок за период нет</p> : (
-                  <table className="w-full text-sm min-w-[420px]">
+                  <table className="table-cards table-cards-3 table-cards-flush w-full text-sm min-w-[420px]">
                     <thead>
                       <tr className="text-xs text-slate-400 text-left">
                         <th className="font-medium pb-2">Источник</th>
@@ -182,7 +182,7 @@ export default function CrmAnalytics({ pipeline, people }) {
                         const src = sourceMeta(r.source)
                         return (
                           <tr key={r.source || 'none'}>
-                            <td className="py-2"><span className={`text-xs font-medium rounded-full px-2 py-0.5 ${src.color}`}>{r.source ? src.label : 'Не указан'}</span></td>
+                            <td data-card="title" className="py-2"><span className={`text-xs font-medium rounded-full px-2 py-0.5 ${src.color}`}>{r.source ? src.label : 'Не указан'}</span></td>
                             <td className="py-2 text-right tabular-nums">{r.created}</td>
                             <td className="py-2 text-right tabular-nums">{r.won}</td>
                             <td className="py-2 text-right tabular-nums">{r.conversion}%</td>
@@ -219,7 +219,7 @@ export default function CrmAnalytics({ pipeline, people }) {
               <p className="text-sm font-semibold text-slate-800 mb-1">Активность менеджеров</p>
               <p className="text-xs text-slate-400 mb-3">Что сделано за период по сделкам этой воронки</p>
               {insights.activity.length === 0 ? <p className="text-sm text-slate-400">Действий за период нет</p> : (
-                <table className="w-full text-sm min-w-[720px]">
+                <table className="table-cards table-cards-3 table-cards-flush w-full text-sm min-w-[720px]">
                   <thead>
                     <tr className="text-xs text-slate-400 text-left">
                       <th className="font-medium pb-2">Менеджер</th>
@@ -236,7 +236,7 @@ export default function CrmAnalytics({ pipeline, people }) {
                   <tbody className="divide-y divide-slate-100">
                     {insights.activity.map(r => (
                       <tr key={r.employeeId}>
-                        <td className="py-2 text-slate-800">{r.name || people[r.employeeId]?.name || '—'}</td>
+                        <td data-card="title" className="py-2 text-slate-800">{r.name || people[r.employeeId]?.name || '—'}</td>
                         <td className="py-2 text-right tabular-nums">{r.callsOut}</td>
                         <td className="py-2 text-right tabular-nums">{r.callsIn}</td>
                         <td className="py-2 text-right tabular-nums">{minutes(r.talkSec / 60)}</td>

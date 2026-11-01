@@ -108,7 +108,7 @@ export default function Teachers() {
         <div className="glass-card rounded-2xl p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">{t('teachers.summary_title')}</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="table-cards table-cards-3 w-full text-sm">
               <thead>
                 <tr className="bg-white/40 border-b border-white/30">
                   <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('teachers.th_branch')}</th>
@@ -126,7 +126,7 @@ export default function Teachers() {
                   const avgRating = bt.length > 0 ? (bt.reduce((s, t) => s + t.rating, 0) / bt.length).toFixed(1) : '—'
                   return (
                     <tr key={branch.id} className="border-b border-slate-50">
-                      <td className="py-3 px-4 font-medium">{branch.name}</td>
+                      <td data-card="title" className="py-3 px-4 font-medium">{branch.name}</td>
                       <td className="py-3 px-4 text-center">{bt.length}</td>
                       <td className="py-3 px-4 text-center hidden md:table-cell">{bt.reduce((s, t) => s + t.groups, 0)}</td>
                       <td className="py-3 px-4 text-center hidden md:table-cell">{bt.reduce((s, t) => s + t.students, 0)}</td>

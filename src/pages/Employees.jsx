@@ -322,7 +322,7 @@ export default function Employees() {
           {/* Table */}
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-cards w-full text-sm">
                 <thead>
                   <tr className="bg-white/40 border-b border-white/30">
                     {canDelete && (
@@ -344,13 +344,13 @@ export default function Employees() {
                   {filtered.map(emp => (
                     <tr key={emp.id} className={`border-b border-slate-50 hover:bg-blue-50/30 transition-colors ${selectedIds.includes(emp.id) ? 'bg-blue-50/50' : ''}`}>
                       {canDelete && (
-                        <td className="py-3 px-2">
+                        <td data-card="select" className="py-3 px-2">
                           <button onClick={() => toggleSelect(emp.id)} className="text-slate-400 hover:text-slate-600">
                             {selectedIds.includes(emp.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                           </button>
                         </td>
                       )}
-                      <td className="py-3 px-4">
+                      <td data-card="title" className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 ${ROLE_COLORS[emp.role] || 'bg-slate-500'} rounded-full flex items-center justify-center text-white text-xs font-bold`}>
                             {emp.avatar || '?'}
@@ -372,7 +372,7 @@ export default function Employees() {
                         <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-mono">{emp.login}</span>
                       </td>
                       <td className="py-3 px-4 text-slate-500 hidden lg:table-cell">{emp.phone || '—'}</td>
-                      <td className="py-3 px-4 text-center">
+                      <td data-card="actions" className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
                           {canEdit && (
                             <button onClick={() => handleEdit(emp)}

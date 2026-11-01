@@ -501,7 +501,7 @@ export default function Students() {
           {/* Table */}
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-cards w-full text-sm">
                 <thead>
                   <tr className="bg-white/40 border-b border-white/30">
                     {canEdit && (
@@ -531,13 +531,13 @@ export default function Students() {
                         className={`border-b border-slate-50 hover:bg-blue-50/30 transition-colors cursor-pointer ${selectedIds.has(student.id) ? 'bg-blue-50/50' : ''}`}
                         onClick={() => setProfileStudent(student)}>
                         {canEdit && (
-                          <td className="py-3 px-2 w-8" onClick={(e) => e.stopPropagation()}>
+                          <td data-card="select" className="py-3 px-2 w-8" onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => toggleSelect(student.id)} className="text-slate-400 hover:text-blue-600 transition-colors">
                               {selectedIds.has(student.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                             </button>
                           </td>
                         )}
-                        <td className="py-3 px-4">
+                        <td data-card="title" className="py-3 px-4">
                           <p className="font-medium text-slate-900">{student.name}</p>
                           <p className="text-xs text-slate-400">
                             {student.course || '—'}
@@ -596,7 +596,7 @@ export default function Students() {
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td data-card="actions" className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={(e) => { e.stopPropagation(); setProfileStudent(student) }}
                               className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title={t('students.tooltip_profile')}>

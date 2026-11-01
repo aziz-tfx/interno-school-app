@@ -113,7 +113,7 @@ export default function Attendance() {
       {activeGroup && groupStudents.length > 0 ? (
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="table-cards w-full text-sm">
               <thead>
                 <tr className="bg-white/40 border-b border-white/30">
                   <th className="text-left py-3 px-4 text-slate-500 font-medium w-8">{t('attendance.th_number')}</th>
@@ -129,8 +129,8 @@ export default function Attendance() {
                   const stats = getAttendanceStats(student.id)
                   return (
                     <tr key={student.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4 text-slate-400">{idx + 1}</td>
-                      <td className="py-3 px-4">
+                      <td data-card="hide" className="py-3 px-4 text-slate-400">{idx + 1}</td>
+                      <td data-card="title" className="py-3 px-4">
                         <p className="font-medium text-slate-900">{student.name}</p>
                         <p className="text-xs text-slate-400">{student.phone}</p>
                       </td>
@@ -147,7 +147,7 @@ export default function Attendance() {
                           <span className="text-xs text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="py-4 px-4">
+                      <td data-card="wide" className="py-4 px-4">
                         <div className="flex items-center justify-center gap-2">
                           {Object.entries(statusIcons).map(([status, { icon: Icon, color, label }]) => {
                             const isMarked = currentStatus === status
@@ -157,7 +157,7 @@ export default function Attendance() {
                                 key={status}
                                 onClick={() => canChange && handleMark(student.id, status)}
                                 disabled={!canChange}
-                                className={`flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-2 md:px-3 py-2 md:py-1.5 rounded-lg text-xs font-medium border transition-all ${
                                   isMarked
                                     ? `${color} border-current shadow-sm scale-105`
                                     : canChange
@@ -166,7 +166,7 @@ export default function Attendance() {
                                 }`}
                               >
                                 <Icon size={14} />
-                                <span className="hidden md:inline">{label}</span>
+                                <span className="hidden min-[380px]:inline md:inline">{label}</span>
                               </button>
                             )
                           })}

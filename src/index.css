@@ -632,3 +632,106 @@ html:not(.has-tabbar) .ai-chat-float { bottom: calc(env(safe-area-inset-bottom) 
   .modal-body form .grid.grid-cols-2:not(.keep-cols) { grid-template-columns: minmax(0, 1fr); }
   .modal-body form .grid.grid-cols-2:not(.keep-cols) > .col-span-2 { grid-column: auto; }
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+   Card view of list tables on phones — <table className="table-cards">.
+   Captions (data-label) are filled from <thead> by utils/tableCards.js;
+   cell roles via data-card="title|select|actions|wide|hide".
+   ──────────────────────────────────────────────────────────────────────── */
+:root {
+  --tcard-bg: rgba(255, 255, 255, 0.78);
+  --tcard-border: rgba(148, 163, 184, 0.22);
+  --tcard-label: #94a3b8;
+}
+html.dark {
+  --tcard-bg: rgba(255, 255, 255, 0.045);
+  --tcard-border: rgba(255, 255, 255, 0.09);
+  --tcard-label: #7c7f9a;
+}
+
+@media (max-width: 767px) {
+  table.table-cards { display: block; width: 100%; min-width: 0 !important; }
+  table.table-cards > thead { display: none; }
+  table.table-cards > tbody { display: flex; flex-direction: column; gap: 0.625rem; padding: 0.625rem; }
+  table.table-cards.table-cards-flush > tbody { padding: 0; }
+
+  table.table-cards > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.625rem 0.875rem;
+    position: relative;
+    padding: 0.875rem;
+    border-radius: 1rem;
+    border: 1px solid var(--tcard-border) !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  /* zero specificity: row utilities (selected / highlighted rows) still win */
+  :where(table.table-cards > tbody > tr) { background: var(--tcard-bg); }
+  table.table-cards.table-cards-3 > tbody > tr { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  table.table-cards > tbody > tr > td {
+    display: flex !important;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 0.125rem;
+    min-width: 0;
+    max-width: none !important;
+    padding: 0 !important;
+    border: 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    position: static !important;
+    background: transparent !important;
+  }
+  table.table-cards > tbody > tr > td::before {
+    content: attr(data-label);
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    font-weight: 500;
+    color: var(--tcard-label);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  table.table-cards > tbody > tr > td[data-label=""]::before,
+  table.table-cards > tbody > tr > td:not([data-label])::before { content: none; display: none; }
+  /* centred / right-aligned cell contents read left-aligned under a caption */
+  table.table-cards > tbody > tr > td > :where(.justify-center, .justify-end) { justify-content: flex-start; }
+  table.table-cards > tbody > tr > td > :where(.text-center, .text-right) { text-align: left; }
+
+  /* roles */
+  table.table-cards > tbody > tr > td[data-card="title"] {
+    grid-column: 1 / -1;
+    order: -1;
+    padding-right: 1.75rem !important;
+    font-size: 0.9375rem;
+  }
+  table.table-cards > tbody > tr > td[data-card="title"]::before { content: none; display: none; }
+  table.table-cards > tbody > tr > td[data-card="select"] {
+    position: absolute !important;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    z-index: 1;
+  }
+  table.table-cards > tbody > tr > td[data-card="select"]::before { content: none; display: none; }
+  table.table-cards > tbody > tr > td[data-card="actions"] {
+    grid-column: 1 / -1;
+    order: 99;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    padding-top: 0.5rem !important;
+    border-top: 1px solid var(--tcard-border) !important;
+  }
+  table.table-cards > tbody > tr > td[data-card="actions"]::before { content: none; display: none; }
+  table.table-cards > tbody > tr > td[data-card="actions"] > :where(.justify-center, .justify-start) { justify-content: flex-end; }
+  table.table-cards > tbody > tr > td[data-card="wide"],
+  table.table-cards > tbody > tr > td[colspan] { grid-column: 1 / -1; }
+  table.table-cards > tbody > tr > td[data-card="wide"] > * { width: 100%; }
+  table.table-cards > tbody > tr > td[data-card="hide"] { display: none !important; }
+  /* single full-row cells: empty states and expandable details */
+  table.table-cards > tbody > tr:has(> td[colspan]:only-child) { display: block; }
+  table.table-cards > tbody > tr > td[colspan]:only-child { align-items: stretch; text-align: center !important; }
+}

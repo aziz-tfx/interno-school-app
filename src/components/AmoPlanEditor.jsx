@@ -122,7 +122,7 @@ export default function AmoPlanEditor({ isOpen, onClose, month, users, onSaved }
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-cards w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 text-xs text-slate-500">
                     <th className="text-left px-3 py-2 sticky left-0 bg-slate-50">Менеджер</th>
@@ -140,7 +140,7 @@ export default function AmoPlanEditor({ isOpen, onClose, month, users, onSaved }
                   )}
                   {users.map(u => (
                     <tr key={u.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2 font-medium text-slate-700 sticky left-0 bg-white">{u.name}</td>
+                      <td data-card="title" className="px-3 py-2 font-medium text-slate-700 sticky left-0 bg-white">{u.name}</td>
                       {METRIC_FIELDS.map(f => (
                         <td key={f.key} className="px-1 py-1">
                           <input
@@ -152,7 +152,7 @@ export default function AmoPlanEditor({ isOpen, onClose, month, users, onSaved }
                           />
                         </td>
                       ))}
-                      <td className="px-1">
+                      <td data-card="select" className="px-1">
                         {users.find(o => o.id !== u.id && plans[o.id]) && (
                           <button
                             onClick={() => {

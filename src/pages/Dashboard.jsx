@@ -152,7 +152,7 @@ function BranchScoreRow({ branch, students, teachers, payments, rank, t }) {
 
   return (
     <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-      <td className="py-4 px-4">
+      <td data-card="title" className="py-4 px-4">
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${
             rank === 0 ? 'from-amber-400 to-amber-500' : rank === 1 ? 'from-slate-300 to-slate-400' : 'from-orange-300 to-orange-400'
@@ -837,7 +837,7 @@ export default function Dashboard() {
               <p className="text-xs text-slate-400">{t('dashboard.scoreboard_subtitle')}</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-cards table-cards-3 w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100">
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.th_branch')}</th>

@@ -155,7 +155,12 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
         </div>
       ) : (
         <div className="flex items-center justify-between px-1">
-          <p className="text-sm text-slate-500">Найдено: {total}</p>
+          <div className="flex items-center gap-3">
+            <label className="md:hidden flex items-center gap-1.5 text-sm text-slate-500">
+              <input type="checkbox" checked={pageAllSelected} onChange={togglePage} /> Все
+            </label>
+            <p className="text-sm text-slate-500">Найдено: {total}</p>
+          </div>
           {isManager && total > 0 && (
             <button onClick={exportCsv} disabled={busy}
               className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900 disabled:opacity-50">
@@ -167,7 +172,7 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
 
       {/* Table */}
       <div className="glass-card rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="table-cards w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-100">
               <th className="p-3 w-8"><input type="checkbox" checked={pageAllSelected} onChange={togglePage} aria-label="Выбрать страницу" /></th>
@@ -194,8 +199,8 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
               const checked = allMatching || selected.has(lead.id)
               return (
                 <tr key={lead.id} className={`border-b border-slate-50 hover:bg-white/60 ${checked ? 'bg-blue-50/50' : ''}`}>
-                  <td className="p-3"><input type="checkbox" checked={checked} onChange={() => toggle(lead.id)} /></td>
-                  <td className="p-3 max-w-[280px]">
+                  <td data-card="select" className="p-3"><input type="checkbox" checked={checked} onChange={() => toggle(lead.id)} aria-label="Выбрать сделку" /></td>
+                  <td data-card="title" className="p-3 max-w-[280px]">
                     <button onClick={() => onOpenLead(lead.id)} className="text-left">
                       <p className="font-medium text-slate-800 hover:text-blue-700 truncate">{lead.title || lead.contact?.name || 'Без названия'}</p>
                       <p className="text-xs text-slate-500 truncate">
