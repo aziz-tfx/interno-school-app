@@ -38,6 +38,9 @@ export function loadConfig(env = process.env) {
     logLevel: env.LOG_LEVEL || (isTest ? 'silent' : 'info'),
     // https://<API_DOMAIN> — the address Telegram posts bot updates to
     publicUrl: env.PUBLIC_URL || (env.API_DOMAIN ? `https://${env.API_DOMAIN}` : ''),
+    // https://<frontend> — what the bot's menu button opens as a Telegram
+    // mini app. Optional: the Integrations page sends its own origin.
+    appUrl: env.APP_URL || '',
     // Daily automations (Telegram payment reminders, debtor status, LMS
     // blocking) at 14:00 Tashkent. Off until the switch from Firebase: while
     // the old Vercel cron still runs, both would message the same people.

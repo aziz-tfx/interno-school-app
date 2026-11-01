@@ -215,10 +215,10 @@ export default function Crm() {
         </div>
       </div>
 
-      <div className="flex gap-1 glass rounded-xl p-1">
+      <div className="flex gap-1 glass rounded-xl p-1 overflow-x-auto no-scrollbar">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setParam('tab', t.id === 'board' ? '' : t.id)}
-            className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${
+            className={`shrink-0 sm:shrink sm:flex-1 px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
               tab === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}>
             <t.icon size={16} /> {t.label}

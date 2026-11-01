@@ -23,8 +23,11 @@ const BLOCKED_STATUS_MESSAGES = {
 /** Employee row → the user object the frontend works with (no secrets). */
 export function publicUser(row) {
   const { password, ...data } = row.data || {}
-  return { ...data, _docId: row.id, tenantId: row.tenant_id }
+  return { ...data, _docId: row.id, tenantId: row.tenant_id, telegramLinked: row.telegram_user_id != null }
 }
+
+/** Why a status keeps someone out ('' when they may sign in). */
+export const blockedStatusMessage = (status) => BLOCKED_STATUS_MESSAGES[status] || ''
 
 /**
  * Check credentials. Returns { user, row } or { error, status }.

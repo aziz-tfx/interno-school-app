@@ -392,22 +392,22 @@ export default function Students() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 bg-white/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div className="flex items-center gap-2">
-              <Filter size={16} className="text-slate-400" />
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <Filter size={16} className="text-slate-400 hidden sm:block" />
               {user.branch === 'all' && (
                 <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
-                  className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="flex-1 min-w-[8rem] sm:flex-none bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="all">{t('students.filter_all_branches')}</option>
                   {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               )}
               <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}
-                className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="flex-1 min-w-[8rem] sm:flex-none bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">{t('students.filter_all_groups')}</option>
                 {uniqueGroups.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                className="flex-1 min-w-[8rem] sm:flex-none bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">{t('students.filter_all_statuses')}</option>
                 <option value="active">{t('students.filter_active')}</option>
                 <option value="debtor">{t('students.filter_debtors')}</option>

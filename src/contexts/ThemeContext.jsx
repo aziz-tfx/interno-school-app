@@ -24,6 +24,10 @@ export function ThemeProvider({ children }) {
     const root = document.documentElement
     root.classList.toggle('dark', theme === 'dark')
     root.dataset.theme = theme
+    // Browser / PWA chrome follows the app theme, not just the OS one
+    document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
+      m.setAttribute('content', theme === 'dark' ? '#0a0614' : '#f5f6f8')
+    })
     try { localStorage.setItem(STORAGE_KEY, theme) } catch (_e) { /* ignore */ }
   }, [theme])
 

@@ -52,6 +52,14 @@ html.dark {
   --glass-border-dim: rgba(255, 255, 255, 0.14);
 }
 
+/* The gradient edge (::before) needs a positioned box. Kept in the base
+   layer at zero specificity so `fixed` / `sticky` / `absolute` utilities
+   on the same element win — as a utility it silently turned the mobile
+   sidebar (fixed + glass-dark) back into an in-flow 288px column. */
+@layer base {
+  :where(.glass, .glass-strong, .glass-card, .glass-btn, .glass-dark) { position: relative; }
+}
+
 @layer utilities {
   .glass, .glass-strong, .glass-card, .glass-btn, .glass-dark {
     background: var(--glass-bg);
@@ -60,7 +68,6 @@ html.dark {
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border: none;
     box-shadow: inset 0 1px 1px var(--glass-shadow-inset);
-    position: relative;
   }
 
   /* Gradient edge — bright at the top/bottom rims, dissolving mid-way */
@@ -547,4 +554,81 @@ html.dark .skeleton {
 /* Hover-lift shadow in dark mode */
 html.dark .hover-lift:hover {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(139, 92, 246, 0.08);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   Mobile & Telegram Mini App
+   ──────────────────────────────────────────────────────────────────────── */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+button, a, [role="button"] { touch-action: manipulation; }
+
+/* Full-height shell: dynamic viewport units follow the mobile browser's
+   collapsing toolbars; Telegram reports its own stable height. */
+.app-shell { height: 100vh; height: 100dvh; }
+html.tg-webapp .app-shell { height: var(--tg-viewport-stable-height, 100dvh); }
+
+/* Notch / home indicator */
+.app-header { padding-top: env(safe-area-inset-top); }
+html.tg-webapp .app-header {
+  padding-top: max(env(safe-area-inset-top), calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)));
+}
+
+/* Bottom tab bar (MobileTabBar): its height incl. the home indicator.
+   Floating UI uses --tabbar-h to stay above it; 0 on desktop. */
+:root { --tabbar-h: 0px; }
+html.has-tabbar { --tabbar-h: calc(3.75rem + 0.25rem + env(safe-area-inset-bottom)); }
+@media (min-width: 768px) {
+  html.has-tabbar { --tabbar-h: 0px; }
+}
+.mobile-tabbar { padding-bottom: env(safe-area-inset-bottom); }
+.app-main { padding-bottom: calc(var(--tabbar-h) + 1rem); }
+@media (min-width: 768px) {
+  .app-main { padding-bottom: 1.5rem; }
+}
+/* Toasts / banners / floating buttons: bottom offset that clears the bar */
+.bottom-safe { bottom: calc(var(--tabbar-h) + 1rem); }
+html:not(.has-tabbar) .bottom-safe { bottom: calc(env(safe-area-inset-bottom) + 1rem); }
+
+@media (max-width: 767px) {
+  /* iOS zooms into inputs with font-size < 16px — keep the layout still */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  /* Wide tables scroll inside their own box, never the whole page */
+  .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+  /* Thinner glass on phones: backdrop blur is expensive on mid-range Android */
+  :root { --glass-blur: 10px; }
+}
+
+/* Fixed backgrounds repaint on every scroll frame in mobile webviews */
+@media (max-width: 767px) {
+  body, html.dark body { background-attachment: scroll; }
+}
+
+/* Floating AI chat (AIChat mode="floating"): above its round button */
+.ai-chat-float {
+  bottom: calc(var(--tabbar-h) + 5.5rem);
+  height: min(520px, calc(100dvh - var(--tabbar-h) - 8rem));
+}
+html:not(.has-tabbar) .ai-chat-float { bottom: calc(env(safe-area-inset-bottom) + 6rem); }
+
+/* Horizontally scrollable rows (tab bars, chips) without a visible bar */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Phone-width forms in dialogs: one field per row instead of two cramped
+   columns (selects and phone numbers got cut off at 360–390px). */
+@media (max-width: 479px) {
+  .modal-body form .grid.grid-cols-2:not(.keep-cols) { grid-template-columns: minmax(0, 1fr); }
+  .modal-body form .grid.grid-cols-2:not(.keep-cols) > .col-span-2 { grid-column: auto; }
 }

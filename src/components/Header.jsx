@@ -1,10 +1,12 @@
-import { Bell, Shield, Menu } from 'lucide-react'
+import { Bell, Shield } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import Logo from './Logo'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import GlobalSearch from './GlobalSearch'
 
-export default function Header({ onMenuClick }) {
+export default function Header() {
   const { user, getRoleLabel } = useAuth()
   const { getDebtors, getBranchName } = useData()
   const { t, language, setLanguage } = useLanguage()
@@ -20,19 +22,21 @@ export default function Header({ onMenuClick }) {
   const debtorCount = getDebtors(user?.branch).length
 
   return (
-    <header className="h-14 md:h-16 glass-strong sticky top-0 z-30 flex items-center justify-between px-3 md:px-6 shrink-0">
-      <div className="flex items-center gap-2 md:gap-4">
-        <button onClick={onMenuClick} className="p-2 hover:bg-white/60 rounded-xl md:hidden transition-colors">
-          <Menu size={20} className="text-slate-600" />
-        </button>
-        <p className="text-xs md:text-sm text-slate-500 capitalize truncate">{today}</p>
+    <header className="app-header glass-strong sticky top-0 z-30 shrink-0">
+      <div className="h-14 md:h-16 flex items-center justify-between gap-2 px-3 md:px-6">
+        <div className="flex items-center gap-2 md:gap-4 min-w-0">
+        {/* Phones: the logo (the tab bar has the menu); desktop: today's date */}
+        <Link to="/" className="md:hidden shrink-0" aria-label="На главную">
+          <Logo size="sm" variant="auto" className="!justify-start [&_img]:w-24" />
+        </Link>
+        <p className="hidden md:block text-sm text-slate-500 capitalize truncate">{today}</p>
         {user?.branch !== 'all' && (
           <span className="hidden md:inline text-xs bg-blue-500/10 text-blue-700 px-2.5 py-1 rounded-full font-medium backdrop-blur-sm">
             {getBranchName(user.branch)}
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 md:gap-3">
+      <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
         <GlobalSearch />
 
         {/* RU / UZ Language Toggle */}
@@ -59,7 +63,7 @@ export default function Header({ onMenuClick }) {
           </button>
         </div>
 
-        <button className="relative p-2.5 glass-btn rounded-xl transition-all" title={`${debtorCount} ${t('header.debtors_tooltip')}`}>
+        <button className="relative p-2 md:p-2.5 glass-btn rounded-xl transition-all" title={`${debtorCount} ${t('header.debtors_tooltip')}`}>
           <Bell size={18} className="text-slate-600" />
           {debtorCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1 shadow-lg shadow-red-200">
@@ -71,6 +75,7 @@ export default function Header({ onMenuClick }) {
           <Shield size={12} />
           {getRoleLabel()}
         </div>
+      </div>
       </div>
     </header>
   )

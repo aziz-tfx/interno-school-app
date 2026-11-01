@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { db } from '../firebase'
 import {
   collection,
@@ -17,6 +17,7 @@ import { setApiTenantId as setAmoTenantId } from '../utils/amocrm'
 import { setApiTenantId as setTgTenantId } from '../utils/telegram'
 import { USE_SERVER, api, getToken, setToken } from '../backend/api'
 import { live } from '../backend/serverStore'
+import { isInTelegram, getInitData, getLaunchTenantId, autoLoginAllowed, skipAutoLogin, allowAutoLogin } from '../utils/telegramWebApp'
 
 const AuthContext = createContext(null)
 
@@ -276,6 +277,11 @@ export function AuthProvider({ children }) {
   const [customPermissions, setCustomPermissions] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // Opened from the school bot without a session: sign in with Telegram's
+  // signed initData before showing the login form (see telegramWebApp.js).
+  const [telegramAuthPending, setTelegramAuthPending] = useState(
+    () => USE_SERVER && !getToken() && isInTelegram() && autoLoginAllowed()
+  )
 
   // Persist user session in localStorage
   useEffect(() => {
@@ -298,8 +304,16 @@ export function AuthProvider({ children }) {
       api('/api/auth/me')
         .then(({ user: fresh }) => setUser(fresh))
         .catch(() => { /* 401 is handled by the event; offline keeps the saved user */ })
+    } else if (telegramAuthPending) {
+      api('/api/public/telegram-login', {
+        method: 'POST', auth: false, body: { initData: getInitData(), tenantId: getLaunchTenantId() },
+      })
+        .then(({ token, user: u }) => adoptSession(token, u))
+        .catch(() => { /* not linked yet → the login form; linking happens after it */ })
+        .finally(() => setTelegramAuthPending(false))
     }
     return () => window.removeEventListener('interno:unauthorized', onUnauthorized)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Real-time sync for permissions from Firestore (tenant-scoped)
@@ -486,6 +500,7 @@ export function AuthProvider({ children }) {
         body: { login: String(loginStr ?? '').trim(), password: String(password ?? '').trim(), ...(savedSession?.tenantId && { tenantId: savedSession.tenantId }) },
       })
       adoptSession(token, u)
+      allowAutoLogin()
       return true
     } catch (err) {
       setError(err.status === 0 ? 'Нет связи с сервером. Проверьте интернет.' : err.message)
@@ -555,7 +570,14 @@ export function AuthProvider({ children }) {
     return false
   }
 
+  /** Merge fields into the signed-in user (e.g. telegramLinked after linking). */
+  const patchUser = useCallback((patch) => {
+    setUser(prev => (prev ? { ...prev, ...patch } : prev))
+  }, [])
+
   const logout = () => {
+    // Inside Telegram the next render would sign the same account back in
+    if (isInTelegram()) skipAutoLogin()
     if (USE_SERVER) {
       setToken('')
       live.reset()
@@ -693,7 +715,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, login, logout, error, setError, adoptSession,
+      user, login, logout, error, setError, adoptSession, patchUser, telegramAuthPending,
       hasPermission, getRoleLabel,
       employees: tenantEmployees, addEmployee, updateEmployee, deleteEmployee, fireEmployee, restoreEmployee, resetEmployees,
       getSalesStaff, loading,

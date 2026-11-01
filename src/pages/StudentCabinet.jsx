@@ -798,7 +798,7 @@ export default function StudentCabinet() {
         )}
 
         {/* ══════════ ACHIEVEMENTS TAB ══════════ */}
-        {activeTab === 'achievements' && gam && (
+        {activeTab === 'achievements' && gam?.level && (
           <div className="space-y-5">
             {/* Level Progress */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
@@ -1298,7 +1298,7 @@ export default function StudentCabinet() {
       {/* Floating AI Chat Button */}
       <button
         onClick={() => setAiChatOpen(v => !v)}
-        className={`fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg shadow-violet-500/30 flex items-center justify-center text-white transition-all z-40 ${
+        className={`fixed bottom-safe right-4 md:right-6 w-14 h-14 rounded-full shadow-lg shadow-violet-500/30 flex items-center justify-center text-white transition-all z-40 ${
           aiChatOpen
             ? 'bg-slate-600 hover:bg-slate-700 rotate-90'
             : 'bg-gradient-to-br from-violet-600 to-blue-600 hover:scale-105'

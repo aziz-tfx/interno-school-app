@@ -184,7 +184,7 @@ export default function Automations() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
             <Zap size={20} className="text-white" />
@@ -194,7 +194,7 @@ export default function Automations() {
             <p className="text-sm text-slate-500">Правила выполняются ежедневно в 14:00 (UZT)</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={handleTest} disabled={testing}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 disabled:opacity-50 transition-colors">
             {testing ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}

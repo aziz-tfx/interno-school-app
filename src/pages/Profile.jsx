@@ -2,13 +2,58 @@ import { useState, useMemo } from 'react'
 import { useAuth, ROLE_LABELS, ROLE_COLORS } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { USE_SERVER, api } from '../backend/api'
+import { toast } from '../components/Toaster'
+import { isInTelegram } from '../utils/telegramWebApp'
 import {
   User, Lock, Phone, Building2, Shield, Camera,
   Save, Eye, EyeOff, CheckCircle, AlertTriangle,
   Users, GraduationCap, DollarSign, TrendingUp,
   Calendar, Clock, BookOpen, BarChart3, Briefcase,
-  Mail, MapPin, Star, Award, Activity
+  Mail, MapPin, Star, Award, Activity, Send
 } from 'lucide-react'
+
+// Telegram mini app sign-in: linked automatically after the first password
+// login inside the school bot's app; can be switched off here.
+function TelegramSignIn() {
+  const { user, patchUser } = useAuth()
+  const [busy, setBusy] = useState(false)
+  const linked = !!user?.telegramLinked
+  const unlink = async () => {
+    setBusy(true)
+    try {
+      await api('/api/auth/telegram-link', { method: 'DELETE' })
+      patchUser({ telegramLinked: false })
+      toast.success('Telegram отвязан')
+    } catch (e) {
+      toast.error(e.message)
+    }
+    setBusy(false)
+  }
+  return (
+    <div className="mt-4 p-4 bg-slate-50 rounded-xl flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="w-10 h-10 shrink-0 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center">
+        <Send size={18} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h4 className="text-sm font-semibold text-slate-700">Вход через Telegram</h4>
+        <p className="text-xs text-slate-500 mt-0.5">
+          {linked
+            ? 'Подключён: приложение в боте школы открывается без пароля.'
+            : isInTelegram()
+              ? 'Подключится автоматически после входа в этом окне.'
+              : 'Откройте систему через бота школы (кнопка «INTERNO») и войдите один раз — дальше вход будет автоматическим.'}
+        </p>
+      </div>
+      {linked && (
+        <button onClick={unlink} disabled={busy}
+          className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-xl disabled:opacity-50 self-start sm:self-auto">
+          {busy ? '...' : 'Отвязать'}
+        </button>
+      )}
+    </div>
+  )
+}
 
 const AVATAR_COLORS = [
   'bg-blue-600', 'bg-rose-600', 'bg-emerald-600', 'bg-purple-600',
@@ -391,6 +436,8 @@ export default function Profile() {
               </div>
             </div>
           </div>
+
+          {USE_SERVER && <TelegramSignIn />}
         </div>
       )}
 

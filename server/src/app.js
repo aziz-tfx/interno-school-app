@@ -22,10 +22,10 @@ import telegramRoutes from './routes/telegram.js'
 import adminRoutes from './routes/admin.js'
 import vercelRoutes from './routes/vercel.js'
 import { initTenantConfig } from './vercel/_lib/tenantConfig.js'
-import { sendTelegram, setTelegramWebhook } from './telegram.js'
+import { sendTelegram, setTelegramWebhook, setTelegramMenuButton } from './telegram.js'
 
 // telegram: injectable so tests don't call the real Bot API
-export async function buildApp({ config, pool, telegram = { send: sendTelegram, setWebhook: setTelegramWebhook } }) {
+export async function buildApp({ config, pool, telegram = { send: sendTelegram, setWebhook: setTelegramWebhook, setMenuButton: setTelegramMenuButton } }) {
   const app = Fastify({
     logger: { level: config.logLevel },
     trustProxy: true, // behind Caddy: real client IP for rate limits

@@ -141,3 +141,57 @@ test('telegram mini app: signed initData of a linked student logs in; forged dat
   assert.equal(ok.json().user.studentId, 'st-1')
   assert.equal((await login(initData.replace(/hash=[0-9a-f]+/, 'hash=' + '0'.repeat(64)))).statusCode, 401)
 })
+
+test('telegram mini app: anyone links their Telegram after a password login, then signs in by initData', async () => {
+  const { createHmac } = await import('node:crypto')
+  const botToken = '123456:TEST-TOKEN' // stored by the previous test
+  const sign = (userId, authDate = Math.floor(Date.now() / 1000)) => {
+    const p = new URLSearchParams({ auth_date: String(authDate), user: JSON.stringify({ id: userId, first_name: 'T' }) })
+    const check = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n')
+    const secret = createHmac('sha256', 'WebAppData').update(botToken).digest()
+    p.set('hash', createHmac('sha256', secret).update(check).digest('hex'))
+    return p.toString()
+  }
+  const login = (data, tenantId = 'school-a') => anon('POST', '/api/public/telegram-login', { initData: data, tenantId })
+  const link = (who, data) => ctx.as(who).post('/api/auth/telegram-link', { initData: data })
+
+  // staff: not linked → 404, then linked from inside the mini app
+  assert.equal((await login(sign(7001))).statusCode, 404)
+  assert.equal((await anon('POST', '/api/auth/telegram-link', { initData: sign(7001) })).statusCode, 401)
+  assert.equal((await link('sales', 'auth_date=1&hash=' + '0'.repeat(64))).statusCode, 400)
+  assert.equal((await link('sales', sign(7001))).statusCode, 200)
+  const res = await login(sign(7001))
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.json().user._docId, 'e-sales')
+  assert.equal(res.json().user.telegramLinked, true)
+  assert.equal((await ctx.as('sales').get('/api/auth/me')).json().user.telegramLinked, true)
+  // the link lives outside `data`: editing the card can't move it to someone else
+  const card = (await ctx.as('owner').get('/api/collections/employees/e-sales')).json()
+  assert.equal(JSON.stringify(card).includes('7001'), false)
+  // the session token from initData works like a password login
+  const me = await ctx.app.inject({ method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${res.json().token}` } })
+  assert.equal(me.json().user.role, 'sales')
+
+  // the same Telegram moves to whoever links it last
+  assert.equal((await link('teacher', sign(7001))).statusCode, 200)
+  assert.equal((await login(sign(7001))).json().user._docId, 'e-teach')
+  assert.equal((await ctx.as('sales').get('/api/auth/me')).json().user.telegramLinked, false)
+
+  // other schools' bots don't sign anyone in here
+  assert.equal((await login(sign(7001), 'school-b')).statusCode, 401)
+
+  // a fired employee is kept out even with a linked Telegram
+  await ctx.pool.query("UPDATE employees SET telegram_user_id = 7002 WHERE id = 'e-fired'")
+  assert.equal((await login(sign(7002))).statusCode, 403)
+
+  // unlink
+  assert.equal((await ctx.as('teacher').delete('/api/auth/telegram-link')).statusCode, 200)
+  assert.equal((await login(sign(7001))).statusCode, 404)
+
+  // a student linking from the mini app also gets payment reminders in that chat
+  await owner().put('/api/collections/students/st-1', { name: 'Алексей', phone: '998935435567' })
+  assert.equal((await link('student', sign(7003))).statusCode, 200)
+  const { rows: [st] } = await ctx.pool.query("SELECT data FROM students WHERE id = 'st-1'")
+  assert.equal(st.data.telegramChatId, 7003)
+  assert.equal((await login(sign(7003))).json().user.studentId, 'st-1')
+})

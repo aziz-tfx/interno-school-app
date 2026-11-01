@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
+import Logo from './components/Logo'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Branches from './pages/Branches'
@@ -42,8 +43,20 @@ function ProtectedRoute({ children, permission }) {
   return children
 }
 
+function SplashScreen() {
+  return (
+    <div className="h-[100dvh] flex flex-col items-center justify-center gap-4">
+      <Logo size="md" variant="auto" />
+      <div className="w-8 h-8 border-[3px] border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+    </div>
+  )
+}
+
 export default function App() {
-  const { user } = useAuth()
+  const { user, telegramAuthPending } = useAuth()
+
+  // Telegram mini app: signing in with Telegram — don't flash the login form
+  if (!user && telegramAuthPending) return <SplashScreen />
 
   if (!user) {
     return (

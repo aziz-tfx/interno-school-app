@@ -211,7 +211,7 @@ export default function AIChat({ isOpen, onClose, context, mode = 'floating' }) 
 
   // Floating mode
   return (
-    <div className="fixed bottom-24 right-4 md:right-6 w-[360px] md:w-[400px] h-[520px] z-50 rounded-2xl shadow-2xl shadow-slate-900/20 overflow-hidden border border-slate-200 bg-white animate-in">
+    <div className="ai-chat-float fixed left-2 right-2 sm:left-auto sm:right-4 md:right-6 sm:w-[360px] md:w-[400px] z-50 rounded-2xl shadow-2xl shadow-slate-900/20 overflow-hidden border border-slate-200 bg-white animate-in">
       {chatContent}
       <style>{`
         @keyframes slideUp {

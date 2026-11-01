@@ -177,8 +177,11 @@ export default function Integrations() {
   const connectTgWebhook = async () => {
     setTgHooking(true)
     try {
-      await api('/api/admin/telegram/webhook', { method: 'POST' })
-      toast.success('Бот подключён к серверу: привязка учеников работает')
+      const res = await api('/api/admin/telegram/webhook', { method: 'POST', body: { appUrl: window.location.origin } })
+      if (res?.miniAppUrl) setCfg(prev => ({ ...prev, telegram: { ...prev.telegram, miniAppUrl: res.miniAppUrl } }))
+      toast.success(res?.menuButton
+        ? 'Бот подключён: кнопка «INTERNO» в боте открывает приложение'
+        : 'Бот подключён к серверу: привязка учеников работает')
     } catch (e) {
       toast.error(e.message)
     }
@@ -400,10 +403,18 @@ export default function Integrations() {
               {!USE_SERVER && <> Не забудьте зарегистрировать webhook: <code className="font-mono">/api/telegram/notify?tenantId={tenantId}</code></>}
             </p>
             {USE_SERVER && (
-              <button onClick={connectTgWebhook} disabled={tgHooking}
-                className="mt-2 px-4 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl text-sm font-medium hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5">
-                <Plug size={14} /> {tgHooking ? 'Подключение...' : 'Подключить бота к серверу'}
-              </button>
+              <>
+                <button onClick={connectTgWebhook} disabled={tgHooking}
+                  className="mt-2 px-4 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl text-sm font-medium hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5">
+                  <Plug size={14} /> {tgHooking ? 'Подключение...' : 'Подключить бота и мини-приложение'}
+                </button>
+                <p className="text-xs text-slate-400 mt-1.5">
+                  В боте появится кнопка меню «INTERNO» — она открывает эту систему прямо в Telegram
+                  {cfg.telegram.miniAppUrl && <> (<code className="font-mono break-all">{cfg.telegram.miniAppUrl}</code>)</>}.
+                  Сотрудники и ученики входят один раз по логину и паролю, дальше — автоматически через Telegram.
+                  Нажимайте кнопку с основного адреса системы: его и откроет бот.
+                </p>
+              </>
             )}
           </div>
 

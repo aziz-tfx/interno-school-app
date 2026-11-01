@@ -719,7 +719,7 @@ export default function Reports() {
       </div>
 
       {/* ─── Filter Bar ──────────────────────────────────────────────────── */}
-      <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
+      <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row md:flex-wrap items-start md:items-center gap-4">
         {/* Month navigation */}
         <div className="flex items-center gap-2">
           <Calendar size={18} className="text-slate-400" />

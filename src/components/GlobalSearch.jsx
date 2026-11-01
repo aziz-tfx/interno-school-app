@@ -146,12 +146,12 @@ export default function GlobalSearch() {
 
       {/* Mobile: icon button → fullscreen overlay */}
       <button onClick={() => setMobileOpen(true)}
-        className="md:hidden p-2.5 glass-btn rounded-xl transition-all">
+        aria-label="Поиск" className="md:hidden p-2 glass-btn rounded-xl transition-all">
         <Search size={18} className="text-slate-600" />
       </button>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-[150] bg-white flex flex-col md:hidden">
+        <div className="fixed inset-0 z-[150] bg-white flex flex-col md:hidden pt-[env(safe-area-inset-top)]">
           <div className="flex items-center gap-2 p-3 border-b border-slate-100">
             <div className="relative flex-1">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

@@ -189,10 +189,21 @@ export default function Sidebar({ open, onClose }) {
   // with the group's children to the right of the sidebar when the user
   // hovers the group header. On touch devices this is disabled and users
   // tap the header to expand the group inline.
-  const canHover = useMemo(() => {
+  // The slide-in menu on phones (< md) always expands groups inline — also
+  // on hover-capable devices like Telegram Desktop in a narrow window.
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 767px)')
+    if (!mq) return
+    const onChange = () => setNarrow(mq.matches)
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [])
+  const hoverPointer = useMemo(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return true
     return window.matchMedia('(hover: hover) and (pointer: fine)').matches
   }, [])
+  const canHover = hoverPointer && !narrow
   const [flyout, setFlyout] = useState(null) // { groupId, top, left, item }
   const hideTimer = useRef(null)
 
@@ -249,17 +260,18 @@ export default function Sidebar({ open, onClose }) {
         fixed inset-y-0 left-0 z-50 w-72 glass-dark text-white flex flex-col shrink-0
         transform transition-transform duration-300 ease-in-out
         md:relative md:translate-x-0 md:w-64
+        pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pb-0
         ${open ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Mobile close button */}
         <div className="md:hidden flex justify-end p-2">
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors">
+          <button onClick={onClose} aria-label="Закрыть меню" className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 border-b border-white/10">
-          <Logo size="md" variant="auto" />
+        <div className="px-6 pb-4 md:p-6 border-b border-white/10">
+          <Logo size="md" variant="auto" className="[&_img]:w-28 md:[&_img]:w-40" />
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item, idx) => {
