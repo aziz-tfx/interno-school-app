@@ -133,3 +133,36 @@ test('admin subscribes amoCRM; unknown events fall back to the core list', async
   assert.equal(failed.ok, false)
   assert.match(failed.error, /401/)
 })
+
+test('main school on .env amo keys: an empty, unticked form on the page does not switch amo off', async () => {
+  const { resolveAmo } = await import('../src/vercel/_lib/tenantConfig.js')
+  const saved = { t: process.env.AMO_ACCESS_TOKEN, s: process.env.AMO_SUBDOMAIN }
+  process.env.AMO_ACCESS_TOKEN = 'env-token'
+  process.env.AMO_SUBDOMAIN = 'interno'
+  try {
+    await ctx.pool.query(`INSERT INTO tenant_integrations (id, tenant_id, data) VALUES ('default', 'default', $1)`,
+      [{ amocrm: { subdomain: '', accessToken: '', enabled: false } }])
+    const main = await resolveAmo({ query: { tenantId: 'default' } })
+    assert.equal(main.source, 'env')
+    assert.equal(main.accessToken, 'env-token')
+    assert.equal(main.subdomain, 'interno')
+    assert.equal(main.enabled, true)
+
+    // keys entered on the page: their «Включено» box decides
+    await ctx.pool.query(`INSERT INTO tenant_integrations (id, tenant_id, data) VALUES ('school-b', 'school-b', $1)`,
+      [{ amocrm: { subdomain: 'b', accessToken: 'tok-b', enabled: false } }])
+    const b = await resolveAmo({ query: { tenantId: 'school-b' } })
+    assert.equal(b.source, 'tenant')
+    assert.equal(b.enabled, false)
+
+    // other schools never see the main school's .env keys
+    const a = await resolveAmo({ query: { tenantId: 'school-a' } })
+    assert.equal(a.source, 'none')
+    assert.equal(a.accessToken, '')
+  } finally {
+    process.env.AMO_ACCESS_TOKEN = saved.t ?? ''
+    process.env.AMO_SUBDOMAIN = saved.s ?? ''
+    if (saved.t === undefined) delete process.env.AMO_ACCESS_TOKEN
+    if (saved.s === undefined) delete process.env.AMO_SUBDOMAIN
+  }
+})

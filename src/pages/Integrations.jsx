@@ -131,6 +131,7 @@ export default function Integrations() {
   const [tgTesting, setTgTesting] = useState(false)
 
   const [amoStatus, setAmoStatus] = useState(null)
+  const [amoInfo, setAmoInfo] = useState(null) // /api/amo/status: { connected, source, account, message }
   const [amoShowToken, setAmoShowToken] = useState(false)
   const [amoRefreshing, setAmoRefreshing] = useState(false)
   const [amoAuthCode, setAmoAuthCode] = useState('')
@@ -231,9 +232,21 @@ export default function Integrations() {
     try { await saveIntegrationSection(tenantId, 'amocrm', cfg.amocrm) } catch {}
     try {
       const data = await checkAmoStatus()
+      setAmoInfo(data)
       setAmoStatus(data.connected ? 'ok' : 'error')
     } catch { setAmoStatus('error') }
   }
+
+  // Show the live state on open (no save): the main school may run on the
+  // server's .env keys while every field here is empty.
+  useEffect(() => {
+    let cancelled = false
+    setAmoStatus('checking')
+    checkAmoStatus()
+      .then(data => { if (!cancelled) { setAmoInfo(data); setAmoStatus(data.connected ? 'ok' : 'error') } })
+      .catch(() => { if (!cancelled) setAmoStatus(null) })
+    return () => { cancelled = true }
+  }, [tenantId])
 
   const doAmoRefresh = async () => {
     setAmoRefreshing(true)
@@ -660,8 +673,26 @@ export default function Integrations() {
 
           {USE_SERVER && <AmoLiveBlock />}
 
-          {amoStatus === 'ok' && <div className="text-sm text-emerald-600 flex items-center gap-1.5"><CheckCircle size={14} /> Подключено</div>}
-          {amoStatus === 'error' && <div className="text-sm text-red-500 flex items-center gap-1.5"><XCircle size={14} /> Ошибка подключения. Проверьте токен.</div>}
+          {amoStatus === 'ok' && (
+            <div className="text-sm text-emerald-600 flex items-start gap-1.5">
+              <CheckCircle size={14} className="mt-0.5 shrink-0" />
+              <span>
+                Подключено{amoInfo?.account ? ` к «${amoInfo.account}»` : ''}{amoInfo?.subdomain ? ` (${amoInfo.subdomain}.amocrm.ru)` : ''}
+                {amoInfo?.source === 'env' && (
+                  <span className="block text-xs text-slate-500 mt-0.5">
+                    Используются ключи из настроек сервера (.env), поэтому поля выше пустые — заполнять их не нужно.
+                    Если заполнить и сохранить, будут использоваться ключи с этой страницы.
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+          {amoStatus === 'error' && (
+            <div className="text-sm text-red-500 flex items-start gap-1.5">
+              <XCircle size={14} className="mt-0.5 shrink-0" />
+              <span>{amoInfo?.message || 'Ошибка подключения. Проверьте токен.'}</span>
+            </div>
+          )}
 
           <div className="flex flex-wrap justify-between items-center gap-2">
             <div className="flex gap-2">

@@ -29,7 +29,12 @@ export default async function handler(req, res) {
     if (!accountRes.ok) {
       return res.status(200).json({
         connected: false,
-        message: 'Токен amoCRM невалиден или истёк. Обновите AMO_ACCESS_TOKEN.',
+        source: amo.source,
+        subdomain: AMO_SUBDOMAIN,
+        canRefresh: Boolean(amo.refreshToken && amo.clientId && amo.clientSecret),
+        message: amo.source === 'env'
+          ? `amoCRM ответил ${accountRes.status}: токен из настроек сервера (.env) невалиден или истёк. Подключите интеграцию заново на этой странице.`
+          : `amoCRM ответил ${accountRes.status}: токен невалиден или истёк. Нажмите «Обновить токен» или получите новый код авторизации.`,
       })
     }
 
@@ -37,14 +42,17 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       connected: true,
+      source: amo.source,
       account: account.name,
       subdomain: AMO_SUBDOMAIN,
+      canRefresh: Boolean(amo.refreshToken && amo.clientId && amo.clientSecret),
       message: `Подключено к ${account.name}`,
     })
 
   } catch (err) {
     return res.status(200).json({
       connected: false,
+      source: amo.source,
       message: `Ошибка подключения: ${err.message}`,
     })
   }

@@ -113,9 +113,10 @@ export async function resolveAmo(req) {
   const tenantId = getTenantId(req)
   const cfg = await loadTenantIntegration(tenantId, 'amocrm')
   const useEnv = isDefaultTenant(tenantId)
+  const source = cfg.accessToken ? 'tenant' : (useEnv && process.env.AMO_ACCESS_TOKEN ? 'env' : 'none')
   return {
     tenantId,
-    source: cfg.accessToken ? 'tenant' : (useEnv ? 'env' : 'none'),
+    source,
     subdomain:    cfg.subdomain    || envIf(useEnv, process.env.AMO_SUBDOMAIN),
     accessToken:  cfg.accessToken  || envIf(useEnv, process.env.AMO_ACCESS_TOKEN),
     refreshToken: cfg.refreshToken || envIf(useEnv, process.env.AMO_REFRESH_TOKEN),
@@ -124,7 +125,10 @@ export async function resolveAmo(req) {
     redirectUri:  cfg.redirectUri  || envIf(useEnv, process.env.AMO_REDIRECT_URI),
     pipelineId:   cfg.pipelineId   || envIf(useEnv, process.env.AMO_PIPELINE_ID),
     statusId:     cfg.statusId     || envIf(useEnv, process.env.AMO_STATUS_ID),
-    enabled: cfg.enabled !== false,
+    // The «Включено» box belongs to the keys entered on the page. With the
+    // server's .env keys (main school) the page shows empty fields and an
+    // unticked box; saving that form must not switch the integration off.
+    enabled: source === 'env' ? true : cfg.enabled !== false,
   }
 }
 
