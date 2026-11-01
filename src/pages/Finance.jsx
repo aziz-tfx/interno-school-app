@@ -20,6 +20,7 @@ import SalesInsights from '../components/SalesInsights'
 import RevenueByCourse from '../components/RevenueByCourse'
 import { toast } from '../components/Toaster'
 import { fetchAmoPerformance, fetchAmoPerformanceV2, fetchAmoCalls } from '../utils/amocrm'
+import useAmoLive from '../hooks/useAmoLive'
 import { sameBranch } from '../utils/branchMatch'
 import { computeCountedSaleIds } from '../utils/countedSales'
 
@@ -243,6 +244,10 @@ export default function Finance() {
   const [amoStatsV2, setAmoStatsV2] = useState(null)
   const [amoCalls, setAmoCalls] = useState(null)
 
+  // Live: amoCRM changes (webhook → server → stream) reload the stats below
+  const [amoTick, setAmoTick] = useState(0)
+  useAmoLive(() => setAmoTick(n => n + 1))
+
   // Load all three sources in parallel for the active month. Each falls
   // back silently — manager cards stay functional without amoCRM.
   useEffect(() => {
@@ -261,7 +266,7 @@ export default function Finance() {
       setAmoCalls(calls.status === 'fulfilled' && calls.value?.success ? calls.value : null)
     })
     return () => { cancelled = true }
-  }, [monthKey, selectedYear, selectedMonth])
+  }, [monthKey, selectedYear, selectedMonth, amoTick])
 
   // Resolve the amoCRM user id for a local employee, with priority:
   //   1. explicit amoUserId

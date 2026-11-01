@@ -10,8 +10,12 @@ import { doc, getDoc } from '../backend/firestore'
 import { useAuth } from '../contexts/AuthContext'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import AmoPlanEditor from '../components/AmoPlanEditor'
+import useAmoLive from '../hooks/useAmoLive'
 
+// Polling is only the safety net: with the amoCRM webhook connected the page
+// refreshes on every change (useAmoLive) and polls every 5 minutes.
 const REFRESH_INTERVAL_MS = 60000
+const REFRESH_INTERVAL_LIVE_MS = 5 * 60000
 
 const METRIC_ROWS = [
   { key: 'leadsNew',      label: 'Кол-во заявок "Новая заявка"' },
@@ -605,14 +609,22 @@ export default function AmoPerformance() {
     setLoading(false)
   }
 
+  // amoCRM pushes changes → refresh right away (latest month via the ref)
+  const loadDataRef = useRef(loadData)
+  loadDataRef.current = loadData
+  const { pushing } = useAmoLive(() => loadDataRef.current(true))
+
   useEffect(() => {
     loadPlan()
     loadData()
-    if (refreshRef.current) clearInterval(refreshRef.current)
-    refreshRef.current = setInterval(() => loadData(true), REFRESH_INTERVAL_MS)
-    return () => clearInterval(refreshRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month])
+
+  useEffect(() => {
+    if (refreshRef.current) clearInterval(refreshRef.current)
+    refreshRef.current = setInterval(() => loadDataRef.current(true), pushing ? REFRESH_INTERVAL_LIVE_MS : REFRESH_INTERVAL_MS)
+    return () => clearInterval(refreshRef.current)
+  }, [month, pushing])
 
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 1000)
@@ -777,7 +789,7 @@ export default function AmoPerformance() {
       <div className="mb-4 flex items-center gap-3 text-xs flex-wrap">
         <span className="flex items-center gap-1.5 text-emerald-700">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          Live · автообновление каждые 60 сек
+          {pushing ? 'Live · обновляется сразу при изменениях в amoCRM' : 'Live · автообновление каждые 60 сек'}
         </span>
         {lastFetchedAgo != null && <span className="text-slate-500">обновлено {lastFetchedAgo} сек назад</span>}
         {data?.meta && (
