@@ -239,21 +239,38 @@ export default function StudentProfile({ student, onClose }) {
             )}
           </div>
           <p className="text-xs text-slate-500 mb-3">
-            Полный бесплатный доступ в кабинете студента, независимо от долга по основному курсу.
+            Полный бесплатный доступ в кабинете студента, без оплаты. Можно подарить и основной курс студента.
           </p>
           <div className="flex flex-wrap gap-2">
-            {getPromoCourses(courses)
-              .filter(c => c.name !== student.course)
+            {[
+              // The student's own main course can be gifted too (a client who
+              // got it for free) — then it opens without any payment.
+              ...courses.filter(c => c.name === student.course),
+              ...getPromoCourses(courses).filter(c => c.name !== student.course),
+            ]
               .map(c => {
                 const granted = (student.bonusCourses || []).includes(c.name)
+                const isMain = c.name === student.course
                 return (
                   <button key={c.id} type="button" disabled={!canEditStudents}
+                    title={isMain ? 'Основной курс студента — открыть бесплатно' : undefined}
                     onClick={async () => {
                       if (!canEditStudents) return
                       const cur = student.bonusCourses || []
                       const next = granted ? cur.filter(n => n !== c.name) : [...cur, c.name]
+                      // Granting a gift must also let the student into the cabinet
+                      // (it's blocked while lmsAccess is off); a gifted MAIN course
+                      // means there's nothing to owe, so lift the debtor status.
+                      const patch = { bonusCourses: next }
+                      if (!granted) {
+                        if (student.lmsAccess !== true) {
+                          patch.lmsAccess = true
+                          patch.lmsAccessGrantedAt = new Date().toISOString()
+                        }
+                        if (isMain && student.status === 'debtor') patch.status = 'active'
+                      }
                       try {
-                        await updateStudent(student.id, { bonusCourses: next })
+                        await updateStudent(student.id, patch)
                         toast.success(granted ? `Курс «${c.name}» отозван` : `🎁 Курс «${c.name}» открыт студенту`)
                       } catch (err) {
                         toast.error('Не удалось сохранить: ' + (err?.message || ''))
@@ -264,7 +281,7 @@ export default function StudentProfile({ student, onClose }) {
                         ? 'bg-violet-600 border-violet-600 text-white'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-violet-100'
                     } ${!canEditStudents ? 'opacity-60 cursor-default' : ''}`}>
-                    {granted ? '✓ ' : ''}{c.icon ? `${c.icon} ` : ''}{c.name}
+                    {granted ? '✓ ' : ''}{c.icon ? `${c.icon} ` : ''}{c.name}{isMain ? ' (основной)' : ''}
                   </button>
                 )
               })}
