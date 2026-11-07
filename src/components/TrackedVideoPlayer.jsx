@@ -13,11 +13,14 @@ let ytApiPromise = null
 function loadYouTubeApi() {
   if (window.YT && window.YT.Player) return Promise.resolve(window.YT)
   if (ytApiPromise) return ytApiPromise
-  ytApiPromise = new Promise((resolve) => {
+  ytApiPromise = new Promise((resolve, reject) => {
     const tag = document.createElement('script')
     tag.src = 'https://www.youtube.com/iframe_api'
     const prev = window.onYouTubeIframeAPIReady
     window.onYouTubeIframeAPIReady = () => { prev?.(); resolve(window.YT) }
+    // Blocked / offline: let the caller fall back to a plain iframe, and
+    // allow a later retry instead of caching the failure forever.
+    tag.onerror = () => { ytApiPromise = null; reject(new Error('YouTube API failed to load')) }
     document.head.appendChild(tag)
   })
   return ytApiPromise
@@ -53,6 +56,10 @@ export default function TrackedVideoPlayer({
   const pollRef = useRef(null)
   const [fallback, setFallback] = useState(false)
   const reportedRef = useRef({ percent: 0 })
+  // The players are created once per video; read the latest onProgress via a
+  // ref so the parent's current state (saved progress, student) is used.
+  const onProgressRef = useRef(onProgress)
+  useEffect(() => { onProgressRef.current = onProgress }, [onProgress])
 
   const report = useCallback((currentTime, duration) => {
     if (!duration || duration < 1) return
@@ -60,17 +67,26 @@ export default function TrackedVideoPlayer({
     if (percent > reportedRef.current.percent) {
       reportedRef.current.percent = percent
     }
-    onProgress?.({ percent, currentTime, duration })
-  }, [onProgress])
+    onProgressRef.current?.({ percent, currentTime, duration })
+  }, [])
 
   // ─── YouTube ───
   useEffect(() => {
     if (videoInfo?.type !== 'youtube') return
     let cancelled = false
     let player = null
+    // Script blocked or very slow → plain iframe (no tracking) instead of an empty box
+    const failTimer = setTimeout(() => { if (!playerRef.current) setFallback(true) }, 6000)
     loadYouTubeApi().then((YT) => {
       if (cancelled || !containerRef.current) return
-      player = new YT.Player(containerRef.current, {
+      clearTimeout(failTimer)
+      // YT replaces the target element with its iframe, so mount into a
+      // child div and size the iframe to the 16:9 box (default is 640×390).
+      const target = document.createElement('div')
+      containerRef.current.replaceChildren(target)
+      player = new YT.Player(target, {
+        width: '100%',
+        height: '100%',
         videoId: videoInfo.id,
         playerVars: { rel: 0, modestbranding: 1, enablejsapi: 1 },
         events: {
@@ -94,10 +110,11 @@ export default function TrackedVideoPlayer({
         },
       })
       playerRef.current = player
-    }).catch(() => setFallback(true))
+    }).catch(() => { clearTimeout(failTimer); setFallback(true) })
 
     return () => {
       cancelled = true
+      clearTimeout(failTimer)
       clearInterval(pollRef.current)
       try { player?.destroy?.() } catch {}
     }
@@ -125,7 +142,12 @@ export default function TrackedVideoPlayer({
 
     loadKinescopeApi().then((IframePlayer) => {
       if (cancelled || !containerRef.current) return
-      return IframePlayer.create(containerRef.current, {
+      // Mount into a child: the API may replace the target element
+      const target = document.createElement('div')
+      target.style.width = '100%'
+      target.style.height = '100%'
+      containerRef.current.replaceChildren(target)
+      return IframePlayer.create(target, {
         url,
         size: { width: '100%', height: '100%' },
         behavior: { autoPlay: false },

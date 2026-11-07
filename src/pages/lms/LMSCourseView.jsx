@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useData } from '../../contexts/DataContext'
@@ -8,24 +8,34 @@ import {
   Clock, FileText, Lock, Play, Users, Calendar, Award,
   Plus, Pencil, Trash2, X, Save, GripVertical, AlertCircle, Video
 } from 'lucide-react'
-import { resolveGroupById } from '../../utils/lessonAccess'
+import { resolveGroupById, isLessonAccessible } from '../../utils/lessonAccess'
+import { toast } from '../../components/Toaster'
 
 // ─── Module Form Modal ──────────────────────────────────────────────
 function ModuleFormModal({ mod, courseId, onSave, onClose, nextOrder }) {
   const { t } = useLanguage()
   const [title, setTitle] = useState(mod?.title || '')
   const [description, setDescription] = useState(mod?.description || '')
+  const [saving, setSaving] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!title.trim()) return
-    onSave({
-      title: title.trim(),
-      description: description.trim(),
-      courseId,
-      order: mod?.order ?? nextOrder,
-      ...(mod ? {} : { createdAt: new Date().toISOString() }),
-    })
+    if (!title.trim() || saving) return
+    setSaving(true)
+    try {
+      await onSave({
+        title: title.trim(),
+        description: description.trim(),
+        courseId,
+        order: mod?.order ?? nextOrder,
+        ...(mod ? {} : { createdAt: new Date().toISOString() }),
+      })
+    } catch (err) {
+      console.error(err)
+      toast.error('Не удалось сохранить модуль. Попробуйте ещё раз.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -57,8 +67,8 @@ function ModuleFormModal({ mod, courseId, onSave, onClose, nextOrder }) {
               className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">
               {t('lms.btn_cancel')}
             </button>
-            <button type="submit"
-              className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 flex items-center gap-2">
+            <button type="submit" disabled={saving}
+              className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
               <Save size={14} /> {mod ? t('lms.save_module') : t('lms.create_module')}
             </button>
           </div>
@@ -75,7 +85,7 @@ export default function LMSCourseView() {
   const navigate = useNavigate()
   const { user, hasPermission } = useAuth()
   const {
-    groups, students, courses, teachers,
+    groups, students, courses, teachers, payments, loading,
     lmsLessons, lmsAssignments, lmsSubmissions, lmsModules, lmsProgress,
     addLmsModule, updateLmsModule, deleteLmsModule, addLmsProgress, deleteLmsProgress,
     updateLmsLesson,
@@ -142,6 +152,17 @@ export default function LMSCourseView() {
     )
   }, [lmsProgress, myStudent, courseId, course])
 
+  // Per-lesson access for students (payment / schedule / free-access rules)
+  const studentDebt = useMemo(() => {
+    if (!myStudent) return 0
+    const totalPaid = (payments || [])
+      .filter(p => p.type === 'income' && String(p.studentId) === String(myStudent.id))
+      .reduce((s, p) => s + (p.amount || 0), 0)
+    return Math.max(0, (myStudent.totalCoursePrice || 0) - totalPaid)
+  }, [payments, myStudent])
+  const isLessonLocked = (lesson) => isStudent && !!myStudent && !!group &&
+    !isLessonAccessible({ lesson, student: myStudent, group, modules, debt: studentDebt }).accessible
+
   const completedCount = lessons.filter(l => completedLessonIds.has(l.id)).length
   const progressPercent = lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0
 
@@ -166,19 +187,32 @@ export default function LMSCourseView() {
     })
   }
 
+  // One toggle per lesson at a time — a double tap must not add two records
+  const togglingRef = useRef(new Set())
+  const [togglingIds, setTogglingIds] = useState(new Set())
   const handleToggleLessonComplete = async (lesson) => {
-    if (!myStudent) return
-    if (completedLessonIds.has(lesson.id)) {
-      const prog = lmsProgress.find(p => p.studentId === myStudent.id && p.lessonId === lesson.id)
-      if (prog) await deleteLmsProgress(prog.id)
-    } else {
-      await addLmsProgress({
-        studentId: myStudent.id,
-        lessonId: lesson.id,
-        groupId: courseId,
-        courseId: course?.id || '',
-        completedAt: new Date().toISOString(),
-      })
+    if (!myStudent || togglingRef.current.has(lesson.id) || isLessonLocked(lesson)) return
+    togglingRef.current.add(lesson.id)
+    setTogglingIds(new Set(togglingRef.current))
+    try {
+      if (completedLessonIds.has(lesson.id)) {
+        const prog = lmsProgress.find(p => p.studentId === myStudent.id && p.lessonId === lesson.id)
+        if (prog) await deleteLmsProgress(prog.id)
+      } else {
+        await addLmsProgress({
+          studentId: myStudent.id,
+          lessonId: lesson.id,
+          groupId: courseId,
+          courseId: course?.id || '',
+          completedAt: new Date().toISOString(),
+        })
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error('Не удалось сохранить отметку. Попробуйте ещё раз.')
+    } finally {
+      togglingRef.current.delete(lesson.id)
+      setTogglingIds(new Set(togglingRef.current))
     }
   }
 
@@ -202,12 +236,78 @@ export default function LMSCourseView() {
     setDeleteModuleConfirm(null)
   }
 
+  if (!group && loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 border-[3px] border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    )
+  }
+
   if (!group) {
     return (
       <div className="text-center py-20">
         <BookOpen size={48} className="mx-auto text-slate-300 mb-4" />
         <p className="text-slate-500">{t('lms.group_not_found')}</p>
         <button onClick={() => navigate('/lms')} className="mt-4 text-blue-600 hover:underline text-sm">{t('lms.go_back')}</button>
+      </div>
+    )
+  }
+
+  // One lesson row (module lists and "unsorted"). Students see a lock on
+  // lessons their payment/schedule doesn't open yet and can't tick them.
+  const renderLessonRow = (lesson, idx) => {
+    const isDone = completedLessonIds.has(lesson.id)
+    const locked = isLessonLocked(lesson)
+    const busy = togglingIds.has(lesson.id)
+    return (
+      <div key={lesson.id}
+        className={`flex items-center gap-3 px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors ${
+          isDone ? 'bg-emerald-50/30' : ''
+        } ${locked ? 'opacity-60' : ''}`}
+      >
+        {isStudent ? (
+          locked ? (
+            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0" title="Урок ещё закрыт">
+              <Lock size={14} className="text-slate-400" />
+            </div>
+          ) : (
+            <button onClick={() => handleToggleLessonComplete(lesson)} disabled={busy}
+              aria-label={isDone ? 'Отметить как непройденный' : 'Отметить как пройденный'}
+              className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all disabled:opacity-50 ${
+                isDone ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 hover:border-blue-400'
+              }`}
+            >
+              {isDone && <CheckCircle2 size={14} className="text-white" />}
+            </button>
+          )
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-medium text-slate-500">{idx + 1}</span>
+          </div>
+        )}
+
+        <button
+          onClick={() => navigate(`/lms/lesson/${lesson.id}`)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <p className={`text-sm font-medium ${locked ? 'text-slate-500' : isDone ? 'text-emerald-700 line-through' : 'text-slate-900'}`}>
+            {lesson.title}
+          </p>
+          {lesson.description && (
+            <p className="text-xs text-slate-400 truncate mt-0.5">{lesson.description}</p>
+          )}
+        </button>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {!locked && lesson.videoUrl && (
+            <span className="text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Видео</span>
+          )}
+          {!locked && lesson.materials?.length > 0 && (
+            <span className="text-xs text-slate-400 hidden sm:inline">Материалы: {lesson.materials.length}</span>
+          )}
+          {locked ? <Lock size={14} className="text-slate-300" /> : <ChevronRight size={14} className="text-slate-300" />}
+        </div>
       </div>
     )
   }
@@ -244,10 +344,20 @@ export default function LMSCourseView() {
                 <FileText size={14} className="text-blue-500" />
                 {lessons.length} {t('lms.total_lessons')}
               </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 size={14} className="text-purple-500" />
-                {assignments.length} {t('lms.total_assignments')}
-              </span>
+              {assignments.length > 0 && !group.synthetic ? (
+                // Assignments (and the answer form) live on the group page
+                <button onClick={() => navigate(`/lms/group/${group.id}?tab=assignments`)}
+                  className="flex items-center gap-1.5 text-purple-600 hover:underline">
+                  <CheckCircle2 size={14} className="text-purple-500" />
+                  {assignments.length} {t('lms.total_assignments')}
+                  <ChevronRight size={14} />
+                </button>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 size={14} className="text-purple-500" />
+                  {assignments.length} {t('lms.total_assignments')}
+                </span>
+              )}
               {teacher && (
                 <span className="flex items-center gap-1.5">
                   <Users size={14} className="text-emerald-500" />
@@ -330,10 +440,14 @@ export default function LMSCourseView() {
 
           return (
             <div key={mod.id} className={`glass-card rounded-2xl overflow-hidden ${isLocked ? 'opacity-60' : ''}`}>
-              {/* Module header */}
-              <button
+              {/* Module header (a div: it holds the edit/delete buttons) */}
+              <div
+                role="button"
+                tabIndex={isLocked ? -1 : 0}
+                aria-expanded={!isLocked && isOpen}
                 onClick={() => !isLocked && toggleModule(mod.id)}
-                className={`w-full flex items-center gap-3 p-4 text-left transition-colors ${isLocked ? 'cursor-not-allowed' : 'hover:bg-slate-50/50'}`}
+                onKeyDown={e => { if (!isLocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleModule(mod.id) } }}
+                className={`w-full flex items-center gap-3 p-4 text-left transition-colors ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50/50'}`}
               >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                   isLocked ? 'bg-slate-200' : modPercent === 100 ? 'bg-emerald-100' : 'bg-blue-100'
@@ -381,7 +495,7 @@ export default function LMSCourseView() {
                 )}
 
                 {!isLocked && <ChevronDown size={16} className={`text-slate-400 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />}
-              </button>
+              </div>
 
               {/* Locked banner */}
               {isLocked && (
@@ -413,52 +527,7 @@ export default function LMSCourseView() {
                   {modLessons.length === 0 ? (
                     <p className="px-4 py-6 text-sm text-slate-400 text-center">{t('lms.no_lessons')}</p>
                   ) : (
-                    modLessons.map((lesson, idx) => {
-                      const isDone = completedLessonIds.has(lesson.id)
-                      return (
-                        <div key={lesson.id}
-                          className={`flex items-center gap-3 px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors ${
-                            isDone ? 'bg-emerald-50/30' : ''
-                          }`}
-                        >
-                          {isStudent ? (
-                            <button onClick={() => handleToggleLessonComplete(lesson)}
-                              className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all ${
-                                isDone ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 hover:border-blue-400'
-                              }`}
-                            >
-                              {isDone && <CheckCircle2 size={14} className="text-white" />}
-                            </button>
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                              <span className="text-xs font-medium text-slate-500">{idx + 1}</span>
-                            </div>
-                          )}
-
-                          <button
-                            onClick={() => navigate(`/lms/lesson/${lesson.id}`)}
-                            className="flex-1 min-w-0 text-left"
-                          >
-                            <p className={`text-sm font-medium ${isDone ? 'text-emerald-700 line-through' : 'text-slate-900'}`}>
-                              {lesson.title}
-                            </p>
-                            {lesson.description && (
-                              <p className="text-xs text-slate-400 truncate mt-0.5">{lesson.description}</p>
-                            )}
-                          </button>
-
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {lesson.videoUrl && (
-                              <span className="text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Video</span>
-                            )}
-                            {lesson.materials?.length > 0 && (
-                              <span className="text-xs text-slate-400">{lesson.materials.length} files</span>
-                            )}
-                            <ChevronRight size={14} className="text-slate-300" />
-                          </div>
-                        </div>
-                      )
-                    })
+                    modLessons.map((lesson, idx) => renderLessonRow(lesson, idx))
                   )}
                 </div>
               )}
@@ -467,7 +536,7 @@ export default function LMSCourseView() {
         })}
 
         {/* Unsorted lessons (no module) */}
-        {(lessonsByModule['unsorted']?.length > 0 || modules.length === 0) && (
+        {lessonsByModule['unsorted']?.length > 0 && (
           <div className="glass-card rounded-2xl overflow-hidden">
             <button
               onClick={() => toggleModule('unsorted')}
@@ -494,48 +563,7 @@ export default function LMSCourseView() {
                 {(lessonsByModule['unsorted'] || []).length === 0 ? (
                   <p className="px-4 py-6 text-sm text-slate-400 text-center">{t('lms.no_lessons')}</p>
                 ) : (
-                  (lessonsByModule['unsorted'] || []).map((lesson, idx) => {
-                    const isDone = completedLessonIds.has(lesson.id)
-                    return (
-                      <div key={lesson.id}
-                        className={`flex items-center gap-3 px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors ${
-                          isDone ? 'bg-emerald-50/30' : ''
-                        }`}
-                      >
-                        {isStudent ? (
-                          <button onClick={() => handleToggleLessonComplete(lesson)}
-                            className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all ${
-                              isDone ? 'bg-emerald-500 border-emerald-500' : 'border-slate-300 hover:border-blue-400'
-                            }`}
-                          >
-                            {isDone && <CheckCircle2 size={14} className="text-white" />}
-                          </button>
-                        ) : (
-                          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-medium text-slate-500">{idx + 1}</span>
-                          </div>
-                        )}
-
-                        <button onClick={() => navigate(`/lms/lesson/${lesson.id}`)}
-                          className="flex-1 min-w-0 text-left"
-                        >
-                          <p className={`text-sm font-medium ${isDone ? 'text-emerald-700 line-through' : 'text-slate-900'}`}>
-                            {lesson.title}
-                          </p>
-                          {lesson.description && (
-                            <p className="text-xs text-slate-400 truncate mt-0.5">{lesson.description}</p>
-                          )}
-                        </button>
-
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {lesson.videoUrl && (
-                            <span className="text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Video</span>
-                          )}
-                          <ChevronRight size={14} className="text-slate-300" />
-                        </div>
-                      </div>
-                    )
-                  })
+                  (lessonsByModule['unsorted'] || []).map((lesson, idx) => renderLessonRow(lesson, idx))
                 )}
               </div>
             )}

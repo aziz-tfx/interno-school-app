@@ -156,7 +156,7 @@ export default function StudentOnboarding({ studentId }) {
           </div>
 
           {/* Body */}
-          <div className="px-8 py-6">
+          <div className="px-5 sm:px-8 py-6">
             <p className="text-sm text-slate-600 leading-relaxed">{current.body}</p>
 
             {/* Go to section button */}
@@ -169,14 +169,14 @@ export default function StudentOnboarding({ studentId }) {
           </div>
 
           {/* Navigation */}
-          <div className="px-8 pb-6 flex items-center justify-between">
+          <div className="px-5 sm:px-8 pb-6 flex items-center justify-between gap-2">
             <button onClick={prev} disabled={step === 0}
               className="flex items-center gap-1 px-3 py-2 text-sm text-slate-500 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               <ChevronLeft size={16} /> Назад
             </button>
 
             {/* Step dots */}
-            <div className="flex gap-1.5">
+            <div className="flex gap-1 sm:gap-1.5">
               {STEPS.map((_, i) => (
                 <button key={i} onClick={() => setStep(i)}
                   className={`w-2 h-2 rounded-full transition-all ${

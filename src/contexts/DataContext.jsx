@@ -658,9 +658,25 @@ export function DataProvider({ children, currentUser }) {
   }
 
   // --- Attendance ---
-  const markAttendance = async (record) => {
+  // All marks live in ONE doc, so every save rewrites the whole array. Quick
+  // taps used to overwrite each other (each built on stale state). Now: the
+  // working copy lives in a ref, updates show at once (optimistic), saves run
+  // one after another, and server snapshots don't replace the working copy
+  // while saves are still pending.
+  const attendanceRef = useRef([])
+  const attendancePending = useRef(0)
+  const attendanceQueue = useRef(Promise.resolve())
+  useEffect(() => {
+    if (attendancePending.current === 0) {
+      attendanceRef.current = Array.isArray(attendance) ? attendance : []
+    } else if (attendance !== attendanceRef.current) {
+      setAttendance(attendanceRef.current) // stale echo while saving — keep local marks
+    }
+  }, [attendance])
+
+  const markAttendance = (record) => {
     // record: { date, groupName, studentId, status: 'present'|'absent'|'late', teacherId }
-    const updated = [...attendance]
+    const updated = [...attendanceRef.current]
     const existing = updated.findIndex(
       a => a.date === record.date && a.studentId === record.studentId && a.groupName === record.groupName
     )
@@ -669,7 +685,14 @@ export function DataProvider({ children, currentUser }) {
     } else {
       updated.push(record)
     }
-    await setDoc(doc(db, 'attendance', `_meta_${tenantId}`), { data: updated, tenantId })
+    attendanceRef.current = updated
+    attendancePending.current++
+    setAttendance(updated)
+    const run = attendanceQueue.current.then(() =>
+      setDoc(doc(db, 'attendance', `_meta_${tenantId}`), { data: attendanceRef.current, tenantId })
+    )
+    attendanceQueue.current = run.catch(() => {}).finally(() => { attendancePending.current-- })
+    return run
   }
 
   const getAttendanceByGroup = (groupName, date) => {

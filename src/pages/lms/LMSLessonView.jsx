@@ -8,7 +8,8 @@ import {
   BookOpen, Play, FileText, Link2, Download, Video,
   Clock, Award, Send, Pencil, AlertCircle, Shield, Lock, Eye
 } from 'lucide-react'
-import { isLessonAccessible, buildFreeAccessGroup } from '../../utils/lessonAccess'
+import { isLessonAccessible, buildFreeAccessGroup, resolveStudentGroups } from '../../utils/lessonAccess'
+import { toast } from '../../components/Toaster'
 import { updateStreak, XP_RULES } from '../../data/gamification'
 import XPGainAnimation from '../../components/XPGainAnimation'
 import AIChat from '../../components/AIChat'
@@ -156,8 +157,11 @@ export default function LMSLessonView() {
   } = useData()
 
   const isStudent = user?.role === 'student'
-  const [answerText, setAnswerText] = useState('')
+  // null = untouched → the textarea shows the saved answer (if any)
+  const [answerText, setAnswerText] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [toggling, setToggling] = useState(false)
+  const togglingRef = useRef(false)
   const [xpGain, setXpGain] = useState(0)
   const [aiChatOpen, setAiChatOpen] = useState(false)
 
@@ -198,6 +202,16 @@ export default function LMSLessonView() {
     if (real) return real
     return buildFreeAccessGroup(myStudent, courses)
   }, [myStudent, groups, courses])
+
+  // The student's group for THIS lesson's course (back link, breadcrumb).
+  // Lessons are course-level and usually carry no groupId.
+  const courseGroup = useMemo(() => {
+    if (!myStudent) return group || null
+    return resolveStudentGroups(myStudent, groups, courses).find(g => g.course === course?.name) || myGroup || null
+  }, [myStudent, groups, courses, course, myGroup, group])
+  const backPath = isStudent
+    ? (courseGroup ? `/lms/course/${courseGroup.id}` : '/lms')
+    : (lesson?.groupId && group ? `/lms/group/${lesson.groupId}` : '/lms')
 
   const studentDebt = useMemo(() => {
     if (!myStudent) return 0
@@ -252,11 +266,14 @@ export default function LMSLessonView() {
   // Find assignment linked to this lesson
   const linkedAssignment = useMemo(() => {
     if (!lesson) return null
+    // Guard against undefined === undefined matches; lessons are course-level,
+    // so also match the student's group for this course.
+    const groupIds = new Set([lesson.groupId, courseGroup?.id].filter(Boolean))
     return lmsAssignments.find(a =>
-      (a.lessonId === lesson.id || a.lessonOrder === lesson.order) &&
-      (a.courseId === lesson.courseId || a.groupId === lesson.groupId)
+      (a.lessonId === lesson.id || (a.lessonOrder != null && a.lessonOrder === lesson.order)) &&
+      ((a.courseId && a.courseId === lesson.courseId) || groupIds.has(a.groupId))
     ) || null
-  }, [lmsAssignments, lesson])
+  }, [lmsAssignments, lesson, courseGroup])
 
   // Find submission for linked assignment
   const mySubmission = useMemo(() => {
@@ -274,14 +291,20 @@ export default function LMSLessonView() {
 
   const [livePercent, setLivePercent] = useState(0)
   const lastSaveRef = useRef(0)
+  const lastMilestoneRef = useRef(0) // last 10%-step already written (until the save echoes back)
+  // Prev/next reuse this page: start each lesson's counters afresh
+  useEffect(() => { lastMilestoneRef.current = 0; setLivePercent(0); setAnswerText(null); setCommentText('') }, [lessonId])
   const handleVideoProgress = useCallback(({ percent, currentTime, duration }) => {
     setLivePercent(p => Math.max(p, percent))
     if (!isStudent || !myStudent) return
     const now = Date.now()
     // Throttle writes: every 10s, or on each new 10%-milestone
-    const milestone = percent >= 25 && Math.floor(percent / 10) > Math.floor((myVideoProgress?.percent || 0) / 10)
+    const decile = Math.floor(percent / 10)
+    const milestone = percent >= 25 &&
+      decile > Math.max(Math.floor((myVideoProgress?.percent || 0) / 10), lastMilestoneRef.current)
     if (now - lastSaveRef.current > 10000 || milestone) {
       lastSaveRef.current = now
+      if (milestone) lastMilestoneRef.current = decile
       saveVideoProgress({
         studentId: myStudent.id, lessonId, courseId: course?.id || '',
         percent, watchedSeconds: currentTime, lastPosition: currentTime, duration,
@@ -300,49 +323,63 @@ export default function LMSLessonView() {
   }, [lmsVideoProgress, lessonId, students, isStudent])
 
   const handleToggleComplete = async () => {
-    if (!myStudent) return
-    if (isCompleted) {
-      const prog = lmsProgress.find(p => p.studentId === myStudent.id && p.lessonId === lessonId)
-      if (prog) await deleteLmsProgress(prog.id)
-    } else {
-      await addLmsProgress({
-        studentId: myStudent.id,
-        lessonId,
-        groupId: lesson.groupId,
-        courseId: course?.id || '',
-        completedAt: new Date().toISOString(),
-      })
-      // Gamification: update streak + show XP animation
-      try {
-        await updateStreak(studentGameData, myStudent.id, updateStudentGameData)
-      } catch (e) { console.error('Streak update error:', e) }
-      setXpGain(prev => prev + 1) // trigger animation
+    if (!myStudent || togglingRef.current) return // no double taps → no duplicate progress / XP
+    togglingRef.current = true
+    setToggling(true)
+    try {
+      if (isCompleted) {
+        const prog = lmsProgress.find(p => p.studentId === myStudent.id && p.lessonId === lessonId)
+        if (prog) await deleteLmsProgress(prog.id)
+      } else {
+        await addLmsProgress({
+          studentId: myStudent.id,
+          lessonId,
+          groupId: lesson.groupId || courseGroup?.id || '',
+          courseId: course?.id || '',
+          completedAt: new Date().toISOString(),
+        })
+        // Gamification: update streak + show XP animation
+        try {
+          await updateStreak(studentGameData, myStudent.id, updateStudentGameData)
+        } catch (e) { console.error('Streak update error:', e) }
+        setXpGain(prev => prev + 1) // trigger animation
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error('Не удалось сохранить отметку. Попробуйте ещё раз.')
+    } finally {
+      togglingRef.current = false
+      setToggling(false)
     }
   }
 
+  const answerValue = answerText ?? mySubmission?.answer ?? ''
   const handleSubmitAnswer = async () => {
-    if (!answerText.trim() || !linkedAssignment || !myStudent) return
+    if (!answerValue.trim() || !linkedAssignment || !myStudent || submitting) return
     setSubmitting(true)
     try {
       if (mySubmission) {
         await updateLmsSubmission(mySubmission.id, {
-          answer: answerText.trim(),
+          answer: answerValue.trim(),
           status: 'submitted',
           updatedAt: new Date().toISOString(),
         })
       } else {
         await addLmsSubmission({
           assignmentId: linkedAssignment.id,
-          groupId: lesson.groupId,
+          groupId: linkedAssignment.groupId || lesson.groupId || '',
           studentId: myStudent.id,
           studentName: myStudent.name,
-          answer: answerText.trim(),
+          answer: answerValue.trim(),
           status: 'submitted',
           comments: [],
           createdAt: new Date().toISOString(),
         })
       }
-      setAnswerText('')
+      setAnswerText(null)
+    } catch (err) {
+      console.error(err)
+      toast.error('Не удалось отправить ответ. Попробуйте ещё раз.')
     } finally {
       setSubmitting(false)
     }
@@ -372,8 +409,10 @@ export default function LMSLessonView() {
 
   // Comment handling
   const [commentText, setCommentText] = useState('')
+  const [sendingComment, setSendingComment] = useState(false)
   const handleAddComment = async () => {
-    if (!commentText.trim() || !mySubmission) return
+    if (!commentText.trim() || !mySubmission || sendingComment) return
+    setSendingComment(true)
     const comments = [...(mySubmission.comments || []), {
       id: Date.now().toString(),
       userId: user?.id || user?._docId || '',
@@ -382,8 +421,15 @@ export default function LMSLessonView() {
       text: commentText.trim(),
       createdAt: new Date().toISOString(),
     }]
-    await updateLmsSubmission(mySubmission.id, { comments })
-    setCommentText('')
+    try {
+      await updateLmsSubmission(mySubmission.id, { comments })
+      setCommentText('')
+    } catch (err) {
+      console.error(err)
+      toast.error('Не удалось отправить комментарий')
+    } finally {
+      setSendingComment(false)
+    }
   }
 
   const embedUrl = getYouTubeEmbedUrl(lesson?.videoUrl)
@@ -474,23 +520,26 @@ export default function LMSLessonView() {
       )}
 
       {/* Top navigation bar */}
-      <div className="flex items-center justify-between gap-4">
-        <button onClick={() => navigate(`/lms/course/${lesson.groupId}`)}
-          className="flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600 transition-colors flex-shrink-0">
-          <ArrowLeft size={16} /> {t('lms.back_to_course')}
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
+        <button onClick={() => navigate(backPath)}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600 transition-colors min-w-0">
+          <ArrowLeft size={16} className="flex-shrink-0" /> <span className="truncate">{t('lms.back_to_course')}</span>
         </button>
 
-        <div className="flex items-center gap-2">
+        {/* Phones: icon-only prev/next (titles are in the bottom navigation) */}
+        <div className="flex items-center gap-2 flex-shrink-0">
           {prevLesson && (
             <button onClick={() => navigate(`/lms/lesson/${prevLesson.id}`)}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
-              <ChevronLeft size={14} /> {t('lms.prev_lesson')}
+              aria-label={t('lms.prev_lesson')} title={t('lms.prev_lesson')}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+              <ChevronLeft size={16} /> <span className="hidden sm:inline">{t('lms.prev_lesson')}</span>
             </button>
           )}
           {nextLesson && (
             <button onClick={() => navigate(`/lms/lesson/${nextLesson.id}`)}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-              {t('lms.next_lesson')} <ChevronRight size={14} />
+              aria-label={t('lms.next_lesson')} title={t('lms.next_lesson')}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+              <span className="hidden sm:inline">{t('lms.next_lesson')}</span> <ChevronRight size={16} />
             </button>
           )}
         </div>
@@ -498,12 +547,12 @@ export default function LMSLessonView() {
 
       {/* Lesson header */}
       <div className="glass-card rounded-2xl p-6">
-        <div className="flex items-center gap-2 text-xs text-slate-400 mb-2">
-          <span>{group?.course}</span>
-          <span>·</span>
-          <span>{group?.name}</span>
-          <span>·</span>
-          <span>{t('lms.lesson_number')} {currentIndex + 1}/{allLessons.length}</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400 mb-2">
+          {[course?.name || courseGroup?.course, courseGroup?.name, `${t('lms.lesson_number')} ${currentIndex + 1}/${allLessons.length}`]
+            .filter(Boolean)
+            .map((part, i) => (
+              <span key={i} className="flex items-center gap-2">{i > 0 && <span>·</span>}{part}</span>
+            ))}
         </div>
         <h1 className="text-xl md:text-2xl font-bold text-slate-900 mb-2">{lesson.title}</h1>
         {lesson.description && (
@@ -527,6 +576,7 @@ export default function LMSLessonView() {
         return (
           <div className="glass-card rounded-2xl overflow-hidden">
             <TrackedVideoPlayer
+              key={lesson.id}
               videoInfo={videoInfo}
               lessonTitle={lesson.title}
               isStudent={isStudent}
@@ -651,17 +701,17 @@ export default function LMSLessonView() {
           )}
 
           {/* Answer section */}
-          {mySubmission && !mySubmission.grade && (
+          {mySubmission && mySubmission.grade == null && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
               <p className="text-xs text-amber-600 font-medium">{t('lms.not_graded_yet')}</p>
               <p className="text-sm text-slate-700 mt-1">{mySubmission.answer}</p>
             </div>
           )}
 
-          {(!mySubmission || mySubmission.grade === undefined) && (
+          {mySubmission?.grade == null && (
             <div className="space-y-2">
               <textarea
-                value={answerText || mySubmission?.answer || ''}
+                value={answerValue}
                 onChange={e => setAnswerText(e.target.value)}
                 placeholder={t('lms.submission_placeholder')}
                 rows={4}
@@ -669,7 +719,7 @@ export default function LMSLessonView() {
               />
               <button
                 onClick={handleSubmitAnswer}
-                disabled={submitting || !answerText.trim()}
+                disabled={submitting || !answerValue.trim() || (mySubmission && answerValue.trim() === (mySubmission.answer || '').trim())}
                 className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors"
               >
                 <Send size={14} />
@@ -699,7 +749,7 @@ export default function LMSLessonView() {
                 placeholder={t('lms.comment_placeholder')}
                 onKeyDown={e => { if (e.key === 'Enter') handleAddComment() }}
                 className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-300" />
-              <button onClick={handleAddComment} disabled={!commentText.trim()}
+              <button onClick={handleAddComment} disabled={!commentText.trim() || sendingComment}
                 className="px-3 py-2 text-xs bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50">
                 <Send size={12} />
               </button>
@@ -711,7 +761,7 @@ export default function LMSLessonView() {
       {/* Mark as complete button */}
       {isStudent && (
         <div className="glass-card rounded-2xl p-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               {isCompleted ? (
                 <div className="flex items-center gap-2 text-emerald-600">
@@ -726,7 +776,7 @@ export default function LMSLessonView() {
               {isStudent && (
                 <button
                   onClick={() => setAiChatOpen(v => !v)}
-                  className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                  className={`flex-1 sm:flex-none justify-center px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap ${
                     aiChatOpen
                       ? 'bg-violet-100 text-violet-700'
                       : 'bg-violet-600 text-white hover:bg-violet-700'
@@ -736,10 +786,11 @@ export default function LMSLessonView() {
                   Спросить AI
                 </button>
               )}
-              <div className="relative">
+              <div className="relative flex-[2] sm:flex-none">
                 <button
                   onClick={handleToggleComplete}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                  disabled={toggling}
+                  className={`w-full justify-center px-4 sm:px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-60 ${
                     isCompleted
                       ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       : 'bg-emerald-600 text-white hover:bg-emerald-700'
@@ -769,12 +820,12 @@ export default function LMSLessonView() {
           )}
 
           {/* Navigation */}
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-100">
             {prevLesson ? (
               <button onClick={() => navigate(`/lms/lesson/${prevLesson.id}`)}
-                className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600 transition-colors">
+                className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600 transition-colors min-w-0">
                 <ChevronLeft size={16} />
-                <div className="text-left">
+                <div className="text-left min-w-0">
                   <p className="text-[10px] text-slate-400">{t('lms.prev_lesson')}</p>
                   <p className="text-sm font-medium truncate max-w-[200px]">{prevLesson.title}</p>
                 </div>
@@ -783,8 +834,8 @@ export default function LMSLessonView() {
 
             {nextLesson ? (
               <button onClick={() => navigate(`/lms/lesson/${nextLesson.id}`)}
-                className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 transition-colors">
-                <div className="text-right">
+                className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 transition-colors min-w-0 ml-auto">
+                <div className="text-right min-w-0">
                   <p className="text-[10px] text-slate-400">{t('lms.next_lesson')}</p>
                   <p className="text-sm font-medium truncate max-w-[200px]">{nextLesson.title}</p>
                 </div>

@@ -4,6 +4,14 @@ import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { sameBranch } from '../utils/branchMatch'
 import { useLanguage } from '../contexts/LanguageContext'
+import { toast } from '../components/Toaster'
+
+// Today in the device's time zone (toISOString() is UTC — before 05:00 in
+// Tashkent it gave yesterday's date)
+function localToday() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function Attendance() {
   const { t } = useLanguage()
@@ -11,7 +19,7 @@ export default function Attendance() {
   const { students, teachers, branches, markAttendance, getAttendanceByGroup, getAttendanceStats } = useData()
   const canMark = hasPermission('attendance', 'mark')
   const canEdit = hasPermission('attendance', 'edit')
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(localToday)
   const [selectedGroup, setSelectedGroup] = useState('')
 
   // Get groups based on role
@@ -23,7 +31,7 @@ export default function Attendance() {
     } else {
       relevantStudents = user.branch === 'all' ? students : students.filter(s => sameBranch(s.branch, user.branch, branches))
     }
-    const groups = [...new Set(relevantStudents.map(s => s.group))].sort()
+    const groups = [...new Set(relevantStudents.map(s => s.group).filter(Boolean))].sort()
     return groups
   }, [students, user])
 
@@ -39,12 +47,15 @@ export default function Attendance() {
   }
 
   const handleMark = (studentId, status) => {
-    markAttendance({
+    Promise.resolve(markAttendance({
       date: selectedDate,
       groupName: activeGroup,
       studentId,
       status,
       teacherId: user.teacherId || user.id,
+    })).catch((err) => {
+      console.error(err)
+      toast.error('Не удалось сохранить отметку. Проверьте интернет и попробуйте ещё раз.')
     })
   }
 
