@@ -19,11 +19,13 @@ import { sameBranch } from '../utils/branchMatch'
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 const DAY_LABELS = { mon: 'Пн', tue: 'Вт', wed: 'Ср', thu: 'Чт', fri: 'Пт', sat: 'Сб', sun: 'Вс' }
 
-const todayISO = () => new Date().toISOString().split('T')[0]
+// Local dates — toISOString() is UTC and gives yesterday until 05:00 in Tashkent
+const localISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const todayISO = () => localISO(new Date())
 const isoDaysAgo = (n) => {
   const d = new Date()
   d.setDate(d.getDate() - n)
-  return d.toISOString().split('T')[0]
+  return localISO(d)
 }
 const nowHHMM = () => {
   const d = new Date()
@@ -60,8 +62,10 @@ export default function BranchOps() {
   const { branches, groups, students, teachers, rooms, schedule, attendance, payments } = useData()
 
   const lockedBranch = user?.branch && user.branch !== 'all' ? user.branch : null
-  const [branchSel, setBranchSel] = useState(lockedBranch || branches[0]?.id || '')
-  const branch = lockedBranch || branchSel
+  const [branchSel, setBranchSel] = useState('')
+  // branches may still be loading on first render (reload / deep link) —
+  // fall back to the first one instead of freezing on ''
+  const branch = lockedBranch || branchSel || branches[0]?.id || ''
 
   const today = todayISO()
   const todayKey = DAY_KEYS[new Date().getDay()]
@@ -198,7 +202,7 @@ export default function BranchOps() {
         {!lockedBranch && (
           <div className="flex items-center gap-2 glass-card rounded-xl px-3 py-2">
             <Filter size={16} className="text-slate-400" />
-            <select value={branchSel} onChange={e => setBranchSel(e.target.value)}
+            <select value={branch} onChange={e => setBranchSel(e.target.value)}
               className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer">
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -317,7 +321,7 @@ export default function BranchOps() {
             <div className="space-y-2">
               {data.groupRates.slice(0, 10).map(g => (
                 <div key={g.name} className="flex items-center gap-3">
-                  <span className="w-36 text-xs text-slate-600 text-right truncate flex-shrink-0">{g.name}</span>
+                  <span className="w-24 sm:w-36 text-xs text-slate-600 text-right truncate flex-shrink-0">{g.name}</span>
                   <div className="flex-1 h-5 bg-slate-100 rounded-lg overflow-hidden">
                     <div className={`h-full rounded-lg bg-gradient-to-r ${
                       g.rate >= 80 ? 'from-emerald-400 to-teal-500' : g.rate >= 60 ? 'from-amber-400 to-amber-500' : 'from-red-400 to-red-500'
@@ -341,7 +345,7 @@ export default function BranchOps() {
             <div className="space-y-2">
               {data.fill.map(g => (
                 <div key={g.id} className="flex items-center gap-3">
-                  <span className="w-36 text-xs text-slate-600 text-right truncate flex-shrink-0">{g.name}</span>
+                  <span className="w-24 sm:w-36 text-xs text-slate-600 text-right truncate flex-shrink-0">{g.name}</span>
                   <div className="flex-1 h-5 bg-slate-100 rounded-lg overflow-hidden">
                     <div className={`h-full rounded-lg bg-gradient-to-r ${
                       g.pct >= 90 ? 'from-emerald-400 to-teal-500' : g.pct >= 50 ? 'from-blue-400 to-violet-500' : 'from-amber-400 to-amber-500'
@@ -368,7 +372,7 @@ export default function BranchOps() {
                 const maxH = Math.max(1, ...data.roomLoad.map(r => r.hours))
                 return data.roomLoad.map(r => (
                   <div key={r.id} className="flex items-center gap-3">
-                    <span className="w-36 text-xs text-slate-600 text-right truncate flex-shrink-0">{r.name}</span>
+                    <span className="w-24 sm:w-36 text-xs text-slate-600 text-right truncate flex-shrink-0">{r.name}</span>
                     <div className="flex-1 h-5 bg-slate-100 rounded-lg overflow-hidden">
                       <div className="h-full rounded-lg bg-gradient-to-r from-cyan-400 to-blue-500"
                         style={{ width: `${Math.max(4, (r.hours / maxH) * 100)}%` }} />

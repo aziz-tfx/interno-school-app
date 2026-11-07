@@ -4,15 +4,16 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
-import { expenseCategories, formatCurrency } from '../data/mockData'
+import { formatCurrency } from '../data/mockData'
+import { sameBranch } from '../utils/branchMatch'
 import Modal from '../components/Modal'
 import BranchForm from '../components/BranchForm'
 import { toast } from '../components/Toaster'
 
 export default function Branches() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { hasPermission } = useAuth()
-  const { branches, students, teachers, groups, rooms, addBranch, updateBranch, deleteBranch, addRoom, updateRoom, deleteRoom } = useData()
+  const { branches, students, teachers, groups, rooms, payments, addBranch, updateBranch, deleteBranch, addRoom, updateRoom, deleteRoom } = useData()
   const [modalOpen, setModalOpen] = useState(false)
   const [editingBranch, setEditingBranch] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -48,7 +49,7 @@ export default function Branches() {
     const branchStudents = students.filter(s => s.branch === id).length
     const branchTeachers = teachers.filter(t => t.branch === id).length
     if (branchStudents > 0 || branchTeachers > 0) {
-      toast.info(`${t('branches.heading')}: ${branchStudents} / ${branchTeachers}`)
+      toast.info(`Нельзя удалить филиал: в нём ${branchStudents} учен. и ${branchTeachers} учит. Сначала переведите их в другой филиал.`)
       setConfirmDelete(null)
       return
     }
@@ -86,13 +87,29 @@ export default function Branches() {
     return roomGroups.length
   }
 
-  // Dynamic expense chart data — use actual branches
-  const dynamicExpenseData = expenseCategories.map(cat => {
-    const row = { category: cat.category }
-    branches.forEach(b => {
-      row[b.id] = cat[b.id] || 0
-    })
-    return row
+  // Money figures are computed from this month's payments (the branch doc's
+  // monthlyRevenue / monthlyExpenses are stale seed fields, NaN for new branches).
+  const now = new Date()
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthLabel = now.toLocaleDateString(language === 'uz' ? 'uz-UZ' : 'ru-RU', { month: 'long' })
+  const monthPayments = (payments || []).filter(p => (p.date || '').startsWith(monthKey))
+  const sumFor = (branchId, type) => monthPayments
+    .filter(p => p.type === type && sameBranch(p.branch, branchId, branches))
+    .reduce((s, p) => s + (Number(p.amount) || 0), 0)
+
+  // Expense structure: this month's expense payments by category, млн сум
+  const expenseByCategory = {}
+  monthPayments.filter(p => p.type === 'expense').forEach(p => {
+    const cat = p.category || 'Прочее'
+    const branch = branches.find(b => sameBranch(p.branch, b.id, branches))
+    if (!branch) return
+    expenseByCategory[cat] ||= { category: cat }
+    expenseByCategory[cat][branch.id] = (expenseByCategory[cat][branch.id] || 0) + (Number(p.amount) || 0)
+  })
+  const dynamicExpenseData = Object.values(expenseByCategory).map(row => {
+    const out = { category: row.category }
+    branches.forEach(b => { out[b.id] = Math.round((row[b.id] || 0) / 1e5) / 10 })
+    return out
   })
 
   // Colors for chart bars
@@ -116,11 +133,13 @@ export default function Branches() {
       {/* Branch Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {branches.map((branch, idx) => {
-          const profit = branch.monthlyRevenue - branch.monthlyExpenses
-          const margin = branch.monthlyRevenue > 0 ? Math.round((profit / branch.monthlyRevenue) * 100) : 0
-          const branchStudentCount = students.filter(s => s.branch === branch.id).length
-          const branchTeacherCount = teachers.filter(t => t.branch === branch.id).length
-          const actualStudents = branchStudentCount || branch.students
+          const revenue = sumFor(branch.id, 'income')
+          const expenses = sumFor(branch.id, 'expense')
+          const profit = revenue - expenses
+          const margin = revenue > 0 ? Math.round((profit / revenue) * 100) : 0
+          const actualStudents = students.filter(s => sameBranch(s.branch, branch.id, branches)).length
+          const branchTeacherCount = teachers.filter(t => sameBranch(t.branch, branch.id, branches)).length
+          const branchGroupCount = groups.filter(g => g.status === 'active' && sameBranch(g.branch, branch.id, branches)).length
           const occupancy = branch.capacity > 0 ? Math.round((actualStudents / branch.capacity) * 100) : 0
 
           return (
@@ -191,12 +210,12 @@ export default function Branches() {
                   </div>
                   <div className="bg-purple-50 rounded-lg p-3">
                     <Users size={18} className="text-purple-600 mx-auto mb-1" />
-                    <p className="text-lg font-bold text-slate-900">{branchTeacherCount || branch.teachers}</p>
+                    <p className="text-lg font-bold text-slate-900">{branchTeacherCount}</p>
                     <p className="text-xs text-slate-500">{t('branches.teachers')}</p>
                   </div>
                   <div className="bg-emerald-50 rounded-lg p-3">
                     <BookOpen size={18} className="text-emerald-600 mx-auto mb-1" />
-                    <p className="text-lg font-bold text-slate-900">{branch.groups || 0}</p>
+                    <p className="text-lg font-bold text-slate-900">{branchGroupCount}</p>
                     <p className="text-xs text-slate-500">{t('branches.groups')}</p>
                   </div>
                 </div>
@@ -205,18 +224,18 @@ export default function Branches() {
 
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-sm text-slate-500">{t('branches.income')}</span>
-                    <span className="text-sm font-semibold text-emerald-600">{formatCurrency(branch.monthlyRevenue)}</span>
+                    <span className="text-sm text-slate-500">{t('branches.income')} · {monthLabel}</span>
+                    <span className="text-sm font-semibold text-emerald-600">{formatCurrency(revenue)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-slate-500">{t('branches.expenses')}</span>
-                    <span className="text-sm font-semibold text-red-500">{formatCurrency(branch.monthlyExpenses)}</span>
+                    <span className="text-sm font-semibold text-red-500">{formatCurrency(expenses)}</span>
                   </div>
                   <div className="flex justify-between border-t border-slate-100 pt-2">
                     <span className="text-sm font-medium text-slate-700">{t('branches.profit')}</span>
                     <span className="text-sm font-bold text-blue-600">{formatCurrency(profit)}</span>
                   </div>
-                  {branch.monthlyRevenue > 0 && (
+                  {revenue > 0 && (
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">{t('branches.margin')}</span>
                       <span className="text-sm font-semibold">{margin}%</span>
@@ -333,9 +352,9 @@ export default function Branches() {
       </Modal>
 
       {/* Expense Comparison */}
-      {branches.length > 0 && (
+      {branches.length > 0 && dynamicExpenseData.length > 0 && (
         <div className="glass-card rounded-2xl p-4 md:p-6">
-          <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-4">{t('branches.expense_chart')}</h3>
+          <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-4">{t('branches.expense_chart')} · {monthLabel}</h3>
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={dynamicExpenseData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

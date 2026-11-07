@@ -80,13 +80,13 @@ export default function GlobalSearch() {
         .slice(0, 3)
         .forEach(e => out.push({
           type: 'employee', icon: UserCog, color: 'bg-violet-100 text-violet-600',
-          title: e.name, subtitle: e.role || '',
+          title: e.name, subtitle: (e.role && t(`role.${e.role}`) !== `role.${e.role}` ? t(`role.${e.role}`) : e.role) || '',
           to: '/employees',
         }))
     }
 
     return out.slice(0, 12)
-  }, [query, students, groups, payments, employees, hasPermission])
+  }, [query, students, groups, payments, employees, hasPermission, t])
 
   const go = (item) => {
     setOpen(false)

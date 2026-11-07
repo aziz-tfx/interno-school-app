@@ -362,7 +362,8 @@ export default function Sidebar({ open, onClose }) {
                 key={to}
                 to={to}
                 onClick={onClose}
-                className={({ isActive }) => linkClass(isActive)}
+                // Staff land on «/», which renders the same Dashboard
+                className={({ isActive }) => linkClass(isActive || (to === '/dashboard' && location.pathname === '/' && user?.role !== 'teacher'))}
               >
                 <Icon size={18} />
                 {label}
