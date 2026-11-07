@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import Logo from './components/Logo'
@@ -43,6 +43,17 @@ function ProtectedRoute({ children, permission }) {
   return children
 }
 
+// /tg is the old student-only mini app. Bots (menu button, BotFather's
+// «Open App») that still point there would lock staff into a student login,
+// so on the server backend it forwards to the whole app, which signs anyone
+// in — staff and students — via Telegram. ?tenantId= is kept: the app needs
+// it to check Telegram's signature with this school's bot.
+function TelegramEntry() {
+  const { search } = useLocation()
+  if (!USE_SERVER) return <TelegramApp />
+  return <Navigate to={`/${search}`} replace />
+}
+
 function SplashScreen() {
   return (
     <div className="h-[100dvh] flex flex-col items-center justify-center gap-4">
@@ -66,7 +77,7 @@ export default function App() {
         <Route path="/register-school" element={<RegisterSchool />} />
         <Route path="/course/:courseId" element={<CourseLanding />} />
         <Route path="/contract/:paymentId" element={<ContractSign />} />
-        <Route path="/tg" element={<TelegramApp />} />
+        <Route path="/tg" element={<TelegramEntry />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     )
@@ -79,7 +90,7 @@ export default function App() {
       <Route path="/login" element={<Navigate to="/" />} />
       <Route path="/contract/:paymentId" element={<ContractSign />} />
       <Route path="/course/:courseId" element={<CourseLanding />} />
-      <Route path="/tg" element={<TelegramApp />} />
+      <Route path="/tg" element={<TelegramEntry />} />
       <Route path="/" element={<Layout />}>
         <Route index element={homePage} />
         <Route path="dashboard" element={
