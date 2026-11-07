@@ -17,6 +17,7 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
   const [missing, setMissing] = useState(false)
   const [newPhone, setNewPhone] = useState('')
   const [conflict, setConflict] = useState(null) // contact that already has a phone being added
+  const [creatingLead, setCreatingLead] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -67,12 +68,19 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
   }
 
   const newLead = async () => {
+    if (creatingLead) return
+    setCreatingLead(true)
     try {
       const lead = await crm.createLead({ contactId: contact.id, title: contact.name || 'Новая сделка' })
       onOpenLead(lead.id)
     } catch (err) {
       toast(err.message, 'error')
     }
+    setCreatingLead(false)
+  }
+
+  const copy = (text) => {
+    navigator.clipboard?.writeText(text).then(() => toast('Скопировано', 'success', 1500)).catch(() => {})
   }
 
   const remove = async () => {
@@ -85,9 +93,9 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
     }
   }
 
-  const textField = (label, key, placeholder) => (
+  const textField = (label, key, placeholder, type = 'text') => (
     <label className="text-xs text-slate-500">{label}
-      <input key={`${key}:${contact[key] || ''}`} defaultValue={contact[key] || ''} placeholder={placeholder} className={inputCls + ' mt-1'}
+      <input type={type} key={`${key}:${contact[key] || ''}`} defaultValue={contact[key] || ''} placeholder={placeholder} className={inputCls + ' mt-1'}
         onBlur={e => e.target.value.trim() !== (contact[key] || '') && save({ [key]: e.target.value.trim() })} />
     </label>
   )
@@ -99,8 +107,8 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
       ) : !contact ? (
         <div className="flex items-center justify-center py-16"><Loader size={22} className="animate-spin text-slate-400" /></div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-          <div className="space-y-5">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <div className="space-y-5 min-w-0">
             {contact.studentId && (
               <p className="flex items-center gap-1.5 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
                 <GraduationCap size={16} /> Уже учится в школе
@@ -114,19 +122,19 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
                   <div key={p} className="flex items-center gap-2 text-sm">
                     <Phone size={13} className="text-slate-400" />
                     <a href={`tel:+${p}`} className="text-blue-600 hover:underline">{formatPhone(p)}</a>
-                    <button onClick={() => navigator.clipboard?.writeText(`+${p}`)} title="Скопировать" className="text-slate-400 hover:text-slate-600"><Copy size={13} /></button>
+                    <button onClick={() => copy(`+${p}`)} title="Скопировать" aria-label="Скопировать" className="p-1.5 -m-1.5 text-slate-400 hover:text-slate-600"><Copy size={13} /></button>
                     {contact.phones.length > 1 && (
-                      <button onClick={() => save({ phones: contact.phones.filter(x => x !== p) })} title="Убрать" className="text-slate-300 hover:text-red-500 ml-auto"><X size={14} /></button>
+                      <button onClick={() => save({ phones: contact.phones.filter(x => x !== p) })} title="Убрать" aria-label="Убрать телефон" className="p-1.5 -m-1.5 text-slate-300 hover:text-red-500 ml-auto"><X size={14} /></button>
                     )}
                   </div>
                 ))}
                 <div className="flex gap-2">
-                  <input value={newPhone} onChange={e => setNewPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPhone()}
-                    placeholder="+ телефон" className={inputCls} />
-                  <button onClick={addPhone} disabled={!newPhone.trim()} className="px-3 rounded-xl bg-white border border-slate-200 text-slate-600 disabled:opacity-40"><Plus size={15} /></button>
+                  <input type="tel" inputMode="tel" autoComplete="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPhone()}
+                    placeholder="+ телефон" className={inputCls + ' min-w-0'} />
+                  <button onClick={addPhone} disabled={!newPhone.trim()} aria-label="Добавить телефон" className="shrink-0 px-3 rounded-xl bg-white border border-slate-200 text-slate-600 disabled:opacity-40"><Plus size={15} /></button>
                 </div>
               </div>
-              {textField('Email', 'email')}
+              {textField('Email', 'email', '', 'email')}
               {textField('Instagram', 'instagram', '@username')}
               {textField('Telegram', 'telegramUsername', 'username')}
               <label className="text-xs text-slate-500">Ответственный
@@ -141,7 +149,7 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-slate-800">Сделки</p>
-                <button onClick={newLead} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"><Plus size={14} /> Сделка</button>
+                <button onClick={newLead} disabled={creatingLead} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 disabled:opacity-50">{creatingLead ? <Loader size={14} className="animate-spin" /> : <Plus size={14} />} Сделка</button>
               </div>
               {contact.leads.length === 0 && <p className="text-xs text-slate-400">Сделок нет</p>}
               {contact.leads.map(l => {
@@ -151,7 +159,7 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
                   <button key={l.id} onClick={() => onOpenLead(l.id)} className="w-full text-left rounded-xl bg-white/60 border border-slate-100 hover:border-slate-200 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium text-slate-800 truncate">{l.title || 'Без названия'}</p>
-                      {l.amount > 0 && <span className="text-xs font-semibold text-slate-700">{formatSum(l.amount)}</span>}
+                      {l.amount > 0 && <span className="text-xs font-semibold text-slate-700 whitespace-nowrap shrink-0">{formatSum(l.amount)}</span>}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full" style={{ background: stage?.color || '#94a3b8' }} />
@@ -169,9 +177,9 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
             )}
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <p className="text-sm font-semibold text-slate-800">История по всем сделкам</p>
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-3 lg:max-h-[60vh] lg:overflow-y-auto lg:pr-1">
               {activities.length === 0 && <p className="text-xs text-slate-400">Пока пусто</p>}
               {activities.map(a => (
                 <ActivityItem key={a.id} a={a} allStages={allStages} people={people} showLead onOpenLead={onOpenLead} />

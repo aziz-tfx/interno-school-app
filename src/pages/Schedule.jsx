@@ -259,9 +259,13 @@ export default function Schedule() {
   const [editingEntry, setEditingEntry] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  // Find student's group for auto-filter
+  // Find student's group for auto-filter (by linked studentId first)
   const myStudent = useMemo(() => {
     if (!isStudent) return null
+    if (user?.studentId) {
+      const byId = students.find(s => String(s.id) === String(user.studentId))
+      if (byId) return byId
+    }
     return students.find(s => s.name === user?.name || s.phone === user?.phone) || null
   }, [students, user, isStudent])
 
@@ -269,9 +273,10 @@ export default function Schedule() {
   const filteredSchedule = useMemo(() => {
     let entries = [...schedule]
 
-    // Student: only their group
-    if (isStudent && myStudent) {
-      return entries.filter(e => e.groupName === myStudent.group || e.groupId === myStudent.groupId)
+    // Student: only their group — never the whole school's schedule
+    if (isStudent) {
+      if (!myStudent) return []
+      return entries.filter(e => (myStudent.group && e.groupName === myStudent.group) || (myStudent.groupId && e.groupId === myStudent.groupId))
     }
 
     // Teacher: only their entries
@@ -441,7 +446,7 @@ export default function Schedule() {
                     const colorClass = getColorForGroup(entry.groupId, groups)
                     return (
                       <div key={entry.id}
-                        className={`relative rounded-xl p-2.5 border ${colorClass} transition-all hover:shadow-md cursor-pointer group`}
+                        className={`relative rounded-xl p-2.5 border ${colorClass} ${canEdit ? 'pr-10 md:pr-2.5' : ''} transition-all hover:shadow-md cursor-pointer group`}
                         onClick={() => {
                           if (canEdit) { setEditingEntry(entry); setShowForm(true) }
                         }}
@@ -450,9 +455,10 @@ export default function Schedule() {
                         {canEdit && (
                           <button
                             onClick={(e) => { e.stopPropagation(); setDeleteConfirm(entry.id) }}
-                            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100"
+                            aria-label="Удалить занятие"
+                            className="absolute top-1 right-1 w-8 h-8 md:w-6 md:h-6 rounded-full bg-white/80 flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity hover:bg-red-100"
                           >
-                            <X size={10} className="text-red-500" />
+                            <X size={14} className="text-red-500" />
                           </button>
                         )}
                         <div className="flex items-center gap-1 mb-1">

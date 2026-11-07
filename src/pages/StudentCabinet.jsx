@@ -18,6 +18,22 @@ import AIChat from '../components/AIChat'
 import Certificate from '../components/Certificate'
 import StudentOnboarding from '../components/StudentOnboarding'
 import { resolveStudentGroups } from '../utils/lessonAccess'
+import { toast } from '../components/Toaster'
+
+// Russian count word: 1 урок, 2 урока, 5 уроков
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few
+  return many
+}
+
+// ISO timestamp → "06.11.2026" (plain dates are shown as they are)
+function fmtDate(v) {
+  if (!v || !String(v).includes('T')) return v || ''
+  const d = new Date(v)
+  return isNaN(d) ? String(v).split('T')[0] : d.toLocaleDateString('ru-RU')
+}
 
 // ─── Format currency ───────────────────────────────────────────────
 function fmt(n) {
@@ -30,7 +46,7 @@ export default function StudentCabinet() {
   const { t } = useLanguage()
   const navigate = useNavigate()
   const {
-    students, groups, courses, payments, teachers, branches,
+    students, groups, courses, payments, teachers, branches, loading,
     getAttendanceByGroup, getAttendanceStats,
     lmsProgress, lmsLessons, lmsModules, lmsAssignments, lmsSubmissions, lmsAnnouncements,
     messages, sendMessage, markMessagesRead,
@@ -42,6 +58,7 @@ export default function StudentCabinet() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [showCertificate, setShowCertificate] = useState(null)
   const [chatText, setChatText] = useState('')
+  const [chatSending, setChatSending] = useState(false)
 
   // Public payment/bot config (safe subset — no secrets)
   const [payConfig, setPayConfig] = useState(null)
@@ -207,18 +224,26 @@ export default function StudentCabinet() {
   }, [messages, chatThreadId])
 
   const handleSendChat = async () => {
-    if (!chatText.trim() || !chatThreadId || !myStudent) return
-    await sendMessage({
-      threadId: chatThreadId,
-      studentId: myStudent.id,
-      groupId: myGroup?.id || '',
-      teacherId: myGroup?.teacherId || '',
-      senderId: myStudent.id,
-      senderName: myStudent.name,
-      senderRole: 'student',
-      text: chatText.trim(),
-    })
-    setChatText('')
+    if (!chatText.trim() || !chatThreadId || !myStudent || chatSending) return
+    setChatSending(true)
+    try {
+      await sendMessage({
+        threadId: chatThreadId,
+        studentId: myStudent.id,
+        groupId: myGroup?.id || '',
+        teacherId: myGroup?.teacherId || '',
+        senderId: myStudent.id,
+        senderName: myStudent.name,
+        senderRole: 'student',
+        text: chatText.trim(),
+      })
+      setChatText('')
+    } catch (err) {
+      console.error(err)
+      toast.error('Не удалось отправить сообщение. Попробуйте ещё раз.')
+    } finally {
+      setChatSending(false)
+    }
   }
 
   // Mark chat read when opening the chat tab
@@ -237,6 +262,15 @@ export default function StudentCabinet() {
   }, [courseProgressData, myGroups])
 
   const setActiveTab = (tab) => navigate(tab === 'overview' ? '/' : `/?tab=${tab}`)
+
+  // ─── Data still loading: don't flash "not enrolled / paid 0/0" ─
+  if (loading && !myStudent) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 border-[3px] border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   // ─── Blocked screen ───────────────────────────────────────────
   if (myStudent && myStudent.lmsAccess !== true) {
@@ -304,9 +338,10 @@ export default function StudentCabinet() {
   // RENDER
   // ═══════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen pb-8">
+    <div className="min-h-screen pb-20 md:pb-8">
       {/* ─── Welcome Header ─────────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-indigo-600 via-blue-600 to-purple-700 -mx-4 -mt-4 px-4 pt-8 pb-12 md:px-8 md:-mx-8 md:-mt-8 mb-0 relative overflow-hidden">
+      {/* Negative margins match <main>'s padding (px-3 / sm:px-4 / md:p-6) */}
+      <div className="bg-gradient-to-br from-indigo-600 via-blue-600 to-purple-700 -mx-3 -mt-3 sm:-mx-4 sm:-mt-4 px-4 pt-8 pb-12 md:px-8 md:-mx-6 md:-mt-6 mb-0 relative overflow-hidden">
         <div className="absolute inset-0 opacity-20">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
           <div className="absolute bottom-0 left-0 w-72 h-72 bg-blue-300 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" />
@@ -358,7 +393,8 @@ export default function StudentCabinet() {
           )}
         </div>
 
-        <div className="relative z-10 max-w-5xl mx-auto">
+        {/* md:pr-14 keeps the quick stats clear of the bell (absolute, top-right) */}
+        <div className="relative z-10 max-w-5xl mx-auto md:pr-14">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center text-white text-xl font-bold border border-white/20">
@@ -393,7 +429,7 @@ export default function StudentCabinet() {
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/10 text-center">
                 <p className="text-2xl font-bold text-white">{overallProgress.completed}</p>
-                <p className="text-white/50 text-xs">из {overallProgress.total} уроков</p>
+                <p className="text-white/50 text-xs">из {overallProgress.total} {plural(overallProgress.total, 'урока', 'уроков', 'уроков')}</p>
               </div>
               {gam?.xp && (
                 <div className="bg-amber-500/20 backdrop-blur-sm rounded-xl px-4 py-3 border border-amber-400/20 text-center">
@@ -412,7 +448,7 @@ export default function StudentCabinet() {
               {pendingAssignments.length > 0 && (
                 <div className="bg-red-500/20 backdrop-blur-sm rounded-xl px-4 py-3 border border-red-400/20 text-center">
                   <p className="text-2xl font-bold text-red-200">{pendingAssignments.length}</p>
-                  <p className="text-red-300/60 text-xs">заданий</p>
+                  <p className="text-red-300/60 text-xs">{plural(pendingAssignments.length, 'задание', 'задания', 'заданий')}</p>
                 </div>
               )}
             </div>
@@ -584,7 +620,7 @@ export default function StudentCabinet() {
               ) : (
                 <div className="space-y-2">
                   {pendingAssignments.slice(0, 4).map(a => (
-                    <button key={a.id} onClick={() => navigate(`/lms/course/${a.groupId}`)}
+                    <button key={a.id} onClick={() => navigate(`/lms/group/${a.groupId}?tab=assignments`)}
                       className="w-full text-left p-3 rounded-xl hover:bg-slate-50 border border-slate-100 transition-colors">
                       <p className="font-medium text-slate-800 text-sm">{a.title}</p>
                       {a.deadline && <p className="text-xs text-slate-400 mt-0.5">Срок: {a.deadline}</p>}
@@ -662,7 +698,7 @@ export default function StudentCabinet() {
                     <div key={a.id} className="p-3 bg-blue-50 rounded-xl border-l-3 border-blue-400">
                       <p className="font-medium text-slate-800 text-sm">{a.title}</p>
                       <p className="text-xs text-slate-500 mt-1 line-clamp-2">{a.content}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">{a.createdAt}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">{fmtDate(a.createdAt)}</p>
                     </div>
                   ))}
                 </div>
@@ -1101,7 +1137,7 @@ export default function StudentCabinet() {
                   {pendingAssignments.map(a => {
                     const group = groups.find(g => g.id === a.groupId)
                     return (
-                      <button key={a.id} onClick={() => navigate(`/lms/course/${a.groupId}`)}
+                      <button key={a.id} onClick={() => navigate(`/lms/group/${a.groupId}?tab=assignments`)}
                         className="w-full text-left p-4 rounded-xl border border-amber-100 bg-amber-50 hover:bg-amber-100 transition-colors">
                         <div className="flex items-center justify-between">
                           <p className="font-medium text-slate-800 text-sm">{a.title}</p>
@@ -1161,9 +1197,9 @@ export default function StudentCabinet() {
                     <Bell size={18} className="text-blue-500" />
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-slate-800">{a.title}</h4>
-                      <span className="text-xs text-slate-400">{a.createdAt}</span>
+                    <div className="flex items-start justify-between gap-3">
+                      <h4 className="font-semibold text-slate-800 min-w-0">{a.title}</h4>
+                      <span className="text-xs text-slate-400 flex-shrink-0 mt-0.5">{fmtDate(a.createdAt)}</span>
                     </div>
                     <p className="text-sm text-slate-600 mt-2 whitespace-pre-line">{a.content}</p>
                   </div>
@@ -1274,7 +1310,7 @@ export default function StudentCabinet() {
                   placeholder="Написать сообщение..."
                   className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                 />
-                <button onClick={handleSendChat} disabled={!chatText.trim()}
+                <button onClick={handleSendChat} disabled={!chatText.trim() || chatSending}
                   className="w-11 h-11 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 disabled:opacity-40 transition-colors flex-shrink-0">
                   <Send size={18} />
                 </button>
@@ -1295,8 +1331,9 @@ export default function StudentCabinet() {
         />
       )}
 
-      {/* Floating AI Chat Button */}
-      <button
+      {/* Floating AI Chat Button — hidden on the teacher-chat tab, where it
+          would sit on top of the Send button */}
+      {activeTab !== 'chat' && <button
         onClick={() => setAiChatOpen(v => !v)}
         className={`fixed bottom-safe right-4 md:right-6 w-14 h-14 rounded-full shadow-lg shadow-violet-500/30 flex items-center justify-center text-white transition-all z-40 ${
           aiChatOpen
@@ -1305,7 +1342,7 @@ export default function StudentCabinet() {
         }`}
       >
         {aiChatOpen ? <X size={22} /> : <Bot size={24} />}
-      </button>
+      </button>}
       <AIChat
         isOpen={aiChatOpen}
         onClose={() => setAiChatOpen(false)}

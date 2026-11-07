@@ -13,6 +13,17 @@ const STATUS = {
   good: { tKey: 'salesDashboard.status_good',   bg: 'bg-blue-100',    text: 'text-blue-700',    bar: 'bg-blue-500'    },
   risk: { tKey: 'salesDashboard.status_risk',    bg: 'bg-amber-100',   text: 'text-amber-700',   bar: 'bg-amber-500'   },
   low:  { tKey: 'salesDashboard.status_low',     bg: 'bg-red-100',     text: 'text-red-700',     bar: 'bg-red-400'     },
+  // No plan for the month — neither «Отстаёт» nor «Выполнен»
+  none: { tKey: 'salesDashboard.no_plan_label',  bg: 'bg-slate-100',   text: 'text-slate-500',   bar: 'bg-slate-300'   },
+}
+
+const statusOf = (perf) => (perf.plan > 0 ? perf.status : 'none')
+const pctLabel = (perf) => (perf.plan > 0 ? `${perf.percentage}%` : '—')
+
+// Local YYYY-MM (toISOString() is UTC — previous month until 05:00 on the 1st in Tashkent)
+const currentMonth = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function StatusBadge({ status }) {
@@ -46,10 +57,10 @@ function SummaryCard({ title, perf, accent = 'blue' }) {
           <p className="text-sm font-semibold text-slate-600">{formatCurrency(perf.plan)}</p>
         </div>
       </div>
-      <ProgressBar pct={perf.percentage} status={perf.status} height="h-2.5" />
+      <ProgressBar pct={perf.percentage} status={statusOf(perf)} height="h-2.5" />
       <div className="flex items-center justify-between mt-2">
-        <StatusBadge status={perf.status} />
-        <span className="text-base font-bold text-slate-800">{perf.percentage}%</span>
+        <StatusBadge status={statusOf(perf)} />
+        <span className="text-base font-bold text-slate-800">{pctLabel(perf)}</span>
       </div>
     </div>
   )
@@ -57,7 +68,8 @@ function SummaryCard({ title, perf, accent = 'blue' }) {
 
 function ManagerCard({ manager, perf, isMe }) {
   const { t } = useLanguage()
-  const s = STATUS[perf.status] || STATUS.low
+  const status = statusOf(perf)
+  const s = STATUS[status] || STATUS.low
   return (
     <div className={`bg-white rounded-xl p-4 shadow-sm border transition-shadow hover:shadow-md ${isMe ? 'border-blue-300 ring-1 ring-blue-200' : 'border-slate-100'}`}>
       <div className="flex items-center gap-3 mb-3">
@@ -69,15 +81,14 @@ function ManagerCard({ manager, perf, isMe }) {
             {manager.name}
             {isMe && <span className="ml-1 text-xs text-blue-500 font-normal">{t('finance.you')}</span>}
           </p>
-          {perf.plan === 0 && <p className="text-xs text-slate-400">{t('salesDashboard.no_plan_label')}</p>}
         </div>
-        <StatusBadge status={perf.status} />
+        <StatusBadge status={status} />
       </div>
-      <ProgressBar pct={perf.percentage} status={perf.status} />
+      <ProgressBar pct={perf.percentage} status={status} />
       <div className="grid grid-cols-3 gap-2 mt-3 text-center">
         <div><p className="text-xs text-slate-400">{t('salesDashboard.plan')}</p><p className="text-xs font-semibold text-slate-700">{perf.plan > 0 ? formatCurrency(perf.plan) : '—'}</p></div>
         <div><p className="text-xs text-slate-400">{t('salesDashboard.fact')}</p><p className="text-xs font-semibold text-emerald-600">{perf.achieved > 0 ? formatCurrency(perf.achieved) : '—'}</p></div>
-        <div><p className="text-xs text-slate-400">%</p><p className={`text-sm font-bold ${s.text}`}>{perf.percentage}%</p></div>
+        <div><p className="text-xs text-slate-400">%</p><p className={`text-sm font-bold ${s.text}`}>{pctLabel(perf)}</p></div>
       </div>
       {perf.plan > 0 && perf.remaining > 0 && (
         <p className="mt-2 text-xs text-slate-400 text-center">{t('salesDashboard.remaining')}: <span className="font-medium text-slate-600">{formatCurrency(perf.remaining)}</span></p>
@@ -95,7 +106,7 @@ export default function SalesDashboard() {
   // together with owner/admin who see every branch.
   const isAdmin = user.role === 'owner' || user.role === 'admin'
   const isBranchDirector = user.role === 'branch_director'
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [month, setMonth] = useState(currentMonth)
   const [planModalOpen, setPlanModalOpen] = useState(false)
   const [branchFilter, setBranchFilter] = useState(
     isAdmin ? 'all' : (user.branch && user.branch !== 'all' ? user.branch : 'all')
@@ -184,8 +195,8 @@ export default function SalesDashboard() {
                   <div className="h-2.5 rounded-full bg-white transition-all duration-500" style={{ width: `${Math.min(perf.percentage, 100)}%` }} />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs opacity-80">{perf.remaining > 0 ? `${t('salesDashboard.remaining')} ${formatCurrency(perf.remaining)}` : t('salesDashboard.plan_done')}</span>
-                  <span className="text-xl font-bold">{perf.percentage}%</span>
+                  <span className="text-xs opacity-80">{perf.plan === 0 ? t('salesDashboard.no_plan_label') : perf.remaining > 0 ? `${t('salesDashboard.remaining')} ${formatCurrency(perf.remaining)}` : t('salesDashboard.plan_done')}</span>
+                  <span className="text-xl font-bold">{pctLabel(perf)}</span>
                 </div>
               </div>
             )

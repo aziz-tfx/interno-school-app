@@ -599,9 +599,10 @@ html:not(.has-tabbar) .bottom-safe { bottom: calc(env(safe-area-inset-bottom) + 
 
 @media (max-width: 767px) {
   /* iOS zooms into inputs with font-size < 16px — keep the layout still */
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
-  select,
-  textarea {
+  /* :not(#_) lifts specificity above Tailwind's .text-sm / .text-xs */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(#_),
+  select:not(#_),
+  textarea:not(#_) {
     font-size: 16px;
   }
   /* Wide tables scroll inside their own box, never the whole page */
@@ -756,8 +757,8 @@ html.dark {
 /* Reports: the two sticky columns of the daily matrix (manager, metric).
    The metric column's left offset must equal the manager column's width;
    on phones both shrink so more than a sliver of the days stays visible. */
-.rpt-c1 { width: 100px; min-width: 100px; max-width: 100px; overflow-wrap: anywhere; }
-.rpt-c2 { left: 100px; min-width: 160px; }
+.rpt-c1 { width: 150px; min-width: 150px; max-width: 150px; overflow-wrap: break-word; }
+.rpt-c2 { left: 150px; min-width: 160px; }
 @media (max-width: 767px) {
   .rpt-c1 { width: 80px; min-width: 80px; max-width: 80px; }
   .rpt-c2 { left: 80px; width: 112px; min-width: 112px; max-width: 112px; }

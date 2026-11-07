@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { toast } from './Toaster'
 
 const WEEKDAYS = [
   { key: 'mon', label: 'Пн' },
@@ -53,6 +54,7 @@ export default function GroupForm({ group, onClose }) {
   const [timeFrom, setTimeFrom] = useState('14:00')
   const [timeTo, setTimeTo] = useState('16:00')
   const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (group) {
@@ -104,14 +106,17 @@ export default function GroupForm({ group, onClose }) {
     set('name', `${code}-${nextNum}`)
   }, [form.course, isEdit])
 
-  // Auto-fill maxOffline when room is selected
-  useEffect(() => {
-    if (!form.room) return
-    const selectedRoom = rooms.find(r => r.id === form.room)
-    if (selectedRoom?.capacity) {
-      set('maxOffline', selectedRoom.capacity)
-    }
-  }, [form.room])
+  // Auto-fill maxOffline when the user picks a room (not when an existing
+  // group's data loads — that would overwrite its saved limit).
+  const handleRoomChange = (roomId) => {
+    const selectedRoom = rooms.find(r => r.id === roomId)
+    setForm(prev => ({
+      ...prev,
+      room: roomId,
+      ...(selectedRoom?.capacity ? { maxOffline: selectedRoom.capacity } : {}),
+    }))
+    if (errors.room) setErrors(p => ({ ...p, room: null }))
+  }
 
   // Build schedule string from selected days + time
   useEffect(() => {
@@ -147,8 +152,9 @@ export default function GroupForm({ group, onClose }) {
     )
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return
     // ─── Required: start date always; room for offline/hybrid groups ───
     const nextErrors = {}
     if (!form.startDate) nextErrors.startDate = 'Укажите дату старта'
@@ -162,16 +168,25 @@ export default function GroupForm({ group, onClose }) {
 
     const data = {
       ...form,
-      teacherId: form.teacherId ? Number(form.teacherId) : null,
+      // numeric legacy ids stay numbers (compared with === elsewhere); string ids as-is (Number() made them NaN → null)
+      teacherId: form.teacherId ? (/^\d+$/.test(String(form.teacherId)) ? Number(form.teacherId) : form.teacherId) : null,
       maxOffline: Number(form.maxOffline) || 15,
       endDate: endDate || null,
     }
-    if (isEdit) {
-      updateGroup(group.id, data)
-    } else {
-      addGroup(data)
+    setSaving(true)
+    try {
+      if (isEdit) {
+        await updateGroup(group.id, data)
+      } else {
+        await addGroup(data)
+      }
+      onClose()
+    } catch (err) {
+      console.error('Group save failed:', err)
+      toast.error('Не удалось сохранить группу. Попробуйте ещё раз.')
+    } finally {
+      setSaving(false)
     }
-    onClose()
   }
 
   return (
@@ -236,7 +251,7 @@ export default function GroupForm({ group, onClose }) {
         {form.format !== 'online' && (
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_room')} <span className="text-red-500">*</span></label>
-            <select value={form.room} onChange={e => { set('room', e.target.value); if (errors.room) setErrors(p => ({ ...p, room: null })) }}
+            <select value={form.room} onChange={e => handleRoomChange(e.target.value)}
               className={`w-full px-3 py-2 bg-slate-50 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.room ? 'border-red-400' : 'border-slate-200'}`}>
               <option value="">{t('groupForm.no_room')}</option>
               {branchRooms.map(r => (
@@ -341,8 +356,8 @@ export default function GroupForm({ group, onClose }) {
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
           {t('groupForm.btn_cancel')}
         </button>
-        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-          {isEdit ? t('groupForm.btn_save') : t('groupForm.btn_create')}
+        <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          {saving ? 'Сохранение...' : isEdit ? t('groupForm.btn_save') : t('groupForm.btn_create')}
         </button>
       </div>
     </form>

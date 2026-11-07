@@ -39,7 +39,7 @@ export default function ActivityItem({ a, allStages, people, showLead = false, o
     <div className="flex gap-3">
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}><Icon size={15} /></div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{text}</p>
+        <p className="text-sm text-slate-700 whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</p>
         {a.type === 'call' && (a.meta?.link || a.meta?.uuid) && a.meta?.answered !== false && <CallRecord id={a.id} />}
         <p className="text-[11px] text-slate-400 mt-0.5">
           {formatDateTime(a.createdAt)}{author ? ` · ${author}` : ''}

@@ -51,6 +51,9 @@ const selectCls = 'bg-white/50 text-sm rounded-xl px-3 py-2 focus:outline-none f
 export default function CrmFilters({ value, onChange, staff, tags = [] }) {
   const [q, setQ] = useState(value.q)
   const [tagsOpen, setTagsOpen] = useState(false)
+  // Phones: only the search is shown until «Фильтры» is tapped (md+: always open)
+  const [open, setOpen] = useState(false)
+  const count = activeCount(value)
   const tagsRef = useRef(null)
   const set = (patch) => onChange({ ...value, ...patch })
 
@@ -72,15 +75,20 @@ export default function CrmFilters({ value, onChange, staff, tags = [] }) {
   const toggleTag = (name) => set({ tags: value.tags.includes(name) ? value.tags.filter(t => t !== name) : [...value.tags, name] })
 
   return (
-    <div className="glass-card rounded-2xl p-3 md:p-4 space-y-3">
+    // z-20: the tags menu must open above the board below (glass-card is its own stacking context)
+    <div className="glass-card relative z-20 rounded-2xl p-3 md:p-4 space-y-3">
       <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-0 md:min-w-[200px]">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Поиск по имени, названию или телефону"
             className="w-full pl-10 pr-4 py-2 bg-white/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Filter size={16} className="text-slate-400" />
+        <button onClick={() => setOpen(o => !o)} aria-expanded={open}
+          className={`md:hidden shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm ${count || open ? 'bg-blue-50 text-blue-700' : 'bg-white/50 text-slate-700'}`}>
+          <Filter size={15} /> Фильтры{count ? ` (${count})` : ''} <ChevronDown size={14} className={open ? 'rotate-180' : ''} />
+        </button>
+        <div className={`${open ? 'flex' : 'hidden'} md:flex items-center gap-2 flex-wrap`}>
+          <Filter size={16} className="text-slate-400 hidden md:block" />
           <select value={value.responsibleId} onChange={e => set({ responsibleId: e.target.value })} className={selectCls}>
             <option value="">Все менеджеры</option>
             <option value="me">Мои сделки</option>
@@ -105,7 +113,7 @@ export default function CrmFilters({ value, onChange, staff, tags = [] }) {
           )}
         </div>
       </div>
-      <div className="flex flex-wrap gap-2 items-center">
+      <div className={`${open ? 'flex' : 'hidden'} md:flex flex-wrap gap-2 items-center`}>
         <select value={value.source} onChange={e => set({ source: e.target.value })} className={selectCls}>
           <option value="">Все источники</option>
           {Object.entries(SOURCES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -138,7 +146,7 @@ export default function CrmFilters({ value, onChange, staff, tags = [] }) {
             {t} <button onClick={() => toggleTag(t)} className="hover:text-blue-900"><X size={12} /></button>
           </span>
         ))}
-        {activeCount(value) > 0 && (
+        {count > 0 && (
           <button onClick={() => onChange({ ...EMPTY_FILTERS, q: value.q })} className="text-xs text-slate-500 hover:text-slate-700 ml-auto">
             Сбросить фильтры
           </button>

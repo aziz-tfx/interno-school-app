@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }) {
@@ -20,7 +21,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
     xl: 'max-w-full md:max-w-4xl',
   }
 
-  return (
+  // Portal to <body>: an ancestor with backdrop-filter / transform (glass
+  // sheets, the header) becomes the containing block of position:fixed, which
+  // trapped dialogs opened from inside another dialog in that dialog's box.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-md" onClick={onClose} />
       {/* Mobile: bottom sheet. Desktop: centered dialog. */}
@@ -39,6 +43,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

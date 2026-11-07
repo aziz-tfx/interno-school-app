@@ -14,7 +14,7 @@ const LOSS_REASONS = [
   'Неактуальная заявка',
 ]
 
-export function LossReasonDialog({ lead, onCancel, onConfirm }) {
+export function LossReasonDialog({ lead, busy = false, onCancel, onConfirm }) {
   const [reason, setReason] = useState('')
   const [custom, setCustom] = useState('')
   const value = reason === 'other' ? custom.trim() : reason
@@ -49,7 +49,7 @@ export function LossReasonDialog({ lead, onCancel, onConfirm }) {
         </div>
         <div className="flex gap-2 justify-end">
           <button onClick={onCancel} className="px-4 py-2 rounded-xl text-sm text-slate-600 hover:bg-slate-100">Отмена</button>
-          <button disabled={!value} onClick={() => onConfirm(value)}
+          <button disabled={busy || !value} onClick={() => onConfirm(value)}
             className="px-4 py-2 rounded-xl text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-40">
             Закрыть сделку
           </button>

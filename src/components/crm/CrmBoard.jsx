@@ -80,7 +80,7 @@ export default function CrmBoard({ pipeline, query, people, refreshKey, onOpenLe
               onDragOver={e => { e.preventDefault(); setDragOver(stage.id) }}
               onDragLeave={() => setDragOver(d => (d === stage.id ? null : d))}
               onDrop={e => { e.preventDefault(); drop(stage.id, e.dataTransfer.getData('text/lead-id')) }}
-              className={`flex-shrink-0 w-[280px] snap-start rounded-2xl flex flex-col max-h-[calc(100dvh-280px)] min-h-[200px] transition-colors ${
+              className={`flex-shrink-0 w-[280px] snap-start rounded-2xl flex flex-col max-h-[calc(100dvh-280px)] md:max-h-[calc(100dvh-420px)] min-h-[200px] transition-colors ${
                 dragOver === stage.id ? 'bg-blue-50/80 ring-2 ring-blue-300' : 'bg-white/40'
               }`}>
               <div className="px-3 pt-3 pb-2 sticky top-0">

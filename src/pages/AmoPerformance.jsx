@@ -738,6 +738,7 @@ export default function AmoPerformance() {
     return b.revFact - a.revFact
   })
   const top3 = sortedByCompletion.slice(0, 3)
+  const hasPlans = leaderboardEntries.some(e => e.completion != null)
   const laggards = sortedByCompletion.filter(e => e.completion != null && e.completion < 0.6).slice(-3)
 
   const totalDeltaRev = prevTotals ? delta(data?.totals?.metrics?.revenue || 0, prevTotals.revenue) : null
@@ -757,7 +758,7 @@ export default function AmoPerformance() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
+    <div className="max-w-[1600px] mx-auto">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-pink-600 flex items-center justify-center">
@@ -828,10 +829,10 @@ export default function AmoPerformance() {
       {data && usersSorted.length > 0 && (
         <div className="mb-5 grid grid-cols-1 lg:grid-cols-2 gap-3">
           {/* Топ-3 */}
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4">
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <Trophy size={16} className="text-amber-600" />
-              <h3 className="text-sm font-bold text-amber-900">Топ-3 по выполнению плана</h3>
+              <h3 className="text-sm font-bold text-amber-900 dark:text-amber-300">Топ-3 по выполнению плана</h3>
             </div>
             <div className="space-y-2">
               {top3.length === 0 && (
@@ -852,7 +853,7 @@ export default function AmoPerformance() {
                       <p className="text-sm font-semibold text-slate-900 truncate">{e.user.userName}</p>
                       <div className="flex items-center gap-2 flex-wrap mt-0.5">
                         <span className="text-[11px] text-slate-500">
-                          {formatMoney(e.revFact)} ₽
+                          {formatMoney(e.revFact)} сум
                         </span>
                         <DeltaPill value={e.revDelta} />
                       </div>
@@ -874,9 +875,14 @@ export default function AmoPerformance() {
           </div>
 
           {/* Отстающие */}
-          <div className={`rounded-2xl p-4 border ${laggards.length > 0 ? 'bg-red-50/50 border-red-200' : 'bg-emerald-50/50 border-emerald-200'}`}>
+          <div className={`rounded-2xl p-4 border ${laggards.length > 0 ? 'bg-red-50/50 border-red-200' : hasPlans ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/50 border-slate-200'}`}>
             <div className="flex items-center gap-2 mb-3">
-              {laggards.length > 0 ? (
+              {!hasPlans ? (
+                <>
+                  <Target size={16} className="text-slate-500" />
+                  <h3 className="text-sm font-bold text-slate-700">План на месяц не задан</h3>
+                </>
+              ) : laggards.length > 0 ? (
                 <>
                   <AlertTriangle size={16} className="text-red-600" />
                   <h3 className="text-sm font-bold text-red-900">Требуют внимания (&lt;60% плана)</h3>
@@ -889,7 +895,9 @@ export default function AmoPerformance() {
               )}
             </div>
             <div className="space-y-2">
-              {laggards.length === 0 ? (
+              {!hasPlans ? (
+                <p className="text-xs text-slate-500 py-2">Задайте план менеджерам (кнопка «План»), чтобы видеть, кто отстаёт.</p>
+              ) : laggards.length === 0 ? (
                 <p className="text-xs text-emerald-700 py-2">Никто не отстаёт ниже 60% — отличный темп!</p>
               ) : laggards.map(e => (
                 <div key={e.user.userId} className="flex items-center gap-3 p-2.5 bg-white rounded-xl border border-red-100">
@@ -899,7 +907,7 @@ export default function AmoPerformance() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-900 truncate">{e.user.userName}</p>
                     <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                      <span className="text-[11px] text-slate-500">{formatMoney(e.revFact)} / {formatMoney(e.revPlan)} ₽</span>
+                      <span className="text-[11px] text-slate-500">{formatMoney(e.revFact)} / {formatMoney(e.revPlan)} сум</span>
                       <DeltaPill value={e.revDelta} />
                     </div>
                   </div>
@@ -971,7 +979,8 @@ export default function AmoPerformance() {
       )}
 
       {/* ── Telephony (OnlinePBX) ─────────────────────────────────────── */}
-      {callsData && (
+      {/* Schools without OnlinePBX get no telephony block instead of a red error */}
+      {callsData && !(callsData.success === false && /не настроен/i.test(callsData.error || '')) && (
         <div className="mb-5">
           <TelephonyBlock data={callsData} />
         </div>
@@ -989,15 +998,15 @@ export default function AmoPerformance() {
         return (
           <div key={u.userId} className="mb-4 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <button onClick={() => toggleExpand(u.userId)}
-              className="w-full flex items-center justify-between px-5 py-3 bg-gradient-to-r from-slate-50 to-white hover:bg-slate-50 transition-colors">
-              <div className="flex items-center gap-3">
+              className="w-full flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 sm:px-5 py-3 bg-gradient-to-r from-slate-50 to-white dark:from-white/5 dark:to-transparent hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-3 min-w-0">
                 {isOpen ? <ChevronDown size={18} className="text-slate-500" /> : <ChevronRight size={18} className="text-slate-500" />}
-                <div className="text-left">
+                <div className="text-left min-w-0">
                   <p className="font-semibold text-slate-900">{u.userName}</p>
                   <p className="text-xs text-slate-500">{u.email || ''}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-3 sm:gap-4 text-sm ml-auto">
                 <div className="text-right">
                   <p className="text-xs text-slate-500">Продажи</p>
                   <div className="flex items-center justify-end gap-1.5">
@@ -1018,7 +1027,7 @@ export default function AmoPerformance() {
                     <p className="text-[10px] text-slate-400">осн {formatMoney(fact.revenueMainWon)} + постопл {formatMoney(fact.revenuePostpayment)}</p>
                   )}
                 </div>
-                <div className="text-right">
+                <div className="text-right hidden sm:block">
                   <p className="text-xs text-slate-500">Конв. в продажу</p>
                   <p className={`font-semibold ${pctClass(fact.convNewToSale)}`}>{formatPct(fact.convNewToSale)}</p>
                 </div>

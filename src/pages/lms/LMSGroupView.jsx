@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useData } from '../../contexts/DataContext'
@@ -11,6 +11,27 @@ import {
 } from 'lucide-react'
 import { toast } from '../../components/Toaster'
 import { isLessonAccessible, isModuleUnlocked, getUnlockedModuleCount } from '../../utils/lessonAccess'
+
+// Runs one async save at a time (no double submits); toasts on failure.
+function useSaving() {
+  const [saving, setSaving] = useState(false)
+  const busy = useRef(false)
+  const run = async (fn) => {
+    if (busy.current) return
+    busy.current = true
+    setSaving(true)
+    try {
+      await fn()
+    } catch (err) {
+      console.error(err)
+      toast.error('Не удалось сохранить. Попробуйте ещё раз.')
+    } finally {
+      busy.current = false
+      setSaving(false)
+    }
+  }
+  return [saving, run]
+}
 
 // ─── Lesson Form ─────────────────────────────────────────────────────
 function LessonForm({ lesson, groupId, courseId, onSave, onClose }) {
@@ -25,6 +46,7 @@ function LessonForm({ lesson, groupId, courseId, onSave, onClose }) {
     order: lesson?.order || 1,
   })
   const [newMaterial, setNewMaterial] = useState({ name: '', url: '', type: 'link' })
+  const [saving, runSave] = useSaving()
 
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }))
 
@@ -40,13 +62,13 @@ function LessonForm({ lesson, groupId, courseId, onSave, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSave({
+    runSave(() => onSave({
       ...form,
       courseId: courseId || lesson?.courseId || '',
       order: Number(form.order),
       updatedAt: new Date().toISOString(),
       ...(!lesson ? { createdAt: new Date().toISOString() } : {}),
-    })
+    }))
   }
 
   return (
@@ -125,7 +147,7 @@ function LessonForm({ lesson, groupId, courseId, onSave, onClose }) {
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
           {t('lms.btn_cancel')}
         </button>
-        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+        <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
           {lesson ? t('lms.lesson_btn_save') : t('lms.lesson_btn_create')}
         </button>
       </div>
@@ -142,18 +164,19 @@ function AssignmentForm({ assignment, groupId, onSave, onClose }) {
     deadline: assignment?.deadline || '',
     maxScore: assignment?.maxScore || 100,
   })
+  const [saving, runSave] = useSaving()
 
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }))
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSave({
+    runSave(() => onSave({
       ...form,
       groupId,
       maxScore: Number(form.maxScore),
       updatedAt: new Date().toISOString(),
       ...(!assignment ? { createdAt: new Date().toISOString() } : {}),
-    })
+    }))
   }
 
   return (
@@ -186,7 +209,7 @@ function AssignmentForm({ assignment, groupId, onSave, onClose }) {
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
           {t('lms.btn_cancel')}
         </button>
-        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700">
+        <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50">
           {assignment ? t('lms.assignment_btn_save') : t('lms.assignment_btn_create')}
         </button>
       </div>
@@ -198,10 +221,11 @@ function AssignmentForm({ assignment, groupId, onSave, onClose }) {
 function AnnouncementForm({ groupId, onSave, onClose }) {
   const { t } = useLanguage()
   const [form, setForm] = useState({ title: '', content: '' })
+  const [saving, runSave] = useSaving()
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSave({ ...form, groupId, createdAt: new Date().toISOString() })
+    runSave(() => onSave({ ...form, groupId, createdAt: new Date().toISOString() }))
   }
 
   return (
@@ -218,7 +242,7 @@ function AnnouncementForm({ groupId, onSave, onClose }) {
       </div>
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('lms.btn_cancel')}</button>
-        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700">{t('lms.announcement_btn_publish')}</button>
+        <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50">{t('lms.announcement_btn_publish')}</button>
       </div>
     </form>
   )
@@ -227,10 +251,11 @@ function AnnouncementForm({ groupId, onSave, onClose }) {
 // ─── Submission + Grading ────────────────────────────────────────────
 function SubmissionView({ assignment, groupId }) {
   const { t } = useLanguage()
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const { students, lmsSubmissions, addLmsSubmission, updateLmsSubmission } = useData()
-  const isTeacher = user?.role === 'teacher'
   const isStudent = user?.role === 'student'
+  // Teachers and admins/owners (anyone with lms.grade) review submissions
+  const canGrade = !isStudent && hasPermission('lms', 'grade')
 
   const groupStudents = students.filter(s => s.groupId === groupId || s.group === groupId)
   const submissions = lmsSubmissions.filter(s => s.assignmentId === assignment.id)
@@ -261,6 +286,7 @@ function SubmissionView({ assignment, groupId }) {
       }
     } catch (err) {
       console.error(err)
+      toast.error('Не удалось отправить ответ. Попробуйте ещё раз.')
     }
     setSubmitting(false)
   }
@@ -396,8 +422,8 @@ function SubmissionView({ assignment, groupId }) {
     )
   }
 
-  // Teacher view — grade submissions
-  if (isTeacher) {
+  // Teacher / admin view — grade submissions
+  if (canGrade) {
     return (
       <div className="mt-4">
         <h5 className="text-sm font-semibold text-slate-700 mb-2">{t('lms.submission_student_answers')} ({submissions.length})</h5>
@@ -796,7 +822,7 @@ export default function LMSGroupView() {
   const studentBlocked = isStudent && (!myStudent || myStudent.lmsAccess !== true || myStudent.status !== 'active' || lmsExpired)
 
   // Student debt for lesson access control
-  const { payments, lmsModules } = useData()
+  const { payments, lmsModules, loading } = useData()
   const studentDebt = useMemo(() => {
     if (!isStudent || !myStudent) return 0
     const totalPaid = (payments || [])
@@ -847,6 +873,42 @@ export default function LMSGroupView() {
   )
 
   const groupStudents = students.filter(s => s.group === group?.name || s.groupId === groupId)
+
+  // ─── Teacher chat: one thread per student in this group ───────────
+  const groupMessages = useMemo(
+    () => (messages || []).filter(m => m.groupId === groupId),
+    [messages, groupId]
+  )
+  const groupChatUnread = useMemo(
+    () => groupMessages.filter(m => m.senderRole === 'student' && !(m.readBy || []).includes(String(user?.id))).length,
+    [groupMessages, user]
+  )
+  const [activeChatStudent, setActiveChatStudent] = useState(null)
+  const [teacherChatText, setTeacherChatText] = useState('')
+
+  const activeThreadId = activeChatStudent ? `${activeChatStudent}__${groupId}` : null
+  const activeThreadMessages = useMemo(() => {
+    if (!activeThreadId) return []
+    return groupMessages
+      .filter(m => m.threadId === activeThreadId)
+      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+  }, [groupMessages, activeThreadId])
+
+  useEffect(() => {
+    if (activeTab === 'chat' && activeThreadId && user?.id) {
+      markMessagesRead(activeThreadId, String(user.id))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, activeThreadId, activeThreadMessages.length])
+
+  // Data still loading (direct link / refresh) — don't flash "not found"
+  if (loading && (!group || (isStudent && !myStudent))) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 border-[3px] border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    )
+  }
 
   if (!group) {
     return (
@@ -927,33 +989,6 @@ export default function LMSGroupView() {
     setShowModal(null)
   }
 
-  // ─── Teacher chat: one thread per student in this group ───────────
-  const groupMessages = useMemo(
-    () => (messages || []).filter(m => m.groupId === groupId),
-    [messages, groupId]
-  )
-  const groupChatUnread = useMemo(
-    () => groupMessages.filter(m => m.senderRole === 'student' && !(m.readBy || []).includes(String(user?.id))).length,
-    [groupMessages, user]
-  )
-  const [activeChatStudent, setActiveChatStudent] = useState(null)
-  const [teacherChatText, setTeacherChatText] = useState('')
-
-  const activeThreadId = activeChatStudent ? `${activeChatStudent}__${groupId}` : null
-  const activeThreadMessages = useMemo(() => {
-    if (!activeThreadId) return []
-    return groupMessages
-      .filter(m => m.threadId === activeThreadId)
-      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
-  }, [groupMessages, activeThreadId])
-
-  useEffect(() => {
-    if (activeTab === 'chat' && activeThreadId && user?.id) {
-      markMessagesRead(activeThreadId, String(user.id))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, activeThreadId, activeThreadMessages.length])
-
   const handleTeacherSend = async () => {
     if (!teacherChatText.trim() || !activeChatStudent) return
     const stu = students.find(s => String(s.id) === String(activeChatStudent))
@@ -982,11 +1017,11 @@ export default function LMSGroupView() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-4">
+      <div className="flex flex-wrap sm:flex-nowrap items-start gap-3 sm:gap-4">
         <button onClick={() => navigate('/lms')} className="p-2 rounded-xl hover:bg-slate-100 transition-colors mt-1">
           <ArrowLeft size={20} className="text-slate-500" />
         </button>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-2xl">{course?.icon || '📚'}</span>
             <h2 className="text-xl md:text-2xl font-bold text-slate-900">{group.course}</h2>
@@ -994,7 +1029,7 @@ export default function LMSGroupView() {
           <p className="text-slate-500 mt-1">{group.name} · {group.schedule || t('lms.no_schedule')}</p>
         </div>
         {canEdit && (
-          <div className="flex flex-wrap gap-2 justify-end">
+          <div className="w-full sm:w-auto flex flex-wrap gap-2 sm:justify-end">
             {course?.id && (
               <button onClick={() => {
                 const url = `${window.location.origin}/course/${course.id}`
@@ -1021,18 +1056,19 @@ export default function LMSGroupView() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto no-scrollbar">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all flex-1 justify-center ${
+            title={tab.label}
+            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all flex-1 flex-shrink-0 justify-center whitespace-nowrap ${
               activeTab === tab.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
             <tab.icon size={14} />
             <span className="hidden sm:inline">{tab.label}</span>
-            <span className="text-xs bg-slate-200 px-1.5 py-0.5 rounded-full ml-1">{tab.count}</span>
+            {tab.count != null && <span className="text-xs bg-slate-200 px-1.5 py-0.5 rounded-full sm:ml-1">{tab.count}</span>}
           </button>
         ))}
       </div>
@@ -1115,7 +1151,7 @@ export default function LMSGroupView() {
                           className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">
                           <Pencil size={12} /> {t('lms.btn_edit')}
                         </button>
-                        <button onClick={() => deleteLmsLesson(lesson.id)}
+                        <button onClick={() => window.confirm(`Удалить урок «${lesson.title}»? Он пропадёт у всех групп курса.`) && deleteLmsLesson(lesson.id)}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
                           <Trash2 size={12} /> {t('lms.btn_delete')}
                         </button>
@@ -1175,7 +1211,7 @@ export default function LMSGroupView() {
                             className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100">
                             <Pencil size={12} /> {t('lms.btn_edit')}
                           </button>
-                          <button onClick={() => deleteLmsAssignment(assignment.id)}
+                          <button onClick={() => window.confirm(`Удалить задание «${assignment.title}»?`) && deleteLmsAssignment(assignment.id)}
                             className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
                             <Trash2 size={12} /> {t('lms.btn_delete')}
                           </button>
@@ -1213,7 +1249,7 @@ export default function LMSGroupView() {
                     <p className="text-xs text-slate-400 mt-2">{a.createdAt?.split('T')[0]}</p>
                   </div>
                   {canEdit && (
-                    <button onClick={() => deleteLmsAnnouncement(a.id)}
+                    <button onClick={() => window.confirm('Удалить объявление?') && deleteLmsAnnouncement(a.id)}
                       className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50">
                       <Trash2 size={14} />
                     </button>
@@ -1270,7 +1306,8 @@ export default function LMSGroupView() {
       {activeTab === 'chat' && (canEdit || isTeacher) && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4" style={{ height: '65vh' }}>
           {/* Student list */}
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-auto">
+          {/* Phones: either the list or the open conversation fills the panel */}
+          <div className={`bg-white rounded-2xl border border-slate-200 overflow-auto ${activeChatStudent ? 'hidden md:block' : ''}`}>
             <p className="text-xs font-semibold text-slate-400 uppercase p-3 border-b border-slate-100">Ученики</p>
             {groupStudents.length === 0 ? (
               <p className="text-sm text-slate-400 text-center py-6">Нет учеников</p>
@@ -1295,7 +1332,7 @@ export default function LMSGroupView() {
           </div>
 
           {/* Conversation */}
-          <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden">
+          <div className={`md:col-span-2 bg-white rounded-2xl border border-slate-200 flex-col overflow-hidden min-h-0 ${activeChatStudent ? 'flex' : 'hidden md:flex'}`}>
             {!activeChatStudent ? (
               <div className="flex-1 flex items-center justify-center text-center p-6">
                 <div>
@@ -1305,6 +1342,14 @@ export default function LMSGroupView() {
               </div>
             ) : (
               <>
+                <div className="md:hidden flex items-center gap-2 p-2 border-b border-slate-100">
+                  <button onClick={() => setActiveChatStudent(null)} className="p-2 rounded-lg hover:bg-slate-100" aria-label="К списку учеников">
+                    <ArrowLeft size={18} className="text-slate-500" />
+                  </button>
+                  <p className="text-sm font-semibold text-slate-800 truncate">
+                    {groupStudents.find(s => String(s.id) === String(activeChatStudent))?.name || ''}
+                  </p>
+                </div>
                 <div className="flex-1 overflow-auto p-4 space-y-3">
                   {activeThreadMessages.length === 0 ? (
                     <p className="text-sm text-slate-400 text-center py-8">Нет сообщений</p>

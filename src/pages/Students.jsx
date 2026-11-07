@@ -31,7 +31,12 @@ export default function Students() {
   const [activeTab, setActiveTab] = useState(initialTab)
   const [search, setSearch] = useState(initialTab === 'students' ? initialQuery : '')
   const [branchFilter, setBranchFilter] = useState(user.branch !== 'all' ? user.branch : 'all')
-  const [statusFilter, setStatusFilter] = useState('all')
+  // ?status=debtor — the header bell opens the debtors list
+  const STATUS_VALUES = ['active', 'debtor', 'frozen']
+  const urlStatus = STATUS_VALUES.includes(searchParams.get('status')) ? searchParams.get('status') : null
+  const [statusFilter, setStatusFilter] = useState(urlStatus || 'all')
+  // the bell pressed while already on this page: follow the URL
+  useEffect(() => { if (urlStatus) { setActiveTab('students'); setStatusFilter(urlStatus) } }, [urlStatus])
   const [groupFilter, setGroupFilter] = useState('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingStudent, setEditingStudent] = useState(null)
@@ -69,6 +74,15 @@ export default function Students() {
     else setSearch(q)
   }, [searchParams])
 
+  // Bulk actions must only ever touch rows the user can see: drop the
+  // selection whenever the visible set changes.
+  useEffect(() => {
+    setSelectedIds(new Set()); setBulkAction(null); setBulkTarget('')
+  }, [search, branchFilter, statusFilter, groupFilter])
+  useEffect(() => {
+    setSelectedGroupIds(new Set()); setGroupBulkAction(null); setGroupBulkTarget('')
+  }, [groupSearch, branchFilter, groupStatusFilter])
+
   const canAdd = hasPermission('students', 'add')
   const canEdit = hasPermission('students', 'edit')
   const canDelete = hasPermission('students', 'delete')
@@ -86,12 +100,17 @@ export default function Students() {
     : groups
 
   // ── Student filters ──
+  const searchLower = search.trim().toLowerCase()
+  const searchDigits = search.replace(/\D/g, '')
   const filtered = allStudents.filter((s) => {
-    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-      (s.course || '').toLowerCase().includes(search.toLowerCase()) ||
-      (s.group || '').toLowerCase().includes(search.toLowerCase())
+    const matchSearch = (s.name || '').toLowerCase().includes(searchLower) ||
+      (s.course || '').toLowerCase().includes(searchLower) ||
+      (s.group || '').toLowerCase().includes(searchLower) ||
+      (searchDigits.length >= 3 && (s.phone || '').replace(/\D/g, '').includes(searchDigits))
     const matchBranch = branchFilter === 'all' || sameBranch(s.branch, branchFilter, branches)
+    // «Должники»: the debtor status, or a negative balance — what the header bell and dashboard count
     const matchStatus = statusFilter === 'all' || s.status === statusFilter
+      || (statusFilter === 'debtor' && Number(s.balance) < 0)
     const matchGroup = groupFilter === 'all' || s.group === groupFilter
     return matchSearch && matchBranch && matchStatus && matchGroup
   })
@@ -141,9 +160,19 @@ export default function Students() {
     setModalOpen(true)
   }
 
-  const handleDelete = (id) => {
-    deleteStudent(id)
-    setConfirmDelete(null)
+  const [deletingStudent, setDeletingStudent] = useState(false)
+  const handleDelete = async (id) => {
+    if (deletingStudent) return
+    setDeletingStudent(true)
+    try {
+      await deleteStudent(id)
+      setConfirmDelete(null)
+    } catch (err) {
+      console.error('Delete student failed:', err)
+      toast.error('Не удалось удалить ученика. Попробуйте ещё раз.')
+    } finally {
+      setDeletingStudent(false)
+    }
   }
 
   const handleAddGroup = () => {
@@ -156,7 +185,7 @@ export default function Students() {
     setGroupModalOpen(true)
   }
 
-  const handleDeleteGroup = (id) => {
+  const handleDeleteGroup = async (id) => {
     const grp = groups.find(g => g.id === id)
     if (grp) {
       const studentsInGroup = getGroupStudents(grp.name)
@@ -166,8 +195,13 @@ export default function Students() {
         return
       }
     }
-    deleteGroup(id)
-    setConfirmDeleteGroup(null)
+    try {
+      await deleteGroup(id)
+      setConfirmDeleteGroup(null)
+    } catch (err) {
+      console.error('Delete group failed:', err)
+      toast.error('Не удалось удалить группу. Попробуйте ещё раз.')
+    }
   }
 
   const getStudentDebtInfo = (student) => {
@@ -288,21 +322,26 @@ export default function Students() {
   const executeGroupBulkAction = async () => {
     if (selectedGroupIds.size === 0) return
     setGroupBulkProcessing(true)
-    const ids = [...selectedGroupIds]
+    const ids = [...selectedGroupIds].filter(id => filteredGroups.some(g => g.id === id))
     try {
       if (groupBulkAction === 'status' && groupBulkTarget) {
         for (const id of ids) await updateGroup(id, { status: groupBulkTarget })
       } else if (groupBulkAction === 'delete') {
+        let skipped = 0
         for (const id of ids) {
           const grp = groups.find(g => g.id === id)
           const studentsInGroup = grp ? getGroupStudents(grp.name) : []
           if (studentsInGroup.length === 0) {
             await deleteGroup(id)
+          } else {
+            skipped++
           }
         }
+        if (skipped > 0) toast.error(`Не удалено групп: ${skipped} — в них есть ученики. Сначала переведите их в другую группу.`)
       }
     } catch (err) {
       console.error('Group bulk action error:', err)
+      toast.error('Не удалось выполнить действие для всех групп. Обновите страницу и проверьте результат.')
     }
     setGroupBulkProcessing(false)
     clearGroupSelection()
@@ -311,7 +350,7 @@ export default function Students() {
   const executeBulkAction = async () => {
     if (selectedIds.size === 0) return
     setBulkProcessing(true)
-    const ids = [...selectedIds]
+    const ids = [...selectedIds].filter(id => filtered.some(s => s.id === id))
     try {
       if (bulkAction === 'status' && bulkTarget) {
         const lmsUpdate = bulkTarget === 'active' ? { lmsAccess: true } : bulkTarget === 'debtor' || bulkTarget === 'frozen' ? { lmsAccess: false } : {}
@@ -329,6 +368,7 @@ export default function Students() {
       }
     } catch (err) {
       console.error('Bulk action error:', err)
+      toast.error('Не удалось выполнить действие для всех учеников. Обновите страницу и проверьте результат.')
     }
     setBulkProcessing(false)
     clearSelection()
@@ -418,23 +458,23 @@ export default function Students() {
 
           {/* ── Bulk Actions Bar ── */}
           {selectedIds.size > 0 && canEdit && (
-            <div className="glass-card rounded-2xl p-3 flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200">
+            <div className="glass-card rounded-2xl p-3 flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200 min-w-0">
               <div className="flex items-center gap-2">
                 <CheckSquare size={16} className="text-blue-600" />
                 <span className="text-sm font-semibold text-blue-800">
                   Выбрано: {selectedIds.size}
                 </span>
-                <button onClick={clearSelection} className="text-blue-400 hover:text-blue-600">
+                <button onClick={clearSelection} aria-label="Снять выделение" className="p-1.5 -m-1 text-blue-400 hover:text-blue-600">
                   <X size={14} />
                 </button>
               </div>
               <div className="h-5 w-px bg-blue-200" />
 
               {/* Status Change */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0 max-w-full">
                 <select value={bulkAction === 'status' ? bulkTarget : ''}
                   onChange={(e) => { setBulkAction('status'); setBulkTarget(e.target.value) }}
-                  className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  className="max-w-full text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
                   <option value="">Сменить статус...</option>
                   <option value="active">✅ Активен</option>
                   <option value="debtor">🔴 Должник</option>
@@ -443,20 +483,20 @@ export default function Students() {
               </div>
 
               {/* Group Transfer */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0 max-w-full">
                 <select value={bulkAction === 'group' ? bulkTarget : ''}
                   onChange={(e) => { setBulkAction('group'); setBulkTarget(e.target.value) }}
-                  className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  className="w-full sm:w-auto sm:max-w-[16rem] max-w-full min-w-0 text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
                   <option value="">Перевести в группу...</option>
                   {allGroups.map(g => <option key={g.id} value={g.id}>{g.name} — {g.course}</option>)}
                 </select>
               </div>
 
               {/* LMS Access */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0 max-w-full">
                 <select value={bulkAction === 'lms' ? bulkTarget : ''}
                   onChange={(e) => { setBulkAction('lms'); setBulkTarget(e.target.value) }}
-                  className="text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  className="max-w-full text-xs bg-white border border-blue-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
                   <option value="">LMS доступ...</option>
                   <option value="on">✅ Включить</option>
                   <option value="off">❌ Отключить</option>
@@ -483,7 +523,7 @@ export default function Students() {
 
               {/* Delete confirmation */}
               {bulkAction === 'delete' && bulkTarget === 'pending' && (
-                <div className="flex items-center gap-2 bg-red-100 border border-red-300 rounded-lg px-3 py-1.5">
+                <div className="flex flex-wrap items-center gap-2 bg-red-100 border border-red-300 rounded-lg px-3 py-1.5">
                   <span className="text-xs text-red-700 font-medium">Удалить {selectedIds.size} учеников?</span>
                   <button onClick={() => executeBulkAction()} disabled={bulkProcessing}
                     className="text-xs bg-red-600 text-white rounded px-3 py-1 hover:bg-red-700 disabled:opacity-50 font-medium">
@@ -506,7 +546,7 @@ export default function Students() {
                   <tr className="bg-white/40 border-b border-white/30">
                     {canEdit && (
                       <th className="py-3 px-2 w-8">
-                        <button onClick={toggleSelectAll} className="text-slate-400 hover:text-blue-600 transition-colors">
+                        <button onClick={toggleSelectAll} aria-label="Выбрать всех" className="p-1.5 -m-1.5 text-slate-400 hover:text-blue-600 transition-colors">
                           {selectedIds.size === filtered.length && filtered.length > 0 ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                         </button>
                       </th>
@@ -514,12 +554,13 @@ export default function Students() {
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('students.th_name')}</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('students.th_branch')}</th>
                     <th className="text-left py-3 px-4 text-slate-500 font-medium">{t('students.th_group')}</th>
-                    <th className="text-center py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">{t('students.th_format')}</th>
-                    <th className="text-left py-3 px-4 text-slate-500 font-medium hidden lg:table-cell">{t('students.th_phone')}</th>
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium hidden xl:table-cell">{t('students.th_format')}</th>
+                    <th className="text-left py-3 px-4 text-slate-500 font-medium hidden xl:table-cell">{t('students.th_phone')}</th>
                     <th className="text-right py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('students.th_paid')}</th>
                     <th className="text-right py-3 px-4 text-slate-500 font-medium hidden md:table-cell">{t('students.th_debt')}</th>
                     <th className="text-center py-3 px-4 text-slate-500 font-medium">{t('students.th_status')}</th>
-                    <th className="text-center py-3 px-4 text-slate-500 font-medium">{t('students.th_actions')}</th>
+                    {/* Sticky so edit/delete stay reachable when the table scrolls sideways (laptops) */}
+                    <th className="text-center py-3 px-4 text-slate-500 font-medium sticky right-0 z-[1] bg-white/90 backdrop-blur-sm">{t('students.th_actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -532,7 +573,7 @@ export default function Students() {
                         onClick={() => setProfileStudent(student)}>
                         {canEdit && (
                           <td data-card="select" className="py-3 px-2 w-8" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => toggleSelect(student.id)} className="text-slate-400 hover:text-blue-600 transition-colors">
+                            <button onClick={() => toggleSelect(student.id)} aria-label="Выбрать" className="p-2 -m-2 text-slate-400 hover:text-blue-600 transition-colors">
                               {selectedIds.has(student.id) ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                             </button>
                           </td>
@@ -554,7 +595,7 @@ export default function Students() {
                         <td className="py-3 px-4">
                           <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-mono">{student.group || '—'}</span>
                         </td>
-                        <td className="py-3 px-4 text-center hidden lg:table-cell">
+                        <td className="py-3 px-4 text-center hidden xl:table-cell">
                           {isOnline ? (
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
                               <Wifi size={10} /> {t('students.format_online')}
@@ -565,14 +606,14 @@ export default function Students() {
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-slate-500 hidden lg:table-cell">{student.phone}</td>
-                        <td className={`py-3 px-4 text-right font-semibold hidden md:table-cell ${info.totalPaid > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        <td className="py-3 px-4 text-slate-500 hidden xl:table-cell whitespace-nowrap">{student.phone}</td>
+                        <td className={`py-3 px-4 text-right font-semibold hidden md:table-cell whitespace-nowrap ${info.totalPaid > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                           {info.totalPaid > 0 ? formatCurrency(info.totalPaid) : '—'}
                         </td>
                         <td className="py-3 px-4 text-right hidden md:table-cell">
                           {info.debt > 0 ? (
                             <div>
-                              <span className="font-semibold text-red-500">{formatCurrency(info.debt)}</span>
+                              <span className="font-semibold text-red-500 whitespace-nowrap">{formatCurrency(info.debt)}</span>
                               {info.isOverdue && (
                                 <div className="flex items-center justify-end gap-1 mt-0.5">
                                   <AlertTriangle size={11} className="text-amber-500" />
@@ -596,7 +637,7 @@ export default function Students() {
                             )}
                           </div>
                         </td>
-                        <td data-card="actions" className="py-3 px-4 text-center">
+                        <td data-card="actions" className="py-3 px-4 text-center sticky right-0 z-[1] bg-white/90 backdrop-blur-sm">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={(e) => { e.stopPropagation(); setProfileStudent(student) }}
                               className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors" title={t('students.tooltip_profile')}>
@@ -745,8 +786,10 @@ export default function Students() {
                 const onlineCount = getGroupOnlineCount(group.name)
                 const totalCount = offlineCount + onlineCount
                 const offlinePct = group.maxOffline > 0 ? Math.round((offlineCount / group.maxOffline) * 100) : 0
-                const isFull = offlineCount >= group.maxOffline
-                const teacher = group.teacherId ? teachers.find(tc => tc.id === group.teacherId) : null
+                const hasLimit = Number(group.maxOffline) > 0
+                const isFull = hasLimit && offlineCount >= group.maxOffline
+                const teacher = group.teacherId ? teachers.find(tc => String(tc.id) === String(group.teacherId)) : null
+                const roomName = group.room ? (dataRooms.find(r => r.id === group.room)?.name || group.room) : ''
                 const isExpanded = expandedGroup === group.id
                 const groupStudentsList = getGroupStudents(group.name)
                 const groupCourseObj = courses.find(c => c.name === group.course)
@@ -773,7 +816,7 @@ export default function Students() {
                         <div className="flex items-center gap-2">
                           {canEdit && (
                             <button onClick={(e) => { e.stopPropagation(); toggleGroupSelect(group.id) }}
-                              className="text-white/80 hover:text-white transition-colors">
+                              aria-label="Выбрать группу" className="p-2 -m-2 shrink-0 text-white/80 hover:text-white transition-colors">
                               {selectedGroupIds.has(group.id) ? <CheckSquare size={18} /> : <Square size={18} />}
                             </button>
                           )}
@@ -824,7 +867,7 @@ export default function Students() {
                         <div className="flex justify-between text-xs text-slate-500 mb-1">
                           <span>{t('students.group_offline_seats')}</span>
                           <span className={`font-semibold ${isFull ? 'text-red-500' : 'text-slate-700'}`}>
-                            {offlineCount}/{group.maxOffline}
+                            {offlineCount}{hasLimit ? `/${group.maxOffline}` : ''}
                             {isFull && ` ${t('students.group_full')}`}
                           </span>
                         </div>
@@ -852,10 +895,10 @@ export default function Students() {
                             <span>{group.schedule}</span>
                           </div>
                         )}
-                        {group.room && (
+                        {roomName && (
                           <div className="flex items-center gap-2 text-slate-600">
                             <DoorOpen size={14} className="text-slate-400" />
-                            <span>{group.room}</span>
+                            <span>{roomName}</span>
                           </div>
                         )}
                         {group.startDate && (
@@ -919,11 +962,11 @@ export default function Students() {
                                     }`}>
                                       {s.learningFormat === 'Онлайн' ? 'ONL' : 'OFF'}
                                     </span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                    <span title={statusLabels[s.status] || ''} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                       s.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
                                       s.status === 'debtor' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'
                                     }`}>
-                                      {s.status === 'active' ? '✓' : s.status === 'debtor' ? '₽' : '❄'}
+                                      {s.status === 'active' ? '✓' : s.status === 'debtor' ? '!' : '❄'}
                                     </span>
                                     {s.lmsAccess && <Monitor size={12} className="text-emerald-500" />}
                                   </div>
@@ -1179,7 +1222,7 @@ export default function Students() {
         <p className="text-sm text-slate-600 mb-4">{t('students.confirm_delete_student')}</p>
         <div className="flex justify-end gap-3">
           <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">{t('students.btn_cancel')}</button>
-          <button onClick={() => handleDelete(confirmDelete)} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">{t('students.btn_delete')}</button>
+          <button onClick={() => handleDelete(confirmDelete)} disabled={deletingStudent} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">{t('students.btn_delete')}</button>
         </div>
       </Modal>
 

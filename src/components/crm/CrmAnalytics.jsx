@@ -3,7 +3,7 @@
 // manager did (calls, notes, tasks, moves, sales).
 
 import { useState, useEffect, useMemo } from 'react'
-import { Loader, Inbox, Trophy, Percent, Wallet, Timer, AlertCircle, Briefcase, CalendarClock, PhoneMissed, Sparkles } from 'lucide-react'
+import { Loader, RotateCw, Inbox, Trophy, Percent, Wallet, Timer, AlertCircle, Briefcase, CalendarClock, PhoneMissed, Sparkles } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts'
 import { crm, formatSum, sourceMeta } from '../../backend/crm'
 import { toast } from '../Toaster'
@@ -32,6 +32,7 @@ export default function CrmAnalytics({ pipeline, people }) {
   const [range, setRange] = useState(() => presetRange('month'))
   const [report, setReport] = useState(null)
   const [insights, setInsights] = useState(null)
+  const [attempt, setAttempt] = useState(0) // «Повторить» after a failed load
 
   useEffect(() => {
     let stop = false
@@ -42,7 +43,7 @@ export default function CrmAnalytics({ pipeline, people }) {
       .then(([r, i]) => { if (!stop) { setReport(r); setInsights(i) } })
       .catch(err => { toast(err.message, 'error'); if (!stop) setReport({ error: true }) })
     return () => { stop = true }
-  }, [pipeline.id, range[0], range[1]])
+  }, [pipeline.id, range[0], range[1], attempt])
 
   const choose = (id) => { setPreset(id); setRange(presetRange(id)) }
   const maxReached = useMemo(() => Math.max(1, ...(report?.stages || []).map(s => s.reached)), [report])
@@ -69,18 +70,26 @@ export default function CrmAnalytics({ pipeline, people }) {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm w-full sm:w-auto">
           <input type="date" value={range[0]} onChange={e => { setPreset(''); setRange([e.target.value, range[1]]) }}
-            className="bg-white/50 rounded-xl px-3 py-1.5 border border-slate-200" />
+            className="flex-1 min-w-0 sm:flex-none bg-white/50 rounded-xl px-3 py-1.5 border border-slate-200" />
           <span className="text-slate-400">—</span>
           <input type="date" value={range[1]} onChange={e => { setPreset(''); setRange([range[0], e.target.value]) }}
-            className="bg-white/50 rounded-xl px-3 py-1.5 border border-slate-200" />
+            className="flex-1 min-w-0 sm:flex-none bg-white/50 rounded-xl px-3 py-1.5 border border-slate-200" />
         </div>
       </div>
 
       {!report ? (
         <div className="flex items-center justify-center py-16"><Loader size={22} className="animate-spin text-slate-400" /></div>
-      ) : report.error ? null : (
+      ) : report.error ? (
+        <div className="glass-card rounded-2xl p-8 text-center space-y-3">
+          <p className="text-sm text-slate-500">Не удалось загрузить отчёт. Проверьте период и подключение.</p>
+          <button onClick={() => setAttempt(a => a + 1)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm bg-white/70 border border-slate-200 hover:bg-white">
+            <RotateCw size={15} /> Повторить
+          </button>
+        </div>
+      ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
             <Stat icon={Inbox} label="Новых заявок" value={report.totals.created} />
@@ -116,13 +125,14 @@ export default function CrmAnalytics({ pipeline, people }) {
             <p className="text-xs text-slate-400 mb-4">Сколько заявок за период дошли до каждого этапа (или дальше)</p>
             <div className="space-y-2.5">
               {report.stages.map(s => (
-                <div key={s.id} className="grid grid-cols-[minmax(110px,180px)_1fr_auto] items-center gap-3">
+                // phones: name and numbers on one line, the bar full-width under them
+                <div key={s.id} className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(110px,180px)_1fr_auto] items-center gap-x-3 gap-y-1 sm:gap-3">
                   <span className="text-sm text-slate-600 truncate">{s.name}</span>
-                  <div className="h-7 bg-slate-100/80 rounded-lg overflow-hidden">
+                  <div className="h-7 bg-slate-100/80 rounded-lg overflow-hidden col-span-2 sm:col-span-1 order-last sm:order-none">
                     <div className="h-full rounded-lg transition-all"
                       style={{ width: `${(s.reached / maxReached) * 100}%`, background: s.color || '#6366f1', minWidth: s.reached ? 6 : 0 }} />
                   </div>
-                  <span className="text-sm text-slate-700 tabular-nums w-24 text-right">
+                  <span className="text-sm text-slate-700 tabular-nums sm:w-24 text-right whitespace-nowrap">
                     {s.reached} <span className="text-slate-400">· {s.conversion}%</span>
                   </span>
                 </div>
@@ -200,9 +210,9 @@ export default function CrmAnalytics({ pipeline, people }) {
                 {insights.lossReasons.length === 0 ? <p className="text-sm text-slate-400">Отказов за период нет</p> : (
                   <div className="space-y-2">
                     {insights.lossReasons.map(r => (
-                      <div key={r.reason} className="grid grid-cols-[minmax(110px,200px)_1fr_auto] items-center gap-3">
+                      <div key={r.reason} className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(110px,200px)_1fr_auto] items-center gap-x-3 gap-y-1 sm:gap-3">
                         <span className="text-sm text-slate-600 truncate" title={r.reason}>{r.reason}</span>
-                        <div className="h-5 bg-slate-100/80 rounded-md overflow-hidden">
+                        <div className="h-5 bg-slate-100/80 rounded-md overflow-hidden col-span-2 sm:col-span-1 order-last sm:order-none">
                           <div className="h-full rounded-md bg-red-400" style={{ width: `${(r.count / maxReason) * 100}%` }} />
                         </div>
                         <span className="text-sm text-slate-700 tabular-nums w-8 text-right">{r.count}</span>
