@@ -819,10 +819,10 @@ export default function Reports() {
             <thead>
               {/* Header row 1: Week groups */}
               <tr className="bg-white/40 border-b border-white/30">
-                <th className="sticky left-0 z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 100 }}>
+                <th className="rpt-c1 sticky left-0 z-20 bg-slate-50 px-2 md:px-3 py-2 text-left text-[11px] md:text-xs font-semibold text-slate-600 border-r border-slate-200">
                   {t('reports.th_manager')}
                 </th>
-                <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 160 }}>
+                <th className="rpt-c2 sticky z-20 bg-slate-50 px-2 md:px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200">
                   {t('reports.th_metric')}
                 </th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 bg-blue-50" colSpan={3}>
@@ -845,8 +845,8 @@ export default function Reports() {
               </tr>
               {/* Header row 2: Individual columns */}
               <tr className="bg-white/40 border-b border-white/30">
-                <th className="sticky left-0 z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
-                <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
+                <th className="rpt-c1 sticky left-0 z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
+                <th className="rpt-c2 sticky z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
                 {/* Month columns */}
                 <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">{t('reports.th_month_plan')}</th>
                 <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">{t('reports.th_month_fact')}</th>
@@ -909,12 +909,11 @@ export default function Reports() {
                       {/* Manager name (merged visually) */}
                       {isFirstRow ? (
                         <td
-                          className="sticky left-0 z-10 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 border-r border-slate-200 align-top"
+                          className="rpt-c1 sticky left-0 z-10 bg-white px-2 md:px-3 py-1.5 text-[11px] md:text-xs font-bold text-slate-800 border-r border-slate-200 align-top"
                           rowSpan={METRICS.length}
-                          style={{ minWidth: 100 }}
                         >
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs">
+                            <div className="hidden md:flex w-7 h-7 shrink-0 rounded-full bg-blue-100 items-center justify-center text-blue-700 font-bold text-xs">
                               {manager[0]}
                             </div>
                             {manager}
@@ -924,10 +923,9 @@ export default function Reports() {
 
                       {/* Metric label */}
                       <td
-                        className={`sticky left-[100px] z-10 px-3 py-1.5 text-xs border-r border-slate-200 ${
+                        className={`rpt-c2 sticky z-10 px-2 md:px-3 py-1.5 text-[11px] md:text-xs border-r border-slate-200 ${
                           isConversion ? 'bg-slate-50 text-slate-500 italic' : 'bg-white text-slate-700 font-medium'
                         }`}
-                        style={{ minWidth: 160 }}
                       >
                         {metric.label}
                       </td>

@@ -948,7 +948,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           <span className="font-semibold">{t('paymentForm.receipt_success')}</span>
         </div>
 
-        <div id="payment-receipt" className="border border-slate-200 rounded-xl p-6 bg-white space-y-3 text-sm">
+        <div id="payment-receipt" className="border border-slate-200 rounded-xl p-4 sm:p-6 bg-white space-y-3 text-sm">
           <div className="text-center border-b border-slate-200 pb-3 mb-3">
             <Logo size="md" variant="dark" />
             <p className="text-slate-500 text-xs mt-1">{branches.find(b => b.id === savedPayment.branch)?.name} — {t('paymentForm.receipt_title')}</p>
@@ -1231,17 +1231,17 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-2 flex-wrap">
+        <div className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:justify-end sm:gap-3 sm:flex-wrap">
           <button onClick={handleGenerateContract} disabled={generatingContract}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50">
+            className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 text-sm font-medium text-purple-700 bg-purple-100 rounded-lg hover:bg-purple-200 transition-colors disabled:opacity-50">
             <FileDown size={16} />
             {generatingContract ? t('paymentForm.btn_generating') : t('paymentForm.btn_generate_contract')}
           </button>
-          <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+          <button onClick={handlePrint} className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
             <Printer size={16} />
             {t('paymentForm.btn_print')}
           </button>
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
+          <button onClick={onClose} className="col-span-2 px-4 py-2.5 sm:py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
             {t('paymentForm.btn_done')}
           </button>
         </div>
@@ -1880,29 +1880,30 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
 
             {/* ─── Optional split between managers ─── */}
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Разделить продажу</p>
                   <p className="text-[11px] text-slate-400">Если этой продажей занимались несколько менеджеров — укажи долю каждого.</p>
                 </div>
                 {splits.length === 0 && (
                   <button type="button" onClick={addSplitRow}
-                    className="text-xs font-medium text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 bg-white">
+                    className="shrink-0 whitespace-nowrap text-xs font-medium text-blue-600 hover:text-blue-700 px-3 py-2 rounded-lg border border-blue-200 bg-white">
                     + Разделить
                   </button>
                 )}
               </div>
               {splits.length > 0 && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 space-y-3 sm:space-y-2">
                   {splits.map((sp, i) => (
-                    <div key={i} className="flex items-center gap-2">
+                    // phones: manager on its own row, amount + ✕ below it
+                    <div key={i} className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                       <select value={sp.managerId}
                         onChange={(e) => {
                           const id = e.target.value
                           const mgr = splitCandidates.find(m => effManagerId(m) === id)
                           updateSplit(i, { managerId: id, name: mgr?.name || '' })
                         }}
-                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        className="w-full sm:w-auto sm:flex-1 min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">— менеджер —</option>
                         {splitCandidates
                           .filter(m => { const mid = effManagerId(m); return mid === sp.managerId || !splits.some(s2 => s2.managerId === mid) })
@@ -1915,17 +1916,17 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                             )
                           })}
                       </select>
-                      <input type="number" min="0" value={sp.amount || ''}
+                      <input type="number" inputMode="numeric" min="0" value={sp.amount || ''}
                         onChange={(e) => updateSplit(i, { amount: Number(e.target.value) || 0 })}
                         placeholder="Сумма"
-                        className="w-36 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="flex-1 min-w-0 sm:flex-none sm:w-36 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       <button type="button" onClick={() => removeSplit(i)}
-                        className="p-1.5 text-slate-400 hover:text-red-500" title="Убрать">
+                        className="p-2 -mr-1 shrink-0 text-slate-400 hover:text-red-500" title="Убрать">
                         <X size={14} />
                       </button>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pt-2 border-t border-slate-200">
                     <button type="button" onClick={addSplitRow}
                       className="text-xs font-medium text-blue-600 hover:text-blue-700">
                       + Добавить менеджера
@@ -2026,21 +2027,25 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
         </div>
       )}
 
-      <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+      {/* Footer — on phones it sticks to the bottom of the sheet, so «Сохранить»
+          is always under the thumb; «Отмена» there is the sheet's ✕. */}
+      <div className="form-sticky-footer flex justify-between items-center gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-100">
         {form.type === 'income' && !isDoplata && (
           <button type="button" onClick={handleGenerateContract} disabled={generatingContract || !form.clientName}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-40">
+            title={t('paymentForm.btn_generate_contract')}
+            className="shrink-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-40">
             <FileDown size={16} />
-            {generatingContract ? t('paymentForm.btn_generating') : t('paymentForm.btn_generate_contract')}
+            <span className="sm:hidden">{generatingContract ? '…' : 'Договор'}</span>
+            <span className="hidden sm:inline">{generatingContract ? t('paymentForm.btn_generating') : t('paymentForm.btn_generate_contract')}</span>
           </button>
         )}
-        {(form.type !== 'income' || isDoplata) && <div />}
-        <div className="flex gap-3">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+        {(form.type !== 'income' || isDoplata) && <div className="hidden sm:block" />}
+        <div className="flex gap-3 flex-1 sm:flex-none min-w-0">
+          <button type="button" onClick={onClose} className="hidden sm:block px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
             {t('paymentForm.btn_cancel')}
           </button>
           <button type="submit" disabled={submitting || (form.type === 'income' && (files.length === 0 || (isDoplata && !form.studentId) || (!isDoplata && !form.groupId)))}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
+            className={`flex-1 sm:flex-none min-w-0 justify-center px-4 py-2.5 sm:py-2 text-sm font-semibold sm:font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
             {submitting ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
