@@ -98,17 +98,17 @@ export default function PipelineSettings({ pipeline, pipelines, onClose, onChang
                 Неразобранное
               </label>
               <div className="flex gap-1 ml-auto">
-                <button disabled={i === 0} onClick={() => move(i, -1)} className="p-1.5 rounded-lg hover:bg-white disabled:opacity-30"><ArrowUp size={15} /></button>
-                <button disabled={i === stages.length - 1} onClick={() => move(i, 1)} className="p-1.5 rounded-lg hover:bg-white disabled:opacity-30"><ArrowDown size={15} /></button>
-                <button onClick={() => removeStage(s)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50"><Trash2 size={15} /></button>
+                <button disabled={i === 0} onClick={() => move(i, -1)} aria-label="Выше" className="p-2 rounded-lg hover:bg-white disabled:opacity-30"><ArrowUp size={15} /></button>
+                <button disabled={i === stages.length - 1} onClick={() => move(i, 1)} aria-label="Ниже" className="p-2 rounded-lg hover:bg-white disabled:opacity-30"><ArrowDown size={15} /></button>
+                <button onClick={() => removeStage(s)} aria-label="Удалить этап" className="p-2 rounded-lg text-red-500 hover:bg-red-50"><Trash2 size={15} /></button>
               </div>
             </div>
           ))}
           <div className="flex gap-2">
             <input value={newStage} onChange={e => setNewStage(e.target.value)} placeholder="Новый этап, например «Пробный урок назначен»"
-              onKeyDown={e => e.key === 'Enter' && addStage()} className={inputCls + ' flex-1'} />
+              onKeyDown={e => e.key === 'Enter' && addStage()} className={inputCls + ' flex-1 min-w-0'} />
             <button onClick={addStage} disabled={!newStage.trim()}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+              className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
               <Plus size={15} /> Этап
             </button>
           </div>
@@ -125,9 +125,9 @@ export default function PipelineSettings({ pipeline, pipelines, onClose, onChang
           ))}
           <div className="flex gap-2">
             <input value={newPipeline} onChange={e => setNewPipeline(e.target.value)} placeholder="Новая воронка, например «Корпоративные клиенты»"
-              onKeyDown={e => e.key === 'Enter' && addPipeline()} className={inputCls + ' flex-1'} />
+              onKeyDown={e => e.key === 'Enter' && addPipeline()} className={inputCls + ' flex-1 min-w-0'} />
             <button onClick={addPipeline} disabled={!newPipeline.trim()}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl text-sm bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-40">
+              className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl text-sm bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-40">
               <Plus size={15} /> Воронка
             </button>
           </div>
