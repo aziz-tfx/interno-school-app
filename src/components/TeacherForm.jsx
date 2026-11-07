@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
+import { useAuth } from '../contexts/AuthContext'
+import { toast } from './Toaster'
 
 const SUBJECTS = ['Английский', 'Математика', 'IT/Программирование', 'Русский язык', 'Корейский язык', 'IELTS', 'SAT', 'Робототехника']
 
 export default function TeacherForm({ teacher, onClose }) {
   const { branches, addTeacher, updateTeacher } = useData()
+  const { user } = useAuth()
   const isEdit = !!teacher
+  const [saving, setSaving] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
-    branch: 'tashkent',
+    branch: user?.branch && user.branch !== 'all' ? user.branch : branches[0]?.id || '',
     subject: 'Английский',
     groups: 1,
     students: 0,
@@ -31,14 +35,30 @@ export default function TeacherForm({ teacher, onClose }) {
     }
   }, [teacher])
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (isEdit) {
-      updateTeacher(teacher.id, form)
-    } else {
-      addTeacher(form)
+  // Branches may arrive after the form mounts — never keep an empty/unknown branch
+  useEffect(() => {
+    if (!isEdit && branches.length && !branches.some(b => b.id === form.branch)) {
+      setForm(prev => ({ ...prev, branch: branches[0].id }))
     }
-    onClose()
+  }, [branches, isEdit, form.branch])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (saving) return
+    setSaving(true)
+    try {
+      if (isEdit) {
+        await updateTeacher(teacher.id, form)
+      } else {
+        await addTeacher(form)
+      }
+      onClose()
+    } catch (err) {
+      console.error('Teacher save failed:', err)
+      toast.error('Не удалось сохранить учителя. Попробуйте ещё раз.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
@@ -75,25 +95,25 @@ export default function TeacherForm({ teacher, onClose }) {
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Кол-во групп</label>
-          <input type="number" min="0" value={form.groups} onChange={(e) => set('groups', Number(e.target.value))}
+          <input type="number" inputMode="numeric" min="0" value={form.groups} onChange={(e) => set('groups', Number(e.target.value))}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Кол-во учеников</label>
-          <input type="number" min="0" value={form.students} onChange={(e) => set('students', Number(e.target.value))}
+          <input type="number" inputMode="numeric" min="0" value={form.students} onChange={(e) => set('students', Number(e.target.value))}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Зарплата (сум)</label>
-          <input type="number" min="0" step="100000" value={form.salary} onChange={(e) => set('salary', Number(e.target.value))}
+          <input type="number" inputMode="numeric" min="0" step="100000" value={form.salary} onChange={(e) => set('salary', Number(e.target.value))}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Рейтинг</label>
-          <input type="number" min="1" max="5" step="0.1" value={form.rating} onChange={(e) => set('rating', Number(e.target.value))}
+          <input type="number" inputMode="decimal" min="1" max="5" step="0.1" value={form.rating} onChange={(e) => set('rating', Number(e.target.value))}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
       </div>
@@ -102,8 +122,8 @@ export default function TeacherForm({ teacher, onClose }) {
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
           Отмена
         </button>
-        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-          {isEdit ? 'Сохранить' : 'Добавить учителя'}
+        <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          {saving ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Добавить учителя'}
         </button>
       </div>
     </form>

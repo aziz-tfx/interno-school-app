@@ -26,7 +26,7 @@ function buildDefaultPricing() {
   }
 }
 
-export default function CourseForm({ course, onClose, onSave }) {
+export default function CourseForm({ course, onClose, onSave, saving = false }) {
   const { t } = useLanguage()
   const isEdit = !!course
   const [openDropdown, setOpenDropdown] = useState(null) // 'region' | `tariff:${regionKey}` | null
@@ -218,6 +218,7 @@ export default function CourseForm({ course, onClose, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (saving) return
     // Clean pricing: convert empty strings to undefined, remove zero-only tariffs
     const cleanedPricing = {}
     for (const [region, tariffs] of Object.entries(pricing)) {
@@ -276,8 +277,8 @@ export default function CourseForm({ course, onClose, onSave }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
       {/* Basic info */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.label_name')}</label>
           <input
             type="text"
@@ -324,15 +325,15 @@ export default function CourseForm({ course, onClose, onSave }) {
         </div>
 
         {/* Per-region duration overrides */}
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-2">Срок обучения по регионам</label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
             {REGION_OPTIONS.map(r => {
               const regionLabel = t(r.tKey)
               const val = durationByRegion[r.key] || ''
               return (
-                <div key={r.key} className="flex items-center gap-2">
-                  <div className="flex items-center gap-1 min-w-[90px]">
+                <div key={r.key} className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1 min-w-[90px] shrink-0">
                     <r.icon size={12} className="text-slate-400" />
                     <span className="text-xs text-slate-600">{regionLabel}</span>
                   </div>
@@ -349,7 +350,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                         return { ...prev, [r.key]: v }
                       })
                     }}
-                    className="flex-1 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
                     <option value="">— по умолч.</option>
                     {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
@@ -363,7 +364,7 @@ export default function CourseForm({ course, onClose, onSave }) {
           <p className="text-[10px] text-slate-400 mt-1.5">Если не указано — используется общий срок выше</p>
         </div>
 
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.label_description')}</label>
           <textarea
             value={form.description}
@@ -374,7 +375,7 @@ export default function CourseForm({ course, onClose, onSave }) {
           />
         </div>
 
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('courseForm.label_program')} <span className="text-slate-400 font-normal">{t('courseForm.program_hint')}</span></label>
           <textarea
             value={form.featuresText}
@@ -572,8 +573,8 @@ export default function CourseForm({ course, onClose, onSave }) {
 
                     return (
                       <div key={tariffKey} className="bg-white rounded-lg border border-slate-100 p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mb-2">
+                          <div className="flex items-center gap-2 min-w-[7rem] flex-1">
                             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${tariffColor}`} />
                             {isRenaming ? (
                               <>
@@ -619,7 +620,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -632,7 +633,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                             <label className="flex items-center gap-1 text-xs text-slate-500" title="Длительность для этого тарифа в месяцах. Пусто = используется длительность курса.">
                               <span>Срок:</span>
                               <input
-                                type="number"
+                                type="number" inputMode="numeric"
                                 min="1"
                                 max="36"
                                 value={tp.durationMonths || ''}
@@ -653,7 +654,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">{t('courseForm.full_price')}</label>
                             <input
-                              type="number"
+                              type="number" inputMode="numeric"
                               value={tp.full}
                               onChange={e => updateTariffField(regionKey, tariffKey, 'full', e.target.value)}
                               placeholder="8000000"
@@ -663,7 +664,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">{t('courseForm.discount_10')}</label>
                             <input
-                              type="number"
+                              type="number" inputMode="numeric"
                               value={tp.d10}
                               onChange={e => updateTariffField(regionKey, tariffKey, 'd10', e.target.value)}
                               placeholder="7200000"
@@ -673,7 +674,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">{t('courseForm.discount_15')}</label>
                             <input
-                              type="number"
+                              type="number" inputMode="numeric"
                               value={tp.d15}
                               onChange={e => updateTariffField(regionKey, tariffKey, 'd15', e.target.value)}
                               placeholder="6800000"
@@ -683,7 +684,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                           <div>
                             <label className="text-[10px] text-slate-400 mb-0.5 block">{t('courseForm.discount_20')}</label>
                             <input
-                              type="number"
+                              type="number" inputMode="numeric"
                               value={tp.d20}
                               onChange={e => updateTariffField(regionKey, tariffKey, 'd20', e.target.value)}
                               placeholder="6400000"
@@ -714,7 +715,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                                         <label className="text-[10px] text-emerald-600 mb-0.5 block font-medium">−{pct}%</label>
                                         <div className="flex items-center gap-1">
                                           <input
-                                            type="number"
+                                            type="number" inputMode="numeric"
                                             value={tp[key] ?? ''}
                                             onChange={e => updateTariffField(regionKey, tariffKey, key, e.target.value)}
                                             placeholder="0"
@@ -734,7 +735,7 @@ export default function CourseForm({ course, onClose, onSave }) {
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] text-slate-500">Скидка</span>
                                   <input
-                                    type="number" min="1" max="99" autoFocus
+                                    type="number" inputMode="numeric" min="1" max="99" autoFocus
                                     value={discountDraft.percent}
                                     onChange={e => setDiscountDraft(d => ({ ...d, percent: e.target.value }))}
                                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitCustomDiscount() } }}
@@ -774,8 +775,8 @@ export default function CourseForm({ course, onClose, onSave }) {
         <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
           {t('courseForm.btn_cancel')}
         </button>
-        <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-          {isEdit ? t('courseForm.btn_save') : t('courseForm.btn_create')}
+        <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+          {saving ? 'Сохранение...' : isEdit ? t('courseForm.btn_save') : t('courseForm.btn_create')}
         </button>
       </div>
     </form>

@@ -101,7 +101,7 @@ function PricingTable({ pricing, region, tariffFeatures }) {
   )
 }
 
-function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelete }) {
+function CourseCard({ course, studentCount, groupCount, canEdit, canDelete, onEdit, onDelete }) {
   const { t } = useLanguage()
   const REGION_LABELS = useRegionLabels()
   const [expanded, setExpanded] = useState(false)
@@ -115,6 +115,46 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
       return prices.length > 0 ? Math.min(...prices) : 0
     } catch { return 0 }
   }, [pricing])
+
+  const adminActions = (canEdit || canDelete) ? (
+    <>
+      {canEdit && (
+        <button
+          onClick={() => {
+            const url = `${window.location.origin}/course/${course.id}`
+            const copy = navigator.clipboard?.writeText(url)
+            if (!copy) { toast.info(url); return }
+            copy.then(
+              () => toast.success('Ссылка на лендинг скопирована! Используйте её в рекламе.'),
+              () => toast.info(url)
+            )
+          }}
+          className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+          title="Скопировать ссылку на публичный лендинг (лидмагнит)"
+        >
+          <Megaphone size={16} />
+        </button>
+      )}
+      {canEdit && (
+        <button
+          onClick={() => onEdit(course)}
+          className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          title={t('courses.tooltip_edit')}
+        >
+          <Pencil size={16} />
+        </button>
+      )}
+      {canDelete && (
+        <button
+          onClick={() => onDelete(course)}
+          className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+          title={t('courses.tooltip_delete')}
+        >
+          <Trash2 size={16} />
+        </button>
+      )}
+    </>
+  ) : null
 
   return (
     <div className="glass-card rounded-2xl overflow-hidden transition-all duration-300">
@@ -153,42 +193,16 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
               от {formatPrice(minPrice)} {t('courses.sum')}
             </span>
           )}
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => {
-                  const url = `${window.location.origin}/course/${course.id}`
-                  navigator.clipboard?.writeText(url).then(
-                    () => toast.success('Ссылка на лендинг скопирована! Используйте её в рекламе.'),
-                    () => toast.info(url)
-                  )
-                }}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
-                title="Скопировать ссылку на публичный лендинг (лидмагнит)"
-              >
-                <Megaphone size={16} />
-              </button>
-              <button
-                onClick={() => onEdit(course)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                title={t('courses.tooltip_edit')}
-              >
-                <Pencil size={16} />
-              </button>
-              <button
-                onClick={() => onDelete(course)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                title={t('courses.tooltip_delete')}
-              >
-                <Trash2 size={16} />
-              </button>
-            </>
-          )}
+          {/* Desktop: actions inline; phones get their own row below so the name isn't squeezed */}
+          {adminActions && <div className="hidden sm:flex items-center gap-2">{adminActions}</div>}
           <button onClick={() => setExpanded(!expanded)} className="p-1">
             {expanded ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
           </button>
         </div>
       </div>
+      {adminActions && (
+        <div className="sm:hidden flex items-center justify-end gap-1 px-4 pb-3 -mt-2">{adminActions}</div>
+      )}
 
       {/* Expanded content */}
       {expanded && (
@@ -249,13 +263,18 @@ function CourseCard({ course, studentCount, groupCount, isAdmin, onEdit, onDelet
 export default function Courses() {
   const { t } = useLanguage()
   const { courses, addCourse, updateCourse, deleteCourse, groups, students } = useData()
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingCourse, setEditingCourse] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
 
   const isAdmin = user?.role === 'owner' || user?.role === 'admin'
+  const canAddCourse = hasPermission('courses', 'add')
+  const canEditCourse = hasPermission('courses', 'edit')
+  // The permission model has no courses.delete — deletion stays owner/admin only
+  const canDeleteCourse = isAdmin
+  const [saving, setSaving] = useState(false)
 
   // Count students and groups per course from real data
   const courseStats = useMemo(() => {
@@ -289,13 +308,22 @@ export default function Courses() {
   const totalGroups = Object.values(courseStats).reduce((sum, s) => sum + s.groups, 0)
 
   const handleSave = async (data) => {
-    if (editingCourse) {
-      await updateCourse(editingCourse.id, data)
-    } else {
-      await addCourse(data)
+    if (saving) return
+    setSaving(true)
+    try {
+      if (editingCourse) {
+        await updateCourse(editingCourse.id, data)
+      } else {
+        await addCourse(data)
+      }
+      setShowForm(false)
+      setEditingCourse(null)
+    } catch (err) {
+      console.error('Course save failed:', err)
+      toast.error('Не удалось сохранить курс. Попробуйте ещё раз.')
+    } finally {
+      setSaving(false)
     }
-    setShowForm(false)
-    setEditingCourse(null)
   }
 
   const handleEdit = (course) => {
@@ -304,11 +332,22 @@ export default function Courses() {
   }
 
   const handleDelete = async () => {
-    if (confirmDelete) {
+    if (!confirmDelete || saving) return
+    setSaving(true)
+    try {
       await deleteCourse(confirmDelete.id)
       setConfirmDelete(null)
+    } catch (err) {
+      console.error('Course delete failed:', err)
+      toast.error('Не удалось удалить курс. Попробуйте ещё раз.')
+    } finally {
+      setSaving(false)
     }
   }
+
+  // Real counts instead of hardcoded "4 тарифа / 3 региона"
+  const tariffCount = new Set(courses.flatMap(c => Object.values(c.pricing || {}).flatMap(r => Object.keys(r || {})))).size
+  const regionCount = new Set(courses.flatMap(c => Object.keys(c.pricing || {}))).size
 
   // Build comparison table from actual course data
   const comparisonData = useMemo(() => {
@@ -343,7 +382,7 @@ export default function Courses() {
             onChange={e => setSearchQuery(e.target.value)}
             className="px-4 py-2 bg-white/70 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-56"
           />
-          {isAdmin && (
+          {canAddCourse && (
             <button
               onClick={() => { setEditingCourse(null); setShowForm(true) }}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors whitespace-nowrap"
@@ -367,14 +406,14 @@ export default function Courses() {
           <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center mb-1">
             <Tag size={16} className="text-purple-600" />
           </div>
-          <p className="text-2xl font-bold text-slate-900">4</p>
+          <p className="text-2xl font-bold text-slate-900">{tariffCount}</p>
           <p className="text-xs text-slate-500">{t('courses.stat_tariffs')}</p>
         </div>
         <div className="glass-card rounded-xl p-4">
           <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center mb-1">
             <MapPin size={16} className="text-emerald-600" />
           </div>
-          <p className="text-2xl font-bold text-slate-900">3</p>
+          <p className="text-2xl font-bold text-slate-900">{regionCount}</p>
           <p className="text-xs text-slate-500">{t('courses.stat_regions')}</p>
         </div>
         <div className="glass-card rounded-xl p-4">
@@ -431,7 +470,8 @@ export default function Courses() {
             course={course}
             studentCount={courseStats[course.name]?.students || 0}
             groupCount={courseStats[course.name]?.groups || 0}
-            isAdmin={isAdmin}
+            canEdit={canEditCourse}
+            canDelete={canDeleteCourse}
             onEdit={handleEdit}
             onDelete={setConfirmDelete}
           />
@@ -460,6 +500,7 @@ export default function Courses() {
                 course={editingCourse}
                 onClose={() => { setShowForm(false); setEditingCourse(null) }}
                 onSave={handleSave}
+                saving={saving}
               />
             </div>
           </div>
@@ -482,7 +523,7 @@ export default function Courses() {
               <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200">
                 {t('courses.btn_cancel')}
               </button>
-              <button onClick={handleDelete} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+              <button onClick={handleDelete} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
                 {t('courses.btn_delete')}
               </button>
             </div>
