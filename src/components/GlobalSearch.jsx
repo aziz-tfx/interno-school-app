@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Search, GraduationCap, Users, DollarSign, UserCog, X, ArrowRight } from 'lucide-react'
 import { useData } from '../contexts/DataContext'
@@ -150,7 +151,8 @@ export default function GlobalSearch() {
         <Search size={18} className="text-slate-600" />
       </button>
 
-      {mobileOpen && (
+      {/* portal: the header's backdrop-filter would make it this overlay's containing block (56px tall) */}
+      {mobileOpen && createPortal(
         <div className="fixed inset-0 z-[150] bg-white flex flex-col md:hidden pt-[env(safe-area-inset-top)]">
           <div className="flex items-center gap-2 p-3 border-b border-slate-100">
             <div className="relative flex-1">
@@ -172,7 +174,8 @@ export default function GlobalSearch() {
           <div className="flex-1 overflow-auto p-2">
             <ResultsList />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

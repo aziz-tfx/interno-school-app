@@ -6,12 +6,15 @@ import MobileTabBar from './MobileTabBar'
 import StaffOnboarding from './StaffOnboarding'
 import { useTableCardLabels } from '../utils/tableCards'
 
+// Dialogs render in a portal on <body>, so captions are kept in sync there, not just in <main>
+const BODY = { get current() { return typeof document !== 'undefined' ? document.body : null } }
+
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
   const mainRef = useRef(null)
   // .table-cards tables turn into cards on phones; captions come from <thead>
-  useTableCardLabels(mainRef)
+  useTableCardLabels(BODY)
 
   // Floating UI (toasts, banners, chat buttons) sits above the bottom tab
   // bar on phones — see --tabbar-h in index.css.
