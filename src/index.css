@@ -735,3 +735,30 @@ html.dark {
   table.table-cards > tbody > tr:has(> td[colspan]:only-child) { display: block; }
   table.table-cards > tbody > tr > td[colspan]:only-child { align-items: stretch; text-align: center !important; }
 }
+
+/* Form footers inside bottom-sheet dialogs (Modal): on phones the action row
+   sticks to the bottom of the sheet, so the main button is reachable without
+   scrolling a long form to its end. */
+@media (max-width: 767px) {
+  .modal-body .form-sticky-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: 0 -1rem calc(-1 * max(1rem, env(safe-area-inset-bottom)));
+    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.92);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  html.dark .modal-body .form-sticky-footer { background: rgba(17, 13, 32, 0.92); }
+}
+
+/* Reports: the two sticky columns of the daily matrix (manager, metric).
+   The metric column's left offset must equal the manager column's width;
+   on phones both shrink so more than a sliver of the days stays visible. */
+.rpt-c1 { width: 100px; min-width: 100px; max-width: 100px; overflow-wrap: anywhere; }
+.rpt-c2 { left: 100px; min-width: 160px; }
+@media (max-width: 767px) {
+  .rpt-c1 { width: 80px; min-width: 80px; max-width: 80px; }
+  .rpt-c2 { left: 80px; width: 112px; min-width: 112px; max-width: 112px; }
+}
