@@ -200,6 +200,7 @@ export async function resolveAiAgent(req) {
     followUpEnabled:   cfg.followUpEnabled !== false,
     followUpHours:     cfg.followUpHours ?? '2, 20',
     notifyChatId:      cfg.notifyChatId || '',
+    errorChatId:       cfg.errorChatId || '', // bot errors go here (e.g. the owner's own Telegram), else notifyChatId
     notifyHandoff:     cfg.notifyHandoff !== false,
     notifyErrors:      cfg.notifyErrors !== false,
     enabled: cfg.enabled === true,

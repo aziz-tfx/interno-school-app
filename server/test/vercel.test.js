@@ -126,6 +126,32 @@ test('AI agent: webhooks check the school key, the log needs a login', async () 
   assert.equal((await ctx.as('sales').post('/api/ai/amo-agent?mode=setup', { action: 'test-notify' })).statusCode, 403)
 })
 
+test('AI agent: «Присылать ошибки мне» — bot errors to the admin\'s own Telegram', async () => {
+  await ctx.pool.query(
+    `INSERT INTO tenant_integrations (id, tenant_id, data) VALUES ('school-a', 'school-a', $1)
+     ON CONFLICT (id) DO UPDATE SET data = tenant_integrations.data || EXCLUDED.data`,
+    [{ telegram: { botToken: 'BOT', chats: { tashkent: '-100group' } }, aiAgent: { enabled: true, notifyChatId: '-100managers' } }])
+  const setup = (who) => ctx.as(who).post('/api/ai/amo-agent?mode=setup', { action: 'errors-to-me' })
+  assert.equal((await setup('sales')).statusCode, 403) // admins only
+
+  // Telegram not linked yet: a clear message, nothing saved
+  const notLinked = await setup('owner')
+  assert.equal(notLinked.statusCode, 400)
+  assert.match(notLinked.json().error, /Telegram не привязан/)
+
+  await ctx.pool.query('UPDATE employees SET telegram_user_id = 555 WHERE id = $1', ['e-owner'])
+  outbound.length = 0
+  const res = await setup('owner')
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.json().errorChatId, '555')
+  const sentTo = outbound.filter(o => o.url.includes('api.telegram.org')).map(o => String(o.body.chat_id))
+  assert.deepEqual(sentTo, ['555']) // the test message went to the owner, not the group
+  const { rows: [ti] } = await ctx.pool.query(`SELECT data->'aiAgent' AS a FROM tenant_integrations WHERE id = 'school-a'`)
+  assert.equal(ti.a.errorChatId, '555')
+  assert.equal(ti.a.notifyChatId, '-100managers') // handoffs stay in the managers' chat
+  await ctx.pool.query('UPDATE employees SET telegram_user_id = NULL WHERE id = $1', ['e-owner'])
+})
+
 test('Payme: create → perform writes the payment, cancel rolls it back', async () => {
   const rpc = (method, params, auth = 'Basic ' + Buffer.from('Paycom:k1').toString('base64')) => ctx.app.inject({
     method: 'POST', url: '/api/pay/payme?tenantId=school-a', headers: { authorization: auth },

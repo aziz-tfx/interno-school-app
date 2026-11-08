@@ -65,6 +65,7 @@ const EMPTY = {
     followUpEnabled: true,
     followUpHours: '2, 20',
     notifyChatId: '',
+    errorChatId: '',
     notifyHandoff: true,
     notifyErrors: true,
     enabled: false,

@@ -33,7 +33,7 @@ import onpbxCalls from '../vercel/onpbx/calls.js'
 import telegramNotify from '../vercel/telegram/notify.js'
 import aiChat from '../vercel/ai/chat.js'
 import payme from '../vercel/pay/payme.js'
-import { handleAmoAgent } from '../vercel/_lib/aiAgent.js'
+import { handleAmoAgent, setErrorChat } from '../vercel/_lib/aiAgent.js'
 import { loadTelegramConfig, webhookSecret } from '../telegram.js'
 import { resolveAmo } from '../vercel/_lib/tenantConfig.js'
 import { ensureAmoToken } from '../vercel/_lib/amoClient.js'
@@ -199,6 +199,21 @@ export default async function vercelRoutes(app, { pool, config, telegram, amoLiv
       if (reply.sent) return reply
       if (isStudent(req.user)) throw forbidden()
       if (mode === 'setup' && !isAdmin(req.user)) throw forbidden()
+      // «Присылать ошибки мне»: bot errors to the admin's own linked Telegram
+      if (mode === 'setup' && req.body?.action === 'errors-to-me') {
+        const { rows: [me] } = await pool.query(
+          'SELECT telegram_user_id, data->>\'name\' AS name FROM employees WHERE id = $1 AND tenant_id = $2',
+          [req.user.employeeId, req.user.tenantId])
+        if (!me?.telegram_user_id) {
+          return reply.code(400).send({ ok: false, error: 'Ваш Telegram не привязан: откройте систему через бота школы (кнопка «INTERNO») и войдите один раз — см. «Профиль → Вход через Telegram».' })
+        }
+        try {
+          await setErrorChat(req.user.tenantId, me.telegram_user_id, me.name)
+        } catch (e) {
+          return reply.code(400).send({ ok: false, error: e.message })
+        }
+        return { ok: true, errorChatId: String(me.telegram_user_id) }
+      }
       return runVercel(handleAmoAgent, req, reply, req.user.tenantId)
     },
   })
