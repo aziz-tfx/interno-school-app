@@ -5,7 +5,6 @@ import { buildApp } from './app.js'
 import { startAutomationScheduler } from './automations.js'
 import { loadTelegramConfig, sendTelegram } from './telegram.js'
 import { runFollowUps } from './vercel/_lib/aiAgent.js'
-import { agentTraffic } from './vercel/_lib/runtime.js'
 import { resolvePayme } from './vercel/_lib/tenantConfig.js'
 import { syncAllCalls } from './routes/crm/telephony.js'
 
@@ -26,14 +25,13 @@ if (config.automations) {
   app.log.info('daily automations: on (14:00 Asia/Tashkent)')
 }
 
-// AI sales agent: nudge clients who went silent (on Vercel this needed an
-// external cron). Each due conversation is claimed, so overlaps are harmless.
-// Only once amo's webhooks arrive here — before that the agent still runs on
-// Vercel and these would duplicate its follow-ups.
-setInterval(() => {
-  if (!agentTraffic.seen) return
-  runFollowUps().catch((err) => app.log.error({ err }, 'AI agent follow-ups failed'))
-}, 5 * 60_000).unref()
+// AI sales agent: answer clients whose reply failed and nudge those who went
+// silent. Each due conversation is claimed, so overlaps are harmless. Runs
+// from the start (the agent lives only here now), so a restart — e.g. with a
+// new amoCRM key — doesn't wait for the next client message to catch up.
+const agentSweep = () => runFollowUps().catch((err) => app.log.error({ err }, 'AI agent follow-ups failed'))
+setTimeout(agentSweep, 30_000).unref()
+setInterval(agentSweep, 5 * 60_000).unref()
 
 // OnlinePBX calls into the CRM timeline (schools without OnlinePBX are skipped)
 let syncingCalls = false
