@@ -86,6 +86,10 @@ if (amo.subdomain && amo.accessToken) {
   out.live.amoAccount = r.status || r.error
   // nginx's HTML 403 = amoCRM blocks this server's IP; JSON = a real API answer
   if (r.status && r.status !== 200) out.live.amoAnswer = { type: r.type, text: r.text }
+  // Without a token: 401 JSON = amoCRM lets this IP in (so a 403 above is about
+  // the token / integration); 403 HTML = the IP itself is blocked
+  const anon = await status(`https://${amo.subdomain}.amocrm.ru/api/v4/account`)
+  out.live.amoNoToken = { status: anon.status || anon.error, type: anon.type, text: anon.text?.slice(0, 80) }
   // the same call the way the AI agent makes it (through the Vercel relay when it's on)
   out.live.amoRelay = amoRelayMode()
   if (out.live.amoRelay !== 'off') {
@@ -95,6 +99,12 @@ if (amo.subdomain && amo.accessToken) {
       if (rr.status !== 200) out.live.amoViaRelayAnswer = mask((await rr.text().catch(() => '')).replace(/\s+/g, ' ')).slice(0, 120)
     } catch (e) {
       out.live.amoViaRelay = mask(e.message)
+    }
+    try {
+      const ra = await amoFetch(`https://${amo.subdomain}.amocrm.ru/api/v4/account`, {}, { priority: 'high', timeoutMs: 20_000 })
+      out.live.amoNoTokenViaRelay = { status: ra.status, type: ra.headers.get('content-type'), text: mask((await ra.text().catch(() => '')).replace(/\s+/g, ' ')).slice(0, 80) }
+    } catch (e) {
+      out.live.amoNoTokenViaRelay = mask(e.message)
     }
   }
 }
