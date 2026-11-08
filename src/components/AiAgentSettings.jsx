@@ -26,6 +26,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
   const [creatingField, setCreatingField] = useState(false)
   const [setupError, setSetupError] = useState(null)
   const [notifyState, setNotifyState] = useState(null) // null | 'sending' | 'ok' | error text
+  const [errorsToMe, setErrorsToMe] = useState(null)   // null | 'sending' | 'ok' | error text
   const [copiedCron, setCopiedCron] = useState(false)
 
   const [chat, setChat] = useState([]) // { role, text, actions? }
@@ -67,6 +68,25 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
       setNotifyState('ok')
     } catch (err) {
       setNotifyState(err.message)
+    }
+  }
+
+  // Bot errors to the signed-in admin's own Telegram (linked in Профиль)
+  const sendErrorsToMe = async () => {
+    setErrorsToMe('sending')
+    try {
+      await persist()
+      const res = await apiFetch('/api/ai/amo-agent?mode=setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, action: 'errors-to-me' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      onChange({ errorChatId: data.errorChatId, notifyErrors: true })
+      setErrorsToMe('ok')
+    } catch (err) {
+      setErrorsToMe(err.message)
     }
   }
 
@@ -419,6 +439,28 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
                 {notifyState === 'ok' && <p className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle size={12} /> Отправлено — проверьте чат</p>}
                 {notifyState && !['ok', 'sending'].includes(notifyState) && (
                   <p className="text-xs text-red-500 flex items-center gap-1"><XCircle size={12} /> {notifyState}</p>
+                )}
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-slate-600 mb-1">Ошибки бота — в отдельный чат</label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input type="text" value={value.errorChatId || ''}
+                    onChange={(e) => onChange({ errorChatId: e.target.value.trim() })}
+                    placeholder="пусто — в чат менеджеров"
+                    className={`${inputCls} font-mono`} />
+                  {USE_SERVER && (
+                    <button onClick={sendErrorsToMe} disabled={errorsToMe === 'sending'}
+                      className="px-4 py-2.5 bg-white text-fuchsia-600 border border-fuchsia-200 rounded-xl text-sm font-medium hover:bg-fuchsia-50 disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0">
+                      {errorsToMe === 'sending' ? <RefreshCw size={14} className="animate-spin" /> : <BellRing size={14} />} Присылать ошибки мне в Telegram
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Сюда приходят только сбои бота. Клиенты, переданные менеджеру, и записи на урок остаются в чате менеджеров.
+                </p>
+                {errorsToMe === 'ok' && <p className="text-xs text-emerald-600 flex items-center gap-1 mt-1"><CheckCircle size={12} /> Готово — проверьте личные сообщения от бота</p>}
+                {errorsToMe && !['ok', 'sending'].includes(errorsToMe) && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1"><XCircle size={12} /> {errorsToMe}</p>
                 )}
               </div>
             </div>

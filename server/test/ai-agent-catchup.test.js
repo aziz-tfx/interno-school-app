@@ -88,3 +88,16 @@ test('test mode: a message is kept for the catch-up when amo can\'t be asked', a
   assert.equal(c.messages.at(-1).text, 'Здравствуйте')
   assert.match(c.lastError, /403/)
 })
+
+test('bot errors go to errorChatId; handoffs stay in the managers\' chat', async () => {
+  amoBlocked = true
+  await ctx.pool.query(`UPDATE tenant_integrations SET data = jsonb_set(jsonb_set(data, '{aiAgent,notifyErrors}', 'true'), '{aiAgent,errorChatId}', '"777"')
+    || jsonb_build_object('telegram', jsonb_build_object('botToken', 'BOT', 'chats', jsonb_build_object('tashkent', '-100group'))) WHERE id = 'school-a'`)
+  await ctx.pool.query(`DELETE FROM ai_agent_alerts`)
+  await put(9, { lastError: 'x', channel: 'telegram', messages: [{ role: 'user', text: 'Привет', at: hoursAgo(2) }] })
+  await runCatchUp()
+  const tg = outbound.filter(o => o.url.includes('api.telegram.org'))
+  assert.equal(tg.length, 1)
+  assert.equal(String(tg[0].body.chat_id), '777')
+  assert.match(tg[0].body.text, /не смог ответить/)
+})

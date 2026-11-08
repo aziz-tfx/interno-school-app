@@ -714,9 +714,10 @@ const leadLink = (amoCfg, leadId) => amoCfg?.subdomain && leadId
   : (leadId ? `Сделка #${leadId}` : '')
 
 // Managers' chat: cfg.notifyChatId, else the main (Tashkent) chat from the Telegram integration.
-async function sendManagerMessage(cfg, text) {
+// `to` sends elsewhere (bot errors go to cfg.errorChatId when it's set).
+async function sendManagerMessage(cfg, text, to) {
   const tg = await resolveTelegram(tenantReq(cfg.tenantId))
-  const chatId = cfg.notifyChatId || tg.chats.tashkent
+  const chatId = to || cfg.notifyChatId || tg.chats.tashkent
   if (!tg.botToken || !chatId) throw new Error('Не настроен Telegram-бот или чат для уведомлений')
   const r = await fetch(`https://api.telegram.org/bot${tg.botToken}/sendMessage`, {
     method: 'POST',
@@ -797,7 +798,7 @@ async function alertError(cfg, amoCfg, leadId, err) {
       leadLink(amoCfg, leadId),
       `<code>${esc(String(err?.message).slice(0, 300))}</code>`,
       'Пока ошибка не исправлена, бот молчит. Следующее уведомление — не раньше чем через 30 минут.',
-    ].filter(Boolean).join('\n'))
+    ].filter(Boolean).join('\n'), cfg.errorChatId)
   } catch (e) {
     console.warn('AI agent error alert failed:', e.message)
   }
@@ -1021,6 +1022,29 @@ async function handleFollowUps(req, res) {
     console.error('AI agent follow-ups error:', e)
     return res.status(500).json({ ok: false, error: e.message })
   }
+}
+
+/**
+ * «Присылать ошибки мне»: a test alert to `chatId` (the admin's own linked
+ * Telegram), and only if it arrived, bot errors go there from now on.
+ * Throws a message for the admin when Telegram refuses (e.g. they never
+ * pressed Start in the bot, so it may not write to them).
+ */
+export async function setErrorChat(tenantId, chatId, who) {
+  const cfg = await resolveAiAgent(tenantReq(tenantId))
+  try {
+    await sendManagerMessage(cfg, [
+      '✅ <b>Ошибки ИИ-агента теперь приходят сюда</b>',
+      `Если бот не сможет ответить клиенту, ${esc(who || 'вы')} узнаете об этом здесь (не чаще раза в 30 минут). Клиенты, переданные менеджеру, и записи на урок по-прежнему уходят в чат менеджеров.`,
+    ].join('\n'), chatId)
+  } catch (e) {
+    if (/Telegram (400|403)/.test(e.message)) {
+      const tg = await resolveTelegram(tenantReq(tenantId))
+      throw new Error('Бот не может написать вам в Telegram: откройте бота школы и нажмите «Старт», затем попробуйте снова.' + (tg.botToken ? '' : ' (Telegram-бот не настроен.)'))
+    }
+    throw e
+  }
+  await saveTenantIntegration(tenantId || 'default', 'aiAgent', { errorChatId: String(chatId) })
 }
 
 /** /api/ai/amo-agent?mode=webhook|followups|test|log|setup */
