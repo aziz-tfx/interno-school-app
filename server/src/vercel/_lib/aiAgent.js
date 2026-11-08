@@ -767,9 +767,9 @@ function explainError(message) {
   if (/OpenAI 429/.test(m)) return 'OpenAI временно ограничил число запросов.'
   if (/OpenAI 5\d\d|abort/i.test(m)) return 'OpenAI не ответил — вероятно, временный сбой.'
   if (/amoCRM .*→ 401/.test(m)) return 'Токен amoCRM истёк и не обновился — переподключите amoCRM в «Интеграциях».'
-  // nginx's HTML page instead of amo's JSON: the server's IP is blocked for too many requests
-  if (/amoCRM .*→ 403/.test(m) && /заблокировал IP|<html|nginx/i.test(m)) {
-    return 'amoCRM временно заблокировал IP сервера за слишком частые запросы к API. Сервер сам делает паузу и снизил частоту запросов; блокировка обычно снимается сама. Если не снимется за несколько часов — напишите в поддержку amoCRM.'
+  // nginx's HTML page instead of amo's JSON: amo blocked the integration's token for too many requests
+  if (/amoCRM .*→ 403/.test(m) && /заблокировал|<html|nginx/i.test(m)) {
+    return 'amoCRM заблокировал доступ к API для интеграции (ключа доступа), через которую работает бот, — за слишком частые запросы. Нужен новый ключ: создайте в amoCRM новую интеграцию с долгосрочным токеном и вставьте его в «Интеграции» → amoCRM, или попросите поддержку amoCRM снять блокировку.'
   }
   if (/amoCRM .*→ 429/.test(m)) return 'amoCRM ограничил число запросов — бот ответит, когда лимит освободится.'
   if (/amoCRM timeout/.test(m)) return 'amoCRM не ответил вовремя — вероятно, временный сбой.'
