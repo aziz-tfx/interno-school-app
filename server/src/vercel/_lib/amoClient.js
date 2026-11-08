@@ -6,6 +6,7 @@
 // OAuth credentials), persisting the fresh pair back to Firestore.
 
 import { saveTenantIntegration } from './tenantConfig.js'
+import { amoFetch } from './amoFetch.js'
 
 /**
  * Exchange the stored refresh_token for a fresh access/refresh pair and persist
@@ -20,7 +21,7 @@ export async function refreshAmoToken(amo, tenantId) {
   if (!subdomain || !clientId || !clientSecret || !refreshToken) return null
 
   try {
-    const res = await fetch(`https://${subdomain}.amocrm.ru/oauth2/access_token`, {
+    const res = await amoFetch(`https://${subdomain}.amocrm.ru/oauth2/access_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -30,7 +31,7 @@ export async function refreshAmoToken(amo, tenantId) {
         refresh_token: refreshToken,
         redirect_uri: redirectUri || `https://${subdomain}.amocrm.ru`,
       }),
-    })
+    }, { priority: 'high' })
 
     if (!res.ok) {
       console.error('amo token refresh failed:', res.status, await res.text())
@@ -64,7 +65,7 @@ export async function ensureAmoToken(amo, tenantId) {
   if (!amo.subdomain || !amo.accessToken) return amo.accessToken
 
   try {
-    const ping = await fetch(`https://${amo.subdomain}.amocrm.ru/api/v4/account`, {
+    const ping = await amoFetch(`https://${amo.subdomain}.amocrm.ru/api/v4/account`, {
       headers: { Authorization: `Bearer ${amo.accessToken}` },
     })
     if (ping.status !== 401) return amo.accessToken
@@ -79,7 +80,8 @@ export async function ensureAmoToken(amo, tenantId) {
 
 /**
  * Minimal amoCRM REST client for jobs that run without a user (e.g. the AI
- * agent): on a 401 it refreshes the token once via refreshAmoToken and retries.
+ * agent). Its calls go ahead of queued report downloads (see amoFetch.js).
+ * On a 401 it refreshes the token once via refreshAmoToken and retries.
  * Accepts a path ("/api/v4/…") or a full amo URL (e.g. Salesbot return_url).
  *
  * @param {object} amo  resolved amo config (from resolveAmo, includes tenantId)
@@ -90,11 +92,11 @@ export function createAmoClient(amo) {
 
   async function request(method, pathOrUrl, body) {
     const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${base}${pathOrUrl}`
-    const doFetch = () => fetch(url, {
+    const doFetch = () => amoFetch(url, {
       method,
       headers: { Authorization: `Bearer ${state.accessToken}`, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    }, { priority: 'high', timeoutMs: 30_000 })
     let r = await doFetch()
     if (r.status === 401) {
       const refreshed = await refreshAmoToken(state, amo.tenantId)

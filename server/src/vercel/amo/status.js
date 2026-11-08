@@ -1,6 +1,7 @@
 // Vercel Serverless Function — check amoCRM connection status
 // GET /api/amo/status
 
+import { amoFetch } from '../_lib/amoFetch.js'
 import { resolveAmo } from '../_lib/tenantConfig.js'
 
 export default async function handler(req, res) {
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const accountRes = await fetch(`https://${AMO_SUBDOMAIN}.amocrm.ru/api/v4/account`, {
+    const accountRes = await amoFetch(`https://${AMO_SUBDOMAIN}.amocrm.ru/api/v4/account`, {
       headers: { 'Authorization': `Bearer ${AMO_ACCESS_TOKEN}` },
     })
 

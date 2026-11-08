@@ -3,16 +3,10 @@
 // Used by the employee form to let admins pick an amoCRM user from a
 // dropdown instead of typing the numeric id.
 
+import { amoFetch } from '../_lib/amoFetch.js'
 import { resolveAmo } from '../_lib/tenantConfig.js'
 
 const TIMEOUT_MS = 10000
-
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`amoCRM timeout after ${ms}ms`)), ms)),
-  ])
-}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -33,7 +27,7 @@ export default async function handler(req, res) {
     const users = []
     let nextPath = '/users?limit=250'
     for (let page = 0; page < 20 && nextPath; page += 1) {
-      const r = await withTimeout(fetch(base + nextPath, { headers }), TIMEOUT_MS)
+      const r = await amoFetch(base + nextPath, { headers }, { timeoutMs: TIMEOUT_MS })
       if (!r.ok) {
         const text = await r.text().catch(() => '')
         return res.status(500).json({ error: `amoCRM ${r.status}: ${text.slice(0, 200)}`, users: [] })

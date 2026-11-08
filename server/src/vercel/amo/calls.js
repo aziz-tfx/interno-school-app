@@ -7,21 +7,15 @@
 //
 // Response: { byUser: { [uid]: { in, out, total } }, totals: {...}, meta }
 
+import { amoFetch } from '../_lib/amoFetch.js'
 import { resolveAmo } from '../_lib/tenantConfig.js'
 
 const TIMEOUT_MS = 15000
 const MAX_PAGES = 80
 const PAGE_SIZE = 250
 
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`amoCRM timeout after ${ms}ms`)), ms)),
-  ])
-}
-
 async function amoGet(base, path, headers) {
-  const r = await withTimeout(fetch(base + path, { headers }), TIMEOUT_MS)
+  const r = await amoFetch(base + path, { headers }, { timeoutMs: TIMEOUT_MS })
   if (!r.ok) {
     const text = await r.text().catch(() => '')
     const err = new Error(`amoCRM ${r.status} ${path}: ${text.slice(0, 200)}`)
