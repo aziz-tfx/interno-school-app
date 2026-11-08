@@ -9,6 +9,7 @@
 import pg from 'pg'
 import { loadTelegramConfig } from '../src/telegram.js'
 import { initTenantConfig, resolveAmo, resolveAiAgent } from '../src/vercel/_lib/tenantConfig.js'
+import { amoFetch, amoRelayMode } from '../src/vercel/_lib/amoFetch.js'
 
 const TENANT = process.argv[2] || 'default'
 const has = (v) => !!(v && String(v).trim())
@@ -85,6 +86,17 @@ if (amo.subdomain && amo.accessToken) {
   out.live.amoAccount = r.status || r.error
   // nginx's HTML 403 = amoCRM blocks this server's IP; JSON = a real API answer
   if (r.status && r.status !== 200) out.live.amoAnswer = { type: r.type, text: r.text }
+  // the same call the way the AI agent makes it (through the Vercel relay when it's on)
+  out.live.amoRelay = amoRelayMode()
+  if (out.live.amoRelay !== 'off') {
+    try {
+      const rr = await amoFetch(`https://${amo.subdomain}.amocrm.ru/api/v4/account`, { headers: { Authorization: `Bearer ${amo.accessToken}` } }, { priority: 'high', timeoutMs: 20_000 })
+      out.live.amoViaRelay = rr.status
+      if (rr.status !== 200) out.live.amoViaRelayAnswer = mask((await rr.text().catch(() => '')).replace(/\s+/g, ' ')).slice(0, 120)
+    } catch (e) {
+      out.live.amoViaRelay = mask(e.message)
+    }
+  }
 }
 if (ai.openaiKey) {
   const r = await status('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${ai.openaiKey}` } })

@@ -18,8 +18,12 @@ set_env() {  # any characters allowed in the value: no sed
   mv .env.tmp .env && chmod 600 .env
 }
 
-while IFS='=' read -r name cipher; do
-  [ -n "$name" ] && [ "${name:0:1}" != "#" ] || continue
+while IFS= read -r line || [ -n "$line" ]; do
+  [ -n "$line" ] && [ "${line:0:1}" != "#" ] || continue
+  # split at the first "=" only: base64 ends in "=" padding, which
+  # `IFS='=' read name cipher` would cut off
+  name=${line%%=*}
+  cipher=${line#*=}
   value=$(printf '%s' "$cipher" | base64 -d | openssl pkeyutl -decrypt -inkey "$KEY" \
     -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256)
   set_env "$name" "$value"

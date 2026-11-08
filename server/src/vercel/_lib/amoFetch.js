@@ -13,6 +13,13 @@
 //   • 403 with an HTML body = the IP is blocked → stop calling that account
 //     for blockPauseMs (hammering only prolongs the block); calls fail at once
 //     with AmoBlockedError meanwhile.
+//
+// Relay: with AMO_RELAY_URL + AMO_RELAY_KEY set (api/amo-relay.js on Vercel),
+// 'high' calls — the AI agent, sales, token refresh — go out from Vercel's
+// IPs instead of the server's, so they keep working while amoCRM blocks the
+// server. AMO_RELAY_ALL=1 sends report downloads that way too (they are
+// heavy: hundreds of calls per report, counted against Vercel's limits).
+// Blocks are tracked per route: a blocked server IP doesn't stop the relay.
 
 const DEFAULTS = {
   minIntervalMs: Number(process.env.AMO_MIN_INTERVAL_MS ?? 200), // ≤ 5 req/s per amo account
@@ -22,11 +29,25 @@ const DEFAULTS = {
 }
 let opts = { ...DEFAULTS }
 
+const relayFromEnv = () => ({
+  url: process.env.AMO_RELAY_URL || '',
+  key: process.env.AMO_RELAY_KEY || '',
+  all: process.env.AMO_RELAY_ALL === '1',
+})
+let relay = relayFromEnv()
+
 /** Tests: change the limits (and reset the queues). */
 export function configureAmoFetch(o = {}) {
-  opts = { ...DEFAULTS, ...o }
+  const { relay: r, ...rest } = o
+  opts = { ...DEFAULTS, ...rest }
+  relay = r ? { url: '', key: '', all: false, ...r } : relayFromEnv()
   hosts.clear()
 }
+
+const useRelay = (priority) => !!(relay.url && relay.key && (relay.all || priority === 'high'))
+
+/** Is the relay on, and for what (shown by diagnostics). */
+export const amoRelayMode = () => (relay.url && relay.key ? (relay.all ? 'all' : 'high') : 'off')
 
 export class AmoBlockedError extends Error {
   constructor(host, until) {
@@ -37,11 +58,13 @@ export class AmoBlockedError extends Error {
   }
 }
 
-const hosts = new Map() // host → { high: [], normal: [], nextAt, timer, blockedUntil }
+// host → { high: [], normal: [], nextAt, timer, blockedUntil: { direct, relay } }
+// One queue per amo account (its limit doesn't care which IP calls), a block per route.
+const hosts = new Map()
 
 function hostState(host) {
   let s = hosts.get(host)
-  if (!s) hosts.set(host, s = { high: [], normal: [], nextAt: 0, timer: null, blockedUntil: 0 })
+  if (!s) hosts.set(host, s = { high: [], normal: [], nextAt: 0, timer: null, blockedUntil: { direct: 0, relay: 0 } })
   return s
 }
 
@@ -83,10 +106,22 @@ export function isIpBlock(res, text) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-async function send(url, init, timeoutMs) {
-  if (!timeoutMs) return globalThis.fetch(url, init)
+async function send(url, init, timeoutMs, viaRelay) {
+  const signal = timeoutMs ? AbortSignal.timeout(timeoutMs + (viaRelay ? 5000 : 0)) : undefined
   try {
-    return await globalThis.fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
+    if (!viaRelay) return await globalThis.fetch(url, { ...init, ...(signal && { signal }) })
+    const res = await globalThis.fetch(relay.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-relay-key': relay.key },
+      body: JSON.stringify({ url: String(url), method: init.method || 'GET', headers: init.headers || {}, body: init.body ?? null }),
+      ...(signal && { signal }),
+    })
+    // the relay's own failure (bad key, Vercel error) — not an amoCRM answer
+    if (!res.headers.get('x-relay-status')) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`amoCRM relay ${res.status}: ${text.slice(0, 200)}`)
+    }
+    return res
   } catch (err) {
     if (err?.name === 'TimeoutError') throw new Error(`amoCRM timeout after ${timeoutMs}ms`)
     throw err
@@ -94,9 +129,9 @@ async function send(url, init, timeoutMs) {
 }
 
 /** Is this amo account paused after an IP block? (ms left, 0 if not) */
-export function amoBlockedFor(url) {
+export function amoBlockedFor(url, route = 'direct') {
   const s = hosts.get(hostOf(url))
-  return s ? Math.max(0, s.blockedUntil - Date.now()) : 0
+  return s ? Math.max(0, s.blockedUntil[route] - Date.now()) : 0
 }
 
 /**
@@ -109,11 +144,13 @@ export function amoBlockedFor(url) {
 export async function amoFetch(url, init = {}, { priority = 'normal', timeoutMs = 0 } = {}) {
   const host = hostOf(url)
   const s = hostState(host)
+  const viaRelay = useRelay(priority)
+  const route = viaRelay ? 'relay' : 'direct'
   for (let attempt = 0; ; attempt++) {
-    if (s.blockedUntil > Date.now()) throw new AmoBlockedError(host, s.blockedUntil)
+    if (s.blockedUntil[route] > Date.now()) throw new AmoBlockedError(host, s.blockedUntil[route])
     await slot(host, priority)
-    if (s.blockedUntil > Date.now()) throw new AmoBlockedError(host, s.blockedUntil)
-    const res = await send(url, init, timeoutMs)
+    if (s.blockedUntil[route] > Date.now()) throw new AmoBlockedError(host, s.blockedUntil[route])
+    const res = await send(url, init, timeoutMs, viaRelay)
 
     if (res.status === 429 && attempt < opts.retries429) {
       const retryAfter = Number(res.headers?.get?.('retry-after')) * 1000
@@ -127,8 +164,8 @@ export async function amoFetch(url, init = {}, { priority = 'normal', timeoutMs 
     if (res.status === 403) {
       const text = await res.text().catch(() => '')
       if (isIpBlock(res, text)) {
-        s.blockedUntil = Date.now() + opts.blockPauseMs
-        console.error(`amoCRM ${host}: IP blocked (403 from nginx), pausing amo calls for ${Math.round(opts.blockPauseMs / 60_000)} min`)
+        s.blockedUntil[route] = Date.now() + opts.blockPauseMs
+        console.error(`amoCRM ${host}: IP blocked (403 from nginx${viaRelay ? ', via the Vercel relay' : ''}), pausing ${route} amo calls for ${Math.round(opts.blockPauseMs / 60_000)} min`)
       }
       // the body has been read: hand callers a fresh Response with the same text
       return new Response(text, { status: res.status, statusText: res.statusText, headers: res.headers })
