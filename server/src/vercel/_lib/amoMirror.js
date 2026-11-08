@@ -135,6 +135,17 @@ export async function syncAmoMirrorOnce(tenantId, { budgetMs = RUN_BUDGET_MS } =
           `UPDATE amo_mirror_state SET cursor = $3, ready = $4, synced_at = now(), error = NULL
             WHERE tenant_id = $1 AND stream = $2`, [tenantId, t.s.stream, to, t.st.ready])
       } catch (e) {
+        // an event type this account doesn't have (amo: 400 «Invalid params passed
+        // to filter»): it has no events, so the stream is complete and empty —
+        // the reports got [] from amo for it too
+        if (t.s.kind === 'event' && /→ 400:.*Invalid params/.test(e.message)) {
+          t.st.cursor = now
+          t.st.ready = true
+          await pool.query(
+            `UPDATE amo_mirror_state SET cursor = $3, ready = true, synced_at = now(), error = $4
+              WHERE tenant_id = $1 AND stream = $2`, [tenantId, t.s.stream, now, 'тип событий не поддерживается аккаунтом — пусто'])
+          continue
+        }
         await pool.query('UPDATE amo_mirror_state SET error = $3 WHERE tenant_id = $1 AND stream = $2',
           [tenantId, t.s.stream, String(e.message).slice(0, 300)]).catch(() => {})
         // amo refuses (blocked, bad key): no point asking for the other streams now

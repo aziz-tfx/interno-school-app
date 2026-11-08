@@ -32,6 +32,7 @@ before(() => {
     const field = key === 'events' ? 'created_at' : 'updated_at'
     const from = Number(u.searchParams.get(`filter[${field}][from]`)), to = Number(u.searchParams.get(`filter[${field}][to]`))
     const type = u.searchParams.get('filter[type]')
+    if (type === 'sms_out') return Response.json({ errors: { key: 'type', value: 'sms_out' }, title: 'Bad Request', status: 400, detail: 'Invalid params passed to filter.' }, { status: 400 })
     let items = amoData[key].filter(o => o[field] >= from && o[field] <= to && (!type || o.type === type))
     // one item per page, to exercise paging
     const page = Number(u.searchParams.get('page') || 1)
@@ -53,7 +54,10 @@ test('backfill, then incremental: the reports\' queries come from Postgres', asy
   await syncAmoMirrorOnce('school-a')
   const status = await amoMirrorStatus('school-a')
   assert.equal(status.length, 6)
-  assert.ok(status.every(s => s.ready && !s.error), JSON.stringify(status))
+  assert.ok(status.every(s => s.ready), JSON.stringify(status))
+  // sms_out doesn't exist in this account: complete and empty, not stuck
+  assert.match(status.find(s => s.stream === 'events:sms_out').error, /не поддерживается/)
+  assert.ok(status.filter(s => s.stream !== 'events:sms_out').every(s => !s.error))
   const backfillCalls = calls.length
   assert.ok(backfillCalls > 6)
 
