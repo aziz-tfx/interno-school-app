@@ -17,7 +17,10 @@ const mask = (s) => String(s ?? '').replace(/\d{5,}/g, '…').replace(/(bot|key=
 async function status(url, init) {
   try {
     const r = await fetch(url, { ...init, signal: AbortSignal.timeout(10_000) })
-    return { status: r.status, body: await r.json().catch(() => null) }
+    const text = await r.text().catch(() => '')
+    let body = null
+    try { body = JSON.parse(text) } catch {}
+    return { status: r.status, body, type: r.headers.get('content-type'), text: mask(text.replace(/\s+/g, ' ')).slice(0, 120) }
   } catch (e) {
     return { status: 0, error: mask(e.message) }
   }
@@ -80,6 +83,8 @@ if (tg.botToken) {
 if (amo.subdomain && amo.accessToken) {
   const r = await status(`https://${amo.subdomain}.amocrm.ru/api/v4/account`, { headers: { Authorization: `Bearer ${amo.accessToken}` } })
   out.live.amoAccount = r.status || r.error
+  // nginx's HTML 403 = amoCRM blocks this server's IP; JSON = a real API answer
+  if (r.status && r.status !== 200) out.live.amoAnswer = { type: r.type, text: r.text }
 }
 if (ai.openaiKey) {
   const r = await status('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${ai.openaiKey}` } })
@@ -101,6 +106,17 @@ out.conversationErrors = (await pool.query(`
   SELECT data->>'lastError' AS e, max(data->>'updatedAt') AS at, count(*)::int AS n
     FROM ai_agent_conversations WHERE tenant_id = $1 AND coalesce(data->>'lastError', '') <> ''
    GROUP BY 1 ORDER BY 2 DESC LIMIT 5`, [TENANT])).rows.map(r => ({ ...r, e: mask(r.e) }))
+// The latest conversations: did the bot answer, what failed, catch-up state
+out.recent = (await pool.query(`
+  SELECT data FROM ai_agent_conversations WHERE tenant_id = $1
+   ORDER BY data->>'updatedAt' DESC NULLS LAST LIMIT 12`, [TENANT])).rows.map(({ data: c }) => {
+  const last = (c.messages || []).at(-1) || {}
+  return {
+    updatedAt: c.updatedAt, channel: c.channel || null, lastRole: last.role || null, lastAt: last.at || null,
+    replies: c.replies || 0, paused: !!c.paused, err: c.lastError ? mask(c.lastError) : null,
+    retryCount: c.retryCount || 0, nextRetryAt: c.nextRetryAt || null,
+  }
+})
 const { rows: [auto] } = await pool.query('SELECT data FROM automation_settings WHERE id = $1', [TENANT])
 out.automationSettings = auto ? Object.fromEntries(Object.entries(auto.data).filter(([, v]) => typeof v === 'boolean')) : null
 
@@ -121,6 +137,19 @@ if (lines.length) {
     }),
     starts: pick(/Server listening|daily automations: on/).length,
   }
+  // with `docker compose logs --timestamps` every line starts with its time
+  const timeOf = (l) => (/^\d{4}-\d\d-\d\dT[\d:.]+Z/.exec(l) || [])[0]?.slice(0, 19) || null
+  const lastTime = (re) => timeOf(pick(re).at(-1) || '')
+  out.logs.times = {
+    lastLine: timeOf(lines.at(-1)),
+    lastWebhook: lastTime(/AI agent webhook:/),
+    lastAccepted: lastTime(/"accepted":true/),
+    lastAgentError: lastTime(/AI agent error/),
+    ipBlocked: pick(/IP blocked/).length,
+    lastIpBlocked: lastTime(/IP blocked/),
+    lastStart: lastTime(/Server listening/),
+  }
+  out.logs.recentErrors = pick(/AI agent error|AI agent catch-up|IP blocked|AI agent follow-up/).slice(-6).map(l => mask(l).slice(0, 200))
 }
 
 console.log(JSON.stringify(out))
