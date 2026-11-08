@@ -1,16 +1,17 @@
 // Every amoCRM API call this server makes goes through amoFetch().
 //
 // amoCRM allows about 7 requests a second per integration. When a client
-// keeps going over it, amoCRM first answers 429 and then blocks the caller's
-// IP: its nginx answers «403 Forbidden» (an HTML page, not JSON) to every
-// request, the AI agent's included. All schools' traffic leaves this server
+// keeps going over it, amoCRM first answers 429 and then blocks it: its nginx
+// answers «403 Forbidden» (an HTML page, not JSON) to every request carrying
+// the integration's token, from any IP, the AI agent's included. (Seen in
+// November 2026: the same call without a token got amo's normal 401.) All schools' traffic leaves this server
 // from one IP, so the limit is enforced here, for the whole process:
 //
 //   • requests to one amo account start at most 1 / minIntervalMs;
 //   • priority 'high' (the AI agent answering a client, a sale being pushed)
 //     goes ahead of queued report downloads;
 //   • 429 → wait (Retry-After, else a few seconds) and retry;
-//   • 403 with an HTML body = the IP is blocked → stop calling that account
+//   • 403 with an HTML body = amo blocked us → stop calling that account
 //     for blockPauseMs (hammering only prolongs the block); calls fail at once
 //     with AmoBlockedError meanwhile.
 //
@@ -51,7 +52,7 @@ export const amoRelayMode = () => (relay.url && relay.key ? (relay.all ? 'all' :
 
 export class AmoBlockedError extends Error {
   constructor(host, until) {
-    super(`amoCRM ${host} → 403: amoCRM временно заблокировал IP сервера за превышение лимита запросов (пауза до ${new Date(until).toISOString()})`)
+    super(`amoCRM ${host} → 403: amoCRM заблокировал доступ к API для этой интеграции за превышение лимита запросов (пауза до ${new Date(until).toISOString()})`)
     this.name = 'AmoBlockedError'
     this.status = 403
     this.blockedUntil = until
@@ -97,7 +98,7 @@ function pump(s) {
   next()
 }
 
-/** True for amo's «IP blocked» answer: 403 from nginx, as an HTML page. */
+/** True for amo's «blocked» answer: 403 from nginx, as an HTML page. */
 export function isIpBlock(res, text) {
   if (res.status !== 403) return false
   const type = res.headers?.get?.('content-type') || ''
@@ -165,7 +166,7 @@ export async function amoFetch(url, init = {}, { priority = 'normal', timeoutMs 
       const text = await res.text().catch(() => '')
       if (isIpBlock(res, text)) {
         s.blockedUntil[route] = Date.now() + opts.blockPauseMs
-        console.error(`amoCRM ${host}: IP blocked (403 from nginx${viaRelay ? ', via the Vercel relay' : ''}), pausing ${route} amo calls for ${Math.round(opts.blockPauseMs / 60_000)} min`)
+        console.error(`amoCRM ${host}: blocked (403 from nginx${viaRelay ? ', via the Vercel relay' : ''}: the integration's token is blocked), pausing ${route} amo calls for ${Math.round(opts.blockPauseMs / 60_000)} min`)
       }
       // the body has been read: hand callers a fresh Response with the same text
       return new Response(text, { status: res.status, statusText: res.statusText, headers: res.headers })

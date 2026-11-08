@@ -167,11 +167,11 @@ if (lines.length) {
     lastWebhook: lastTime(/AI agent webhook:/),
     lastAccepted: lastTime(/"accepted":true/),
     lastAgentError: lastTime(/AI agent error/),
-    ipBlocked: pick(/IP blocked/).length,
-    lastIpBlocked: lastTime(/IP blocked/),
+    amoBlocked: pick(/IP blocked|blocked \(403 from nginx/).length,
+    lastAmoBlocked: lastTime(/IP blocked|blocked \(403 from nginx/),
     lastStart: lastTime(/Server listening/),
   }
-  out.logs.recentErrors = pick(/AI agent error|AI agent catch-up|IP blocked|AI agent follow-up/).slice(-6).map(l => mask(l).slice(0, 200))
+  out.logs.recentErrors = pick(/AI agent error|AI agent catch-up|IP blocked|blocked \(403 from nginx|AI agent follow-up/).slice(-6).map(l => mask(l).slice(0, 200))
 }
 
 console.log(JSON.stringify(out))
