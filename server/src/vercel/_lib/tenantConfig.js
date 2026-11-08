@@ -23,6 +23,9 @@ export function initTenantConfig(p) {
   setPool(p)
 }
 
+/** The server's pg pool (null before initTenantConfig). */
+export const getPool = () => pool
+
 /** Firestore-compatible handle over the server's document tables. */
 export function getDb() { return firestoreDb() }
 
@@ -174,7 +177,7 @@ export async function resolveAiAgent(req) {
   return {
     tenantId,
     openaiKey:         cfg.openaiKey || envIf(useEnv, process.env.OPENAI_API_KEY),
-    model:             cfg.model || 'gpt-4o-mini',
+    model:             cfg.model || 'gpt-4.1-mini',
     systemPrompt:      cfg.systemPrompt || '',
     knowledge:         cfg.knowledge || '',
     includeCourses:    cfg.includeCourses !== false,

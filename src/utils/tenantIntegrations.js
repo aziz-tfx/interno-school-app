@@ -41,7 +41,7 @@ const EMPTY = {
   },
   aiAgent: {
     openaiKey: '',
-    model: 'gpt-4o-mini',
+    model: 'gpt-4.1-mini',
     systemPrompt: '',
     knowledge: '',
     includeCourses: true,

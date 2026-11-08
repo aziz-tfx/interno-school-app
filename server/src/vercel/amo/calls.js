@@ -8,6 +8,7 @@
 // Response: { byUser: { [uid]: { in, out, total } }, totals: {...}, meta }
 
 import { amoFetch } from '../_lib/amoFetch.js'
+import { withMirror } from '../_lib/amoMirror.js'
 import { resolveAmo } from '../_lib/tenantConfig.js'
 
 const TIMEOUT_MS = 15000
@@ -60,6 +61,8 @@ export default async function handler(req, res) {
 
   const base = `https://${amo.subdomain}.amocrm.ru/api/v4`
   const headers = { 'Authorization': `Bearer ${amo.accessToken}` }
+  // deals / events / notes from the local copy when it covers the range (amoMirror.js)
+  const getAll = withMirror(amo.tenantId, amoGetAll)
   const fromTs = Math.floor(new Date(from + 'T00:00:00').getTime() / 1000)
   const toTs = Math.floor(new Date(to + 'T23:59:59').getTime() / 1000)
 
@@ -70,7 +73,7 @@ export default async function handler(req, res) {
       + `&filter[created_at][from]=${fromTs}&filter[created_at][to]=${toTs}`
     let events = []
     try {
-      events = await amoGetAll(base, path, headers, 'events')
+      events = await getAll(base, path, headers, 'events')
     } catch (err) {
       // If events endpoint is restricted on this account, fail soft.
       return res.status(200).json({

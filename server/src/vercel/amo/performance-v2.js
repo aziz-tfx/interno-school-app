@@ -4,6 +4,7 @@
 // Автоопределение этапов воронки по названию + метрики с ежедневной разбивкой.
 
 import { amoFetch } from '../_lib/amoFetch.js'
+import { withMirror } from '../_lib/amoMirror.js'
 import { resolveAmo } from '../_lib/tenantConfig.js'
 
 const AMO_API_TIMEOUT_MS = 15000
@@ -148,6 +149,8 @@ export default async function handler(req, res) {
     'Authorization': `Bearer ${AMO_ACCESS_TOKEN}`,
     'Content-Type': 'application/json',
   }
+  // deals / events / notes from the local copy when it covers the range (amoMirror.js)
+  const getAll = withMirror(amo.tenantId, amoGetAll)
 
   const { month } = req.query
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
@@ -169,7 +172,7 @@ export default async function handler(req, res) {
 
   try {
     // 1) Пользователи amo
-    const usersRaw = await amoGetAll(base, '/users', headers, 'users', { pageSize: 250 })
+    const usersRaw = await getAll(base, '/users', headers, 'users', { pageSize: 250 })
     const users = usersRaw.map(u => ({ id: u.id, name: u.name, email: u.email }))
     const userMap = Object.fromEntries(users.map(u => [u.id, u]))
 
@@ -194,10 +197,10 @@ export default async function handler(req, res) {
     //    б) закрытые в месяце (для выручки — сделки могли быть созданы раньше,
     //       но достигли "Успешно реализовано" только в этом месяце)
     const [leadsByCreated, leadsByClosed] = await Promise.all([
-      amoGetAll(base,
+      getAll(base,
         `/leads?filter[created_at][from]=${fromTs}&filter[created_at][to]=${toTs}`,
         headers, 'leads', { pageSize: 250, maxPages: 100 }),
-      amoGetAll(base,
+      getAll(base,
         `/leads?filter[closed_at][from]=${fromTs}&filter[closed_at][to]=${toTs}`,
         headers, 'leads', { pageSize: 250, maxPages: 100 }),
     ])
