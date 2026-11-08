@@ -38,7 +38,7 @@ async function openStream(base, ticket, collections) {
 
 test('amo cache: one load for concurrent readers, kept until a change or TTL', async () => {
   let t = 0
-  const live = createAmoLive({ pool: { query: async () => {} }, ttlMs: 1000, now: () => t })
+  const live = createAmoLive({ pool: { query: async () => {} }, ttlMs: 1000, minReloadMs: 300, now: () => t })
   let loads = 0
   const load = async () => { loads++; await new Promise(r => setTimeout(r, 10)); return { n: loads } }
   const [a, b] = await Promise.all([live.get('s', 'perf', { month: '2026-11' }, load), live.get('s', 'perf', { month: '2026-11' }, load)])
@@ -57,10 +57,19 @@ test('amo cache: one load for concurrent readers, kept until a change or TTL', a
   await live.get('s', 'perf', { month: '2026-11' }, load)
   await live.get('other', 'perf', { month: '2026-11' }, load)
   assert.equal(loads, 5)
-  // a change drops only that school's entries
+  // a change marks only that school's entries stale; a stale report reloads
+  // once it is minReloadMs old, however many changes arrive meanwhile
+  live.invalidate('s')
   live.invalidate('s')
   await live.get('s', 'perf', { month: '2026-11' }, load)
+  assert.equal(loads, 5)
+  t = 1800
+  await live.get('s', 'perf', { month: '2026-11' }, load)
   await live.get('other', 'perf', { month: '2026-11' }, load)
+  assert.equal(loads, 6)
+  // fresh again: no reload until the next change (or the TTL)
+  t = 2200
+  await live.get('s', 'perf', { month: '2026-11' }, load)
   assert.equal(loads, 6)
   // failures aren't cached
   let fails = 0
