@@ -1,6 +1,16 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://api.internoedu.uz/api/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/amo-relay",
+      "destination": "/api/amo-relay"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.internoedu.uz/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
