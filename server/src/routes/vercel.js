@@ -38,6 +38,7 @@ import { loadTelegramConfig, webhookSecret } from '../telegram.js'
 import { resolveAmo } from '../vercel/_lib/tenantConfig.js'
 import { ensureAmoToken } from '../vercel/_lib/amoClient.js'
 import { amoWebhookKey, amoWebhookUrl, registerAmoWebhook } from '../amoLive.js'
+import { kickAmoMirror, forgetAmoLeads } from '../vercel/_lib/amoMirror.js'
 import { timingSafeEqual } from 'node:crypto'
 
 const safeEqual = (a, b) => {
@@ -127,7 +128,14 @@ export default async function vercelRoutes(app, { pool, config, telegram, amoLiv
     const tenantId = String(q.tenantId || '')
     // amo HTML-escapes saved URLs: "&key=" may arrive as "amp;key"
     const key = String(q.key || q['amp;key'] || '')
-    if (tenantId && key && safeEqual(key, amoWebhookKey(config.jwtSecret, tenantId))) amoLive.changed(tenantId)
+    if (tenantId && key && safeEqual(key, amoWebhookKey(config.jwtSecret, tenantId))) {
+      // deleted deals leave the local copy now; everything else syncs in a few seconds
+      const deleted = Object.entries(req.body || {})
+        .filter(([k]) => /^leads\[delete\]\[\d+\]\[id\]$/.test(k)).map(([, v]) => v)
+      if (deleted.length) await forgetAmoLeads(tenantId, deleted).catch(() => {})
+      kickAmoMirror(tenantId)
+      amoLive.changed(tenantId)
+    }
     return { ok: true }
   })
 

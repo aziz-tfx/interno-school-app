@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { USE_SERVER, apiFetch } from '../backend/api'
 
-const MODEL_SUGGESTIONS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1']
+const MODEL_SUGGESTIONS = ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o']
 
 const CHANNELS = [
   { key: 'replyInstagram', channel: 'instagram', label: 'Instagram Direct' },
@@ -181,7 +181,7 @@ export default function AiAgentSettings({ tenantId, value, onChange, persist, sa
             <label className="block text-sm font-medium text-slate-700 mb-1.5">Модель</label>
             <input type="text" list="ai-agent-models" value={value.model}
               onChange={(e) => onChange({ model: e.target.value.trim() })}
-              placeholder="gpt-4o-mini"
+              placeholder="gpt-4.1-mini"
               className={`${inputCls} font-mono`} />
             <datalist id="ai-agent-models">
               {MODEL_SUGGESTIONS.map(m => <option key={m} value={m} />)}

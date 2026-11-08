@@ -31,7 +31,8 @@
 
 import crypto from 'node:crypto'
 import { waitUntil } from './runtime.js'
-import { getDb, getTenantId, resolveAmo, resolveAiAgent, resolveTelegram, saveTenantIntegration } from './tenantConfig.js'
+import { getDb, getPool, getTenantId, resolveAmo, resolveAiAgent, resolveTelegram, saveTenantIntegration } from './tenantConfig.js'
+import { amoFetch } from './amoFetch.js'
 import { createAmoClient } from './amoClient.js'
 
 const HISTORY_LIMIT = 40          // messages kept in Firestore
@@ -130,12 +131,60 @@ function channelIntro(channel, school) {
   return [`Ты — консультант ${school} и отвечаешь клиентам в Instagram Direct.`]
 }
 
-// What the model sees for a client message that has no real text
+// What the model sees for a client message: voice messages arrive
+// transcribed, photos are attached to the turn (see answerConversation)
 const START_RE = /^\/start(\s|$)/i
-function clientText(text) {
-  if (!text) return '[Клиент отправил вложение без текста: фото, голосовое или стикер]'
+function clientText(text, m = {}) {
+  if (m.voice && text) return `[Голосовое сообщение, расшифровка] ${text}`
+  if (m.image) return text ? `[Фото] ${text}` : '[Клиент отправил фото без подписи]'
+  if (!text) return '[Клиент отправил вложение без текста: видео, файл, стикер или голосовое, которое не удалось расшифровать]'
   if (START_RE.test(text)) return '[Клиент нажал «Старт» и ещё ничего не написал]'
   return text
+}
+
+// ─── Voice and photos ───────────────────────────────────────────────────
+// amo's webhook carries the attachment's type and link. Voice messages are
+// transcribed with OpenAI before they are stored; photos are downloaded at
+// answer time and shown to the model (gpt-4o / gpt-4.1 see images).
+const isAudio = (type) => /voice|audio/i.test(String(type || ''))
+const isImage = (type) => /picture|image|photo/i.test(String(type || ''))
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+const MAX_IMAGES_PER_TURN = 3
+
+/** Downloads an attachment: as is, then with the amo token if amo wants it. */
+async function downloadAttachment(link, amoCfg) {
+  const get = (headers) => fetch(link, { headers, signal: AbortSignal.timeout(20_000) })
+  let r = await get({})
+  if ((r.status === 401 || r.status === 403) && amoCfg?.accessToken && /\.amocrm\.(ru|com)\//.test(link)) {
+    r = await get({ Authorization: `Bearer ${amoCfg.accessToken}` })
+  }
+  if (!r.ok) throw new Error(`attachment ${r.status}`)
+  const buf = Buffer.from(await r.arrayBuffer())
+  if (buf.length > MAX_ATTACHMENT_BYTES) throw new Error('attachment too large')
+  return { buf, type: (r.headers.get('content-type') || '').split(';')[0] }
+}
+
+/** Speech → text (Russian / Uzbek). Newer model first, whisper-1 as a fallback. */
+export async function transcribeVoice(cfg, link, amoCfg, fileName = 'voice.ogg') {
+  const { buf, type } = await downloadAttachment(link, amoCfg)
+  for (const model of ['gpt-4o-mini-transcribe', 'whisper-1']) {
+    const form = new FormData()
+    form.append('model', model)
+    form.append('file', new Blob([buf], { type: type || 'audio/ogg' }), fileName || 'voice.ogg')
+    form.append('prompt', 'Клиент пишет в учебный центр: курсы, цены, филиалы, запись на урок. Русский или узбекский язык.')
+    const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST', headers: { Authorization: `Bearer ${cfg.openaiKey}` }, body: form, signal: AbortSignal.timeout(60_000),
+    })
+    if (r.ok) return String((await r.json()).text || '').trim()
+    if (r.status !== 400 && r.status !== 404) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 200)}`)
+  }
+  throw new Error('no transcription model available')
+}
+
+async function imageDataUrl(link, amoCfg) {
+  const { buf, type } = await downloadAttachment(link, amoCfg)
+  if (buf.length > 5 * 1024 * 1024) throw new Error('image too large')
+  return `data:${/^image\//.test(type) ? type : 'image/jpeg'};base64,${buf.toString('base64')}`
 }
 
 function nowInTashkent(date = new Date()) {
@@ -160,7 +209,7 @@ async function buildSystemPrompt(cfg, channel) {
     `- Сейчас ${nowInTashkent()} (Ташкент).`,
     '- Вызывай handoff_to_manager, если клиент просит живого человека, жалуется, готов оплатить, спрашивает про индивидуальные условия/скидки сверх указанных или ты не уверен в ответе.',
     '- Не обещай скидки, сроки и условия, которых нет в базе знаний.',
-    '- Вложения (фото, голосовые) ты не видишь и не слышишь — вежливо попроси написать вопрос текстом.',
+    '- Голосовые сообщения клиента приходят тебе расшифрованными (пометка «Голосовое сообщение, расшифровка»); в расшифровке бывают ошибки — если смысл неясен, переспроси. Фото клиента ты видишь. Видео, файлы и стикеры не видишь — вежливо попроси написать вопрос текстом.',
     cfg.systemPrompt ? `\nДополнительные инструкции школы:\n${cfg.systemPrompt}` : '',
     cfg.knowledge ? `\n## База знаний\n${cfg.knowledge}` : '',
     erp.courses ? `\n## Курсы и цены (из ERP)\n${erp.courses}` : '',
@@ -362,6 +411,14 @@ async function executeTool(name, args, ctx) {
 }
 
 // ─── OpenAI ─────────────────────────────────────────────────────────────
+// Reasoning models (o1/o3/o4…, gpt-5…) refuse max_tokens and a custom
+// temperature; the gpt-4o / gpt-4.1 family takes both.
+export function samplingParams(model) {
+  return /^(o\d|gpt-5)/i.test(String(model || ''))
+    ? { max_completion_tokens: 2000 }
+    : { temperature: 0.4, max_tokens: 600 }
+}
+
 async function callOpenAI(cfg, messages) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), OPENAI_TIMEOUT_MS)
@@ -370,7 +427,7 @@ async function callOpenAI(cfg, messages) {
       method: 'POST',
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${cfg.openaiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: cfg.model, messages, tools: TOOLS, temperature: 0.4, max_tokens: 600 }),
+      body: JSON.stringify({ model: cfg.model, messages, tools: TOOLS, ...samplingParams(cfg.model) }),
     })
     if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 300)}`)
     return await r.json()
@@ -383,14 +440,19 @@ async function callOpenAI(cfg, messages) {
  * One agent turn: history + new client message → reply text (+ amo actions).
  * Returns { reply, actions, handoff, usage }.
  */
-export async function runAgentTurn({ cfg, history, message, followUp, lateHours, channel = 'instagram', ctx }) {
+export async function runAgentTurn({ cfg, history, message, images = [], followUp, lateHours, channel = 'instagram', ctx }) {
   const system = await buildSystemPrompt(cfg, channel)
   const messages = [
     { role: 'system', content: system },
-    ...history.slice(-HISTORY_TO_MODEL).map(m => ({ role: m.role, content: m.role === 'user' ? clientText(m.text) : m.text })),
+    ...history.slice(-HISTORY_TO_MODEL).map(m => ({ role: m.role, content: m.role === 'user' ? clientText(m.text, m) : m.text })),
     followUp
       ? { role: 'system', content: followUpInstruction(followUp) }
-      : { role: 'user', content: message },
+      : {
+          role: 'user',
+          content: images.length
+            ? [{ type: 'text', text: message }, ...images.map(url => ({ type: 'image_url', image_url: { url } }))]
+            : message,
+        },
     // a reply that failed earlier (e.g. amoCRM was unreachable) and is sent now
     ...(lateHours ? [{ role: 'system', content: lateInstruction(lateHours) }] : []),
   ]
@@ -475,6 +537,8 @@ export function parseIncomingMessages(body) {
       contactId: String(f('contact_id') ?? ''),
       authorName: String(f('author', 'name') ?? ''),
       attachmentType: String(f('attachment', 'type') ?? ''),
+      attachmentLink: String(f('attachment', 'link') ?? ''),
+      attachmentName: String(f('attachment', 'file_name') ?? ''),
     })
   }
   return out
@@ -529,6 +593,18 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
     }
   }
 
+  // Voice message → text before it's stored, so history and the log read it too
+  let voice = false
+  if (!msg.text && isAudio(msg.attachmentType) && msg.attachmentLink && cfg.openaiKey) {
+    try {
+      const text = await transcribeVoice(cfg, msg.attachmentLink, amoCfg, msg.attachmentName)
+      if (text) { msg.text = text; voice = true }
+    } catch (e) {
+      console.warn('AI agent: voice transcription failed:', e.message)
+    }
+  }
+  const image = isImage(msg.attachmentType) && msg.attachmentLink ? msg.attachmentLink : null
+
   // 1. Record the message (transaction: several webhooks may land at once)
   const fresh = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref)
@@ -543,7 +619,9 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
       contactName: msg.authorName || conv.contactName || null,
       origin: msg.origin || conv.origin || null,
       channel,
-      messages: [...(conv.messages || []), { role: 'user', text: msg.text, at: now, id: msg.id }].slice(-HISTORY_LIMIT),
+      messages: [...(conv.messages || []), {
+        role: 'user', text: msg.text, at: now, id: msg.id, ...(voice && { voice: true }), ...(image && { image }),
+      }].slice(-HISTORY_LIMIT),
       processedIds: [...processed, msg.id].filter(Boolean).slice(-PROCESSED_IDS_LIMIT),
       followUpsSent: 0,
       followUpDueAt: null,
@@ -591,11 +669,15 @@ async function answerConversation({ cfg, amoCfg, amo, ref, conv, leadId, contact
     let split = messages.length
     while (split > 0 && messages[split - 1].role === 'user') split--
     const history = messages.slice(0, split)
-    const message = messages.slice(split).map(m => clientText(m.text)).join('\n')
+    const tail = messages.slice(split)
+    const message = tail.map(m => clientText(m.text, m)).join('\n')
     if (!message) return 'nothing to answer'
+    const images = (await Promise.all(tail.filter(m => m.image).slice(-MAX_IMAGES_PER_TURN)
+      .map(m => imageDataUrl(m.image, amoCfg).catch((e) => { console.warn('AI agent: photo download failed:', e.message); return null }))))
+      .filter(Boolean)
 
     const result = await runAgentTurn({
-      cfg, history, message, channel, lateHours,
+      cfg, history, message, images, channel, lateHours,
       ctx: { amo, leadId, contactId, dryRun: false },
     })
     if (result.reply) await sendReply(amo, cfg, { leadId, contactId }, result.reply)
@@ -804,6 +886,107 @@ async function alertError(cfg, amoCfg, leadId, err) {
   }
 }
 
+// ─── Self-check ─────────────────────────────────────────────────────────
+// Once a day (and after a restart) the server checks what the agent needs —
+// the amoCRM key, its expiry, OpenAI and the model — and tells the error
+// chat before a client runs into it. Nothing is sent while all is well.
+
+const TOKEN_WARN_DAYS = [14, 7, 3, 2, 1]
+
+/** Expiry of an amoCRM long-lived token (a JWT) in ms, or null. */
+export function tokenExpiresAt(token) {
+  try {
+    const part = String(token || '').split('.')[1]
+    const { exp } = JSON.parse(Buffer.from(part, 'base64url').toString('utf8'))
+    return exp ? exp * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+const fmtDate = (ms) => new Date(ms).toLocaleDateString('ru-RU', { timeZone: 'Asia/Tashkent', day: 'numeric', month: 'long', year: 'numeric' })
+
+/**
+ * { problems: [...], warnings: [...] } for one school, or null when its agent
+ * is off. Problems stop the bot now; warnings are about to (key expiry).
+ */
+export async function checkAgentHealth(tenantId, now = Date.now()) {
+  const req = tenantReq(tenantId)
+  const [cfg, amoCfg] = await Promise.all([resolveAiAgent(req), resolveAmo(req)])
+  if (!cfg.enabled) return null
+  const problems = []
+  const warnings = []
+
+  if (!amoCfg.subdomain || !amoCfg.accessToken) {
+    problems.push('amoCRM не подключён: нет субдомена или ключа доступа.')
+  } else {
+    try {
+      const r = await amoFetch(`https://${amoCfg.subdomain}.amocrm.ru/api/v4/account`,
+        { headers: { Authorization: `Bearer ${amoCfg.accessToken}` } }, { priority: 'high', timeoutMs: 20_000 })
+      if (r.status !== 200) {
+        const text = await r.text().catch(() => '')
+        problems.push(`amoCRM: ${explainError(`amoCRM GET /account → ${r.status}: ${text}`)} (ответ ${r.status})`)
+      }
+    } catch (e) {
+      problems.push(`amoCRM: ${explainError(e.message)}`)
+    }
+    const exp = tokenExpiresAt(amoCfg.accessToken)
+    if (exp) {
+      const days = Math.ceil((exp - now) / 86_400_000)
+      if (days <= 0) problems.push(`Ключ amoCRM истёк ${fmtDate(exp)}. Выпустите новый долгосрочный токен в интеграции amoCRM и вставьте его в «Интеграции → amoCRM».`)
+      else if (days <= TOKEN_WARN_DAYS[0]) warnings.push(`Ключ amoCRM перестанет работать ${fmtDate(exp)} — через ${days} дн. Выпустите новый долгосрочный токен в интеграции amoCRM и вставьте его в «Интеграции → amoCRM».`)
+    }
+  }
+
+  if (!cfg.openaiKey) {
+    problems.push('Не указан ключ OpenAI.')
+  } else {
+    try {
+      const r = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(cfg.model)}`, {
+        headers: { Authorization: `Bearer ${cfg.openaiKey}` }, signal: AbortSignal.timeout(20_000),
+      })
+      if (r.status === 404) problems.push(`OpenAI: модели «${cfg.model}» нет — выберите другую в настройках ИИ-агента.`)
+      else if (r.status !== 200) problems.push(`OpenAI: ${explainError(`OpenAI ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`)}`)
+    } catch (e) {
+      problems.push(`OpenAI не отвечает: ${e.message}`)
+    }
+  }
+  return { problems, warnings }
+}
+
+/**
+ * Checks every school whose agent is on and writes to its error chat.
+ * warnings: also send key-expiry reminders (the daily run, on reminder days).
+ */
+export async function runAgentHealthChecks({ warnings: withWarnings = true, now = Date.now() } = {}) {
+  const pool = getPool()
+  if (!pool) return []
+  const { rows } = await pool.query(
+    `SELECT id FROM tenant_integrations WHERE (data->'aiAgent'->>'enabled') = 'true'`)
+  const out = []
+  for (const { id } of rows) {
+    try {
+      const h = await checkAgentHealth(id, now)
+      if (!h) continue
+      const amoCfg = await resolveAmo(tenantReq(id))
+      const exp = tokenExpiresAt(amoCfg.accessToken)
+      const days = exp ? Math.ceil((exp - now) / 86_400_000) : null
+      const remind = withWarnings && h.warnings.length && TOKEN_WARN_DAYS.includes(days)
+      out.push({ tenantId: id, ...h })
+      if (!h.problems.length && !remind) continue
+      const cfg = await resolveAiAgent(tenantReq(id))
+      await sendManagerMessage(cfg, [
+        h.problems.length ? '🩺 <b>Проверка ИИ-агента: бот не сможет отвечать клиентам</b>' : '🩺 <b>Проверка ИИ-агента: скоро нужно действие</b>',
+        ...h.problems.map(p => `• ${esc(p)}`),
+        ...(remind || h.problems.length ? h.warnings.map(w => `• ${esc(w)}`) : []),
+      ].join('\n'), cfg.errorChatId)
+    } catch (e) {
+      console.error('AI agent health check failed:', id, e.message)
+    }
+  }
+  return out
+}
+
 // ─── Follow-ups ─────────────────────────────────────────────────────────
 export function parseFollowUpHours(raw) {
   return String(raw ?? '').split(/[,;\s]+/).map(Number).filter(n => n > 0 && n <= 168).slice(0, 3)
@@ -953,7 +1136,7 @@ async function handleWebhook(req, res) {
   for (const m of parsed) {
     console.log('AI agent webhook:', JSON.stringify({
       origin: m.origin, channel: detectChannel(m.origin), type: m.type, leadId: m.leadId,
-      hasText: !!m.text, attachment: m.attachmentType || null, accepted: messages.includes(m),
+      hasText: !!m.text, attachment: m.attachmentType || null, attachmentLink: !!m.attachmentLink, accepted: messages.includes(m),
     }))
   }
 

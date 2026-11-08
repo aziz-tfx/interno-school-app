@@ -10,6 +10,8 @@ import pg from 'pg'
 import { loadTelegramConfig } from '../src/telegram.js'
 import { initTenantConfig, resolveAmo, resolveAiAgent } from '../src/vercel/_lib/tenantConfig.js'
 import { amoFetch, amoRelayMode } from '../src/vercel/_lib/amoFetch.js'
+import { amoMirrorStatus } from '../src/vercel/_lib/amoMirror.js'
+import { checkAgentHealth } from '../src/vercel/_lib/aiAgent.js'
 
 const TENANT = process.argv[2] || 'default'
 const has = (v) => !!(v && String(v).trim())
@@ -128,6 +130,15 @@ out.conversationErrors = (await pool.query(`
   SELECT data->>'lastError' AS e, max(data->>'updatedAt') AS at, count(*)::int AS n
     FROM ai_agent_conversations WHERE tenant_id = $1 AND coalesce(data->>'lastError', '') <> ''
    GROUP BY 1 ORDER BY 2 DESC LIMIT 5`, [TENANT])).rows.map(r => ({ ...r, e: mask(r.e) }))
+// The local copy of amoCRM the reports read (amoMirror.js)
+out.amoMirror = (await amoMirrorStatus(TENANT)).map(r => ({ ...r, error: r.error ? mask(r.error) : null }))
+const { rows: [mc] } = await pool.query(
+  `SELECT count(*) FILTER (WHERE kind = 'lead')::int AS leads, count(*) FILTER (WHERE kind = 'note')::int AS notes,
+          count(*) FILTER (WHERE kind = 'event')::int AS events FROM amo_mirror WHERE tenant_id = $1`, [TENANT])
+out.amoMirrorRows = mc
+// What the daily self-check would report now
+try { out.agentHealth = await checkAgentHealth(TENANT) } catch (e) { out.agentHealth = { error: mask(e.message) } }
+
 // The latest conversations: did the bot answer, what failed, catch-up state
 out.recent = (await pool.query(`
   SELECT data FROM ai_agent_conversations WHERE tenant_id = $1

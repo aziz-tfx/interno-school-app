@@ -5,6 +5,7 @@
 // (звонок, сообщение, SMS, заметка) и считает разницу в минутах.
 
 import { amoFetch } from '../_lib/amoFetch.js'
+import { withMirror } from '../_lib/amoMirror.js'
 import { resolveAmo } from '../_lib/tenantConfig.js'
 
 const AMO_API_TIMEOUT_MS = 20000
@@ -81,6 +82,8 @@ export default async function handler(req, res) {
     'Authorization': `Bearer ${AMO_ACCESS_TOKEN}`,
     'Content-Type': 'application/json',
   }
+  // deals / events / notes from the local copy when it covers the range (amoMirror.js)
+  const getAll = withMirror(amo.tenantId, amoGetAll)
 
   const { month } = req.query
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
@@ -97,18 +100,18 @@ export default async function handler(req, res) {
 
   try {
     // 1) Пользователи
-    const usersRaw = await amoGetAll(base, '/users', headers, 'users', { pageSize: 250 })
+    const usersRaw = await getAll(base, '/users', headers, 'users', { pageSize: 250 })
     const userMap = Object.fromEntries(usersRaw.map(u => [u.id, { id: u.id, name: u.name }]))
 
     // 2) Лиды созданные в месяце
     const leadsPath = `/leads?filter[created_at][from]=${fromTs}&filter[created_at][to]=${toTs}`
-    const leads = await amoGetAll(base, leadsPath, headers, 'leads', { pageSize: 250, maxPages: 100 })
+    const leads = await getAll(base, leadsPath, headers, 'leads', { pageSize: 250, maxPages: 100 })
 
     // 3) События — параллельно собираем по типам (amoCRM не поддерживает OR по type в одном запросе стабильно)
     const eventsPath = (type) =>
       `/events?filter[created_at][from]=${fromTs}&filter[created_at][to]=${eventsToTs}&filter[entity]=lead&filter[type]=${type}`
     const eventsArrays = await Promise.all(
-      OUTGOING_EVENT_TYPES.map(t => amoGetAll(base, eventsPath(t), headers, 'events', { pageSize: 250, maxPages: 60 }).catch(err => {
+      OUTGOING_EVENT_TYPES.map(t => getAll(base, eventsPath(t), headers, 'events', { pageSize: 250, maxPages: 60 }).catch(err => {
         console.warn(`events ${t} failed:`, err.message)
         return []
       }))
@@ -119,7 +122,7 @@ export default async function handler(req, res) {
     const notesPath = `/leads/notes?filter[created_at][from]=${fromTs}&filter[created_at][to]=${eventsToTs}`
     let allNotes = []
     try {
-      allNotes = await amoGetAll(base, notesPath, headers, 'notes', { pageSize: 250, maxPages: 80 })
+      allNotes = await getAll(base, notesPath, headers, 'notes', { pageSize: 250, maxPages: 80 })
     } catch (err) {
       console.warn('notes failed:', err.message)
     }
