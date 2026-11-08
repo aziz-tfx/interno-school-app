@@ -17,7 +17,7 @@ export default function UpdateBanner() {
   }
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[210] w-[calc(100vw-2rem)] max-w-md pointer-events-none">
+    <div className="fixed bottom-safe left-1/2 -translate-x-1/2 z-[210] w-[calc(100vw-2rem)] max-w-md pointer-events-none">
       <div className="pointer-events-auto flex items-center gap-3 bg-gradient-to-r from-violet-600 to-blue-600 text-white rounded-2xl shadow-2xl shadow-violet-500/30 p-3 pl-4 animate-[toastIn_300ms_cubic-bezier(0.21,1.02,0.73,1)]">
         <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
           <Sparkles size={18} className="text-white" />

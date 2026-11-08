@@ -7,7 +7,7 @@
 // that the daily automations send personal payment reminders to.
 // Telegram retries non-2xx answers forever, so every update gets a 200.
 
-import { loadTelegramConfig, webhookSecret } from '../telegram.js'
+import { loadTelegramConfig, webhookSecret, miniAppKeyboard } from '../telegram.js'
 
 export default async function telegramRoutes(app, { pool, config, telegram }) {
   app.post('/api/telegram/webhook', async (req, reply) => {
@@ -23,6 +23,8 @@ export default async function telegramRoutes(app, { pool, config, telegram }) {
 
     const tg = await loadTelegramConfig(pool, tenantId)
     if (!tg.botToken) return { ok: true }
+    // «Открыть INTERNO» under the replies, once the admin connected the mini app
+    const appButton = miniAppKeyboard(tg.miniAppUrl)
 
     const link = text.match(/^\/start\s+st_([A-Za-z0-9_-]+)$/)
     if (link) {
@@ -35,13 +37,16 @@ export default async function telegramRoutes(app, { pool, config, telegram }) {
         ? `✅ <b>${student.name || ''}</b>, уведомления подключены!\n\n`
           + 'Я напомню вам о предстоящих платежах за курс, чтобы доступ к урокам не прерывался.\n\n'
           + "Eslatmalar ulandi! Kurs to'lovlari haqida oldindan xabar beraman."
-        : '❌ Ученик не найден. Откройте ссылку из личного кабинета ещё раз.')
+        : '❌ Ученик не найден. Откройте ссылку из личного кабинета ещё раз.', student ? appButton : {})
       return { ok: true }
     }
 
     if (text === '/start') {
-      await telegram.send(tg.botToken, chatId,
-        'Привет! Чтобы получать напоминания об оплате, откройте личный кабинет ученика и нажмите «Подключить Telegram-уведомления».')
+      await telegram.send(tg.botToken, chatId, tg.miniAppUrl
+        ? 'Привет! Нажмите «Открыть INTERNO», чтобы войти в личный кабинет прямо в Telegram. '
+          + 'После первого входа по логину и паролю дальше вход будет автоматическим.'
+        : 'Привет! Чтобы получать напоминания об оплате, откройте личный кабинет ученика и нажмите «Подключить Telegram-уведомления».',
+      appButton)
     }
     return { ok: true }
   })

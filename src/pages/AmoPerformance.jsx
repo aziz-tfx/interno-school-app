@@ -10,8 +10,12 @@ import { doc, getDoc } from '../backend/firestore'
 import { useAuth } from '../contexts/AuthContext'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import AmoPlanEditor from '../components/AmoPlanEditor'
+import useAmoLive from '../hooks/useAmoLive'
 
+// Polling is only the safety net: with the amoCRM webhook connected the page
+// refreshes on every change (useAmoLive) and polls every 5 minutes.
 const REFRESH_INTERVAL_MS = 60000
+const REFRESH_INTERVAL_LIVE_MS = 5 * 60000
 
 const METRIC_ROWS = [
   { key: 'leadsNew',      label: 'Кол-во заявок "Новая заявка"' },
@@ -160,7 +164,7 @@ function ResponseTimesBlock({ data, prevData }) {
       {/* Таблица по менеджерам */}
       {usersSorted.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="table-cards table-cards-3 table-cards-flush w-full text-xs">
             <thead>
               <tr className="text-slate-500 border-b border-slate-100">
                 <th className="text-left px-2 py-2 font-medium">Менеджер</th>
@@ -176,7 +180,7 @@ function ResponseTimesBlock({ data, prevData }) {
             <tbody>
               {usersSorted.map(u => (
                 <tr key={u.userId} className="border-b border-slate-50 hover:bg-slate-50/40">
-                  <td className="text-left px-2 py-2 font-medium text-slate-800">{u.userName}</td>
+                  <td data-card="title" className="text-left px-2 py-2 font-medium text-slate-800">{u.userName}</td>
                   <td className="text-right px-2 py-2 text-slate-600">{u.totalLeads}</td>
                   <td className={`text-right px-2 py-2 font-semibold ${responseTimeColor(u.avgMinutes)}`}>
                     {formatMinutes(u.avgMinutes)}
@@ -332,7 +336,7 @@ function TelephonyBlock({ data }) {
 
       {rows.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="table-cards table-cards-3 table-cards-flush w-full text-xs">
             <thead>
               <tr className="text-slate-500 border-b border-slate-100">
                 <th className="text-left px-2 py-2 font-medium">Добавочный</th>
@@ -349,7 +353,7 @@ function TelephonyBlock({ data }) {
             <tbody>
               {rows.map(b => (
                 <tr key={b.ext} className="border-b border-slate-50 hover:bg-slate-50/40">
-                  <td className="text-left px-2 py-2 font-semibold text-slate-800">{b.ext}</td>
+                  <td data-card="title" className="text-left px-2 py-2 font-semibold text-slate-800">{b.ext}</td>
                   <td className="text-right px-2 py-2 text-slate-700">{b.totalCalls}</td>
                   <td className="text-right px-2 py-2 text-blue-700">{b.incoming}</td>
                   <td className="text-right px-2 py-2 text-emerald-700">{b.outgoing}</td>
@@ -605,14 +609,22 @@ export default function AmoPerformance() {
     setLoading(false)
   }
 
+  // amoCRM pushes changes → refresh right away (latest month via the ref)
+  const loadDataRef = useRef(loadData)
+  loadDataRef.current = loadData
+  const { pushing } = useAmoLive(() => loadDataRef.current(true))
+
   useEffect(() => {
     loadPlan()
     loadData()
-    if (refreshRef.current) clearInterval(refreshRef.current)
-    refreshRef.current = setInterval(() => loadData(true), REFRESH_INTERVAL_MS)
-    return () => clearInterval(refreshRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month])
+
+  useEffect(() => {
+    if (refreshRef.current) clearInterval(refreshRef.current)
+    refreshRef.current = setInterval(() => loadDataRef.current(true), pushing ? REFRESH_INTERVAL_LIVE_MS : REFRESH_INTERVAL_MS)
+    return () => clearInterval(refreshRef.current)
+  }, [month, pushing])
 
   useEffect(() => {
     const t = setInterval(() => setNowTick(Date.now()), 1000)
@@ -726,6 +738,7 @@ export default function AmoPerformance() {
     return b.revFact - a.revFact
   })
   const top3 = sortedByCompletion.slice(0, 3)
+  const hasPlans = leaderboardEntries.some(e => e.completion != null)
   const laggards = sortedByCompletion.filter(e => e.completion != null && e.completion < 0.6).slice(-3)
 
   const totalDeltaRev = prevTotals ? delta(data?.totals?.metrics?.revenue || 0, prevTotals.revenue) : null
@@ -745,7 +758,7 @@ export default function AmoPerformance() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
+    <div className="max-w-[1600px] mx-auto">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-pink-600 flex items-center justify-center">
@@ -777,7 +790,7 @@ export default function AmoPerformance() {
       <div className="mb-4 flex items-center gap-3 text-xs flex-wrap">
         <span className="flex items-center gap-1.5 text-emerald-700">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          Live · автообновление каждые 60 сек
+          {pushing ? 'Live · обновляется сразу при изменениях в amoCRM' : 'Live · автообновление каждые 60 сек'}
         </span>
         {lastFetchedAgo != null && <span className="text-slate-500">обновлено {lastFetchedAgo} сек назад</span>}
         {data?.meta && (
@@ -816,10 +829,10 @@ export default function AmoPerformance() {
       {data && usersSorted.length > 0 && (
         <div className="mb-5 grid grid-cols-1 lg:grid-cols-2 gap-3">
           {/* Топ-3 */}
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4">
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <Trophy size={16} className="text-amber-600" />
-              <h3 className="text-sm font-bold text-amber-900">Топ-3 по выполнению плана</h3>
+              <h3 className="text-sm font-bold text-amber-900 dark:text-amber-300">Топ-3 по выполнению плана</h3>
             </div>
             <div className="space-y-2">
               {top3.length === 0 && (
@@ -840,7 +853,7 @@ export default function AmoPerformance() {
                       <p className="text-sm font-semibold text-slate-900 truncate">{e.user.userName}</p>
                       <div className="flex items-center gap-2 flex-wrap mt-0.5">
                         <span className="text-[11px] text-slate-500">
-                          {formatMoney(e.revFact)} ₽
+                          {formatMoney(e.revFact)} сум
                         </span>
                         <DeltaPill value={e.revDelta} />
                       </div>
@@ -862,9 +875,14 @@ export default function AmoPerformance() {
           </div>
 
           {/* Отстающие */}
-          <div className={`rounded-2xl p-4 border ${laggards.length > 0 ? 'bg-red-50/50 border-red-200' : 'bg-emerald-50/50 border-emerald-200'}`}>
+          <div className={`rounded-2xl p-4 border ${laggards.length > 0 ? 'bg-red-50/50 border-red-200' : hasPlans ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/50 border-slate-200'}`}>
             <div className="flex items-center gap-2 mb-3">
-              {laggards.length > 0 ? (
+              {!hasPlans ? (
+                <>
+                  <Target size={16} className="text-slate-500" />
+                  <h3 className="text-sm font-bold text-slate-700">План на месяц не задан</h3>
+                </>
+              ) : laggards.length > 0 ? (
                 <>
                   <AlertTriangle size={16} className="text-red-600" />
                   <h3 className="text-sm font-bold text-red-900">Требуют внимания (&lt;60% плана)</h3>
@@ -877,7 +895,9 @@ export default function AmoPerformance() {
               )}
             </div>
             <div className="space-y-2">
-              {laggards.length === 0 ? (
+              {!hasPlans ? (
+                <p className="text-xs text-slate-500 py-2">Задайте план менеджерам (кнопка «План»), чтобы видеть, кто отстаёт.</p>
+              ) : laggards.length === 0 ? (
                 <p className="text-xs text-emerald-700 py-2">Никто не отстаёт ниже 60% — отличный темп!</p>
               ) : laggards.map(e => (
                 <div key={e.user.userId} className="flex items-center gap-3 p-2.5 bg-white rounded-xl border border-red-100">
@@ -887,7 +907,7 @@ export default function AmoPerformance() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-900 truncate">{e.user.userName}</p>
                     <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                      <span className="text-[11px] text-slate-500">{formatMoney(e.revFact)} / {formatMoney(e.revPlan)} ₽</span>
+                      <span className="text-[11px] text-slate-500">{formatMoney(e.revFact)} / {formatMoney(e.revPlan)} сум</span>
                       <DeltaPill value={e.revDelta} />
                     </div>
                   </div>
@@ -959,7 +979,8 @@ export default function AmoPerformance() {
       )}
 
       {/* ── Telephony (OnlinePBX) ─────────────────────────────────────── */}
-      {callsData && (
+      {/* Schools without OnlinePBX get no telephony block instead of a red error */}
+      {callsData && !(callsData.success === false && /не настроен/i.test(callsData.error || '')) && (
         <div className="mb-5">
           <TelephonyBlock data={callsData} />
         </div>
@@ -977,15 +998,15 @@ export default function AmoPerformance() {
         return (
           <div key={u.userId} className="mb-4 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <button onClick={() => toggleExpand(u.userId)}
-              className="w-full flex items-center justify-between px-5 py-3 bg-gradient-to-r from-slate-50 to-white hover:bg-slate-50 transition-colors">
-              <div className="flex items-center gap-3">
+              className="w-full flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 sm:px-5 py-3 bg-gradient-to-r from-slate-50 to-white dark:from-white/5 dark:to-transparent hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-3 min-w-0">
                 {isOpen ? <ChevronDown size={18} className="text-slate-500" /> : <ChevronRight size={18} className="text-slate-500" />}
-                <div className="text-left">
+                <div className="text-left min-w-0">
                   <p className="font-semibold text-slate-900">{u.userName}</p>
                   <p className="text-xs text-slate-500">{u.email || ''}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-3 sm:gap-4 text-sm ml-auto">
                 <div className="text-right">
                   <p className="text-xs text-slate-500">Продажи</p>
                   <div className="flex items-center justify-end gap-1.5">
@@ -1006,7 +1027,7 @@ export default function AmoPerformance() {
                     <p className="text-[10px] text-slate-400">осн {formatMoney(fact.revenueMainWon)} + постопл {formatMoney(fact.revenuePostpayment)}</p>
                   )}
                 </div>
-                <div className="text-right">
+                <div className="text-right hidden sm:block">
                   <p className="text-xs text-slate-500">Конв. в продажу</p>
                   <p className={`font-semibold ${pctClass(fact.convNewToSale)}`}>{formatPct(fact.convNewToSale)}</p>
                 </div>
@@ -1016,7 +1037,7 @@ export default function AmoPerformance() {
             {isOpen && (
               <div className="p-4">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="table-cards table-cards-3 table-cards-flush w-full text-xs">
                     <thead>
                       <tr className="text-slate-500 border-b border-slate-100">
                         <th className="text-left px-2 py-2 font-medium sticky left-0 bg-white min-w-[260px]">Показатель</th>
@@ -1045,7 +1066,7 @@ export default function AmoPerformance() {
 
                         return (
                           <tr key={row.key} className={`border-b border-slate-50 ${row.derived ? 'bg-slate-50/40' : 'hover:bg-slate-50/40'}`}>
-                            <td className={`text-left px-2 py-2 sticky left-0 bg-white ${row.derived ? 'text-slate-500 italic pl-4' : 'text-slate-700 font-medium'}`}>
+                            <td data-card="title" className={`text-left px-2 py-2 sticky left-0 bg-white ${row.derived ? 'text-slate-500 italic pl-4' : 'text-slate-700 font-medium'}`}>
                               {row.label}
                             </td>
                             <td className="text-right px-2 py-2 text-slate-500">{fv(planVal)}</td>

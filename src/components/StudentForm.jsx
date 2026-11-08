@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { sameBranch } from '../utils/branchMatch'
+import { toast } from './Toaster'
 import { AlertTriangle, Users, Wifi } from 'lucide-react'
 
 const STATUSES = [
@@ -34,6 +36,7 @@ export default function StudentForm({ student, onClose }) {
   })
 
   const [capacityWarning, setCapacityWarning] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (student) {
@@ -42,17 +45,22 @@ export default function StudentForm({ student, onClose }) {
         branch: student.branch,
         group: student.group || '',
         learningFormat: student.learningFormat || 'Оффлайн',
-        phone: student.phone,
-        balance: student.balance,
-        status: student.status,
+        phone: student.phone || '',
+        balance: student.balance || 0,
+        status: student.status || 'active',
         totalCoursePrice: student.totalCoursePrice || '',
         contractNumber: student.contractNumber || '',
       })
     }
   }, [student])
 
-  // Filter groups by selected branch
-  const branchGroups = groups.filter(g => g.branch === form.branch && g.status !== 'archived')
+  // Filter groups by selected branch. Keep the student's current group even
+  // if it's archived — otherwise the required select is empty and the
+  // student can't be saved without being moved to another group.
+  const branchGroups = groups.filter(g =>
+    (sameBranch(g.branch, form.branch, branches) && g.status !== 'archived') ||
+    (isEdit && g.name === student?.group && g.name === form.group)
+  )
 
   // Selected group object
   const selectedGroup = branchGroups.find(g => g.name === form.group)
@@ -65,7 +73,7 @@ export default function StudentForm({ student, onClose }) {
       const adjustedCount = isEdit && student?.group === form.group && student?.learningFormat !== 'Онлайн'
         ? currentOffline - 1
         : currentOffline
-      if (adjustedCount >= selectedGroup.maxOffline) {
+      if (selectedGroup.maxOffline > 0 && adjustedCount >= selectedGroup.maxOffline) {
         setCapacityWarning(t('studentForm.capacity_warning').replace('{current}', adjustedCount).replace('{max}', selectedGroup.maxOffline))
       }
     }
@@ -86,26 +94,35 @@ export default function StudentForm({ student, onClose }) {
     }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    if (saving) return
     if (capacityWarning && form.learningFormat === 'Оффлайн') return
 
     const data = {
       ...form,
-      course: selectedGroup?.course || form.group,
+      course: selectedGroup?.course || student?.course || form.group,
       totalCoursePrice: Number(form.totalCoursePrice) || 0,
     }
-    if (isEdit) {
-      updateStudent(student.id, data)
-    } else {
-      addStudent({
-        ...data,
-        createdBy: user?.id || null,
-        createdByName: user?.name || '',
-        createdAt: new Date().toISOString(),
-      })
+    setSaving(true)
+    try {
+      if (isEdit) {
+        await updateStudent(student.id, data)
+      } else {
+        await addStudent({
+          ...data,
+          createdBy: user?.id || null,
+          createdByName: user?.name || '',
+          createdAt: new Date().toISOString(),
+        })
+      }
+      onClose()
+    } catch (err) {
+      console.error('Student save failed:', err)
+      toast.error('Не удалось сохранить ученика. Попробуйте ещё раз.')
+    } finally {
+      setSaving(false)
     }
-    onClose()
   }
 
   return (
@@ -134,10 +151,10 @@ export default function StudentForm({ student, onClose }) {
             <option value="">{t('studentForm.select_group')}</option>
             {branchGroups.map(g => {
               const offCount = getGroupOfflineCount(g.name)
-              const isFull = offCount >= g.maxOffline
+              const isFull = g.maxOffline > 0 && offCount >= g.maxOffline
               return (
                 <option key={g.id} value={g.name}>
-                  {g.name} — {g.course} ({offCount}/{g.maxOffline} офф){isFull ? ` ${t('studentForm.group_full')}` : ''}
+                  {g.name} — {g.course} ({offCount}{g.maxOffline > 0 ? `/${g.maxOffline}` : ''} офф){isFull ? ` ${t('studentForm.group_full')}` : ''}
                 </option>
               )
             })}
@@ -188,7 +205,7 @@ export default function StudentForm({ student, onClose }) {
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.label_course_price')}</label>
-          <input type="number" value={form.totalCoursePrice} onChange={e => set('totalCoursePrice', e.target.value)}
+          <input type="number" inputMode="numeric" value={form.totalCoursePrice} onChange={e => set('totalCoursePrice', e.target.value)}
             placeholder={t('studentForm.placeholder_course_price')}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
@@ -202,7 +219,7 @@ export default function StudentForm({ student, onClose }) {
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('studentForm.label_balance')}</label>
-          <input type="number" value={form.balance} onChange={e => set('balance', Number(e.target.value))}
+          <input type="number" inputMode="numeric" value={form.balance} onChange={e => set('balance', Number(e.target.value))}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
@@ -220,13 +237,13 @@ export default function StudentForm({ student, onClose }) {
           {t('studentForm.btn_cancel')}
         </button>
         <button type="submit"
-          disabled={!!(capacityWarning && form.learningFormat === 'Оффлайн')}
-          className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+          disabled={saving || !!(capacityWarning && form.learningFormat === 'Оффлайн')}
+          className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-60 ${
             capacityWarning && form.learningFormat === 'Оффлайн'
               ? 'bg-slate-300 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700'
           }`}>
-          {isEdit ? t('studentForm.btn_save') : t('studentForm.btn_add')}
+          {saving ? 'Сохранение...' : isEdit ? t('studentForm.btn_save') : t('studentForm.btn_add')}
         </button>
       </div>
     </form>

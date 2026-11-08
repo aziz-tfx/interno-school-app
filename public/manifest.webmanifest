@@ -1,0 +1,12 @@
+{
+  "name": "INTERNO — Zamonaviy Kasblar Maktabi",
+  "short_name": "INTERNO",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#6161ff",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

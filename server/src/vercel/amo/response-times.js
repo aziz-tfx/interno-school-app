@@ -4,19 +4,13 @@
 // Для каждого лида, созданного в месяце, находит первое исходящее событие
 // (звонок, сообщение, SMS, заметка) и считает разницу в минутах.
 
+import { amoFetch } from '../_lib/amoFetch.js'
 import { resolveAmo } from '../_lib/tenantConfig.js'
 
 const AMO_API_TIMEOUT_MS = 20000
 
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`amoCRM timeout after ${ms}ms`)), ms)),
-  ])
-}
-
 async function amoGet(base, path, headers) {
-  const res = await withTimeout(fetch(`${base}${path}`, { headers }), AMO_API_TIMEOUT_MS)
+  const res = await amoFetch(`${base}${path}`, { headers }, { timeoutMs: AMO_API_TIMEOUT_MS })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     const err = new Error(`amoCRM ${res.status} ${path}: ${text.slice(0, 200)}`)

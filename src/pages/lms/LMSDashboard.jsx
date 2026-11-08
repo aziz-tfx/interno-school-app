@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useData } from '../../contexts/DataContext'
 import { useLanguage } from '../../contexts/LanguageContext'
@@ -12,6 +12,50 @@ import {
 } from 'lucide-react'
 import { resolveStudentGroups } from '../../utils/lessonAccess'
 import LMSAnalytics from './LMSAnalytics'
+import { toast } from '../../components/Toaster'
+
+// Runs one async save at a time (no double submits); toasts on failure.
+function useSaving() {
+  const [saving, setSaving] = useState(false)
+  const busy = useRef(false)
+  const run = async (fn) => {
+    if (busy.current) return
+    busy.current = true
+    setSaving(true)
+    try {
+      await fn()
+    } catch (err) {
+      console.error(err)
+      toast.error('Не удалось сохранить. Попробуйте ещё раз.')
+    } finally {
+      busy.current = false
+      setSaving(false)
+    }
+  }
+  return [saving, run]
+}
+
+// Russian count word: 1 урок, 2 урока, 5 уроков. Other UI languages keep
+// the locale's word.
+function ruPlural(n, [one, few, many]) {
+  const m10 = n % 10, m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few
+  return many
+}
+const PLURALS = {
+  'lms.lessons_count': ['урок', 'урока', 'уроков'],
+  'lms.courses_count': ['курс', 'курса', 'курсов'],
+  'lms.groups_count': ['группа', 'группы', 'групп'],
+  'lms.students_count': ['ученик', 'ученика', 'учеников'],
+  'lms.pending_tasks': ['задание', 'задания', 'заданий'],
+  'lms.modules': ['модуль', 'модуля', 'модулей'],
+  'lms.stat_courses': ['курс', 'курса', 'курсов'],
+}
+function useCount() {
+  const { t, language } = useLanguage()
+  return (n, key) => `${n} ${language === 'ru' && PLURALS[key] ? ruPlural(n, PLURALS[key]) : t(key)}`
+}
 
 // ─── Lesson Form Modal ─────────────────────────────────────────────
 function LessonFormModal({ courseId, lesson, modules, onSave, onClose }) {
@@ -27,6 +71,7 @@ function LessonFormModal({ courseId, lesson, modules, onSave, onClose }) {
     moduleId: lesson?.moduleId || '',
   })
   const [newMaterial, setNewMaterial] = useState({ name: '', url: '', type: 'link' })
+  const [saving, runSave] = useSaving()
 
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }))
 
@@ -42,13 +87,13 @@ function LessonFormModal({ courseId, lesson, modules, onSave, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSave({
+    runSave(() => onSave({
       ...form,
       courseId,
       order: Number(form.order),
       updatedAt: new Date().toISOString(),
       ...(!lesson ? { createdAt: new Date().toISOString() } : {}),
-    })
+    }))
   }
 
   return (
@@ -151,8 +196,8 @@ function LessonFormModal({ courseId, lesson, modules, onSave, onClose }) {
               className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">
               {t('lms.btn_cancel')}
             </button>
-            <button type="submit"
-              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 flex items-center gap-2">
+            <button type="submit" disabled={saving}
+              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
               <Save size={14} /> {lesson ? t('lms.lesson_btn_save') : t('lms.lesson_btn_create')}
             </button>
           </div>
@@ -167,17 +212,18 @@ function ModuleFormModal({ mod, courseId, onSave, onClose, nextOrder }) {
   const { t } = useLanguage()
   const [title, setTitle] = useState(mod?.title || '')
   const [description, setDescription] = useState(mod?.description || '')
+  const [saving, runSave] = useSaving()
 
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!title.trim()) return
-    onSave({
+    runSave(() => onSave({
       title: title.trim(),
       description: description.trim(),
       courseId,
       order: mod?.order ?? nextOrder,
       ...(mod ? {} : { createdAt: new Date().toISOString() }),
-    })
+    }))
   }
 
   return (
@@ -209,8 +255,8 @@ function ModuleFormModal({ mod, courseId, onSave, onClose, nextOrder }) {
               className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">
               {t('lms.btn_cancel')}
             </button>
-            <button type="submit"
-              className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 flex items-center gap-2">
+            <button type="submit" disabled={saving}
+              className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
               <Save size={14} /> {mod ? t('lms.save_module') : t('lms.create_module')}
             </button>
           </div>
@@ -244,6 +290,7 @@ function LMSCourseForm({ course, onSave, onClose }) {
     online_individual: course?.pricing?.online?.individual?.full || '',
   })
   const [activeRegion, setActiveRegion] = useState('tashkent')
+  const [saving, runSave] = useSaving()
 
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }))
 
@@ -294,7 +341,7 @@ function LMSCourseForm({ course, onSave, onClose }) {
       ...(pricing ? { pricing } : {}),
     }
 
-    onSave(data)
+    runSave(() => onSave(data))
   }
 
   return (
@@ -407,8 +454,8 @@ function LMSCourseForm({ course, onSave, onClose }) {
               className="px-4 py-2 text-sm text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200">
               {t('lms.courseForm_btn_cancel')}
             </button>
-            <button type="submit"
-              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 flex items-center gap-2">
+            <button type="submit" disabled={saving}
+              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
               <Save size={14} /> {course ? t('lms.courseForm_btn_save') : t('lms.courseForm_btn_create')}
             </button>
           </div>
@@ -427,6 +474,8 @@ const COURSE_COLORS = ['from-blue-600 to-indigo-700', 'from-emerald-600 to-teal-
 
 function CatalogCourseCard({ courseName, courseIcon, course, group, lessonsCount, completedCount, modulesCount, nextLesson, onClick }) {
   const { t } = useLanguage()
+  const count = useCount()
+  const [coverFailed, setCoverFailed] = useState(false)
   const percentage = lessonsCount > 0 ? Math.round((completedCount / lessonsCount) * 100) : 0
   const isCompleted = percentage === 100 && lessonsCount > 0
   const isStarted = completedCount > 0
@@ -438,8 +487,8 @@ function CatalogCourseCard({ courseName, courseIcon, course, group, lessonsCount
     >
       {/* Cover image or gradient */}
       <div className="relative h-44 overflow-hidden">
-        {coverUrl ? (
-          <img src={coverUrl} alt={courseName}
+        {coverUrl && !coverFailed ? (
+          <img src={coverUrl} alt="" onError={() => setCoverFailed(true)}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         ) : (
           <div className={`w-full h-full bg-gradient-to-br ${COURSE_COLORS[Math.abs(courseName?.charCodeAt(0) || 0) % COURSE_COLORS.length]} flex items-center justify-center`}>
@@ -481,9 +530,9 @@ function CatalogCourseCard({ courseName, courseIcon, course, group, lessonsCount
       {/* Card body */}
       <div className="p-4">
         {/* Stats row */}
-        <div className="flex items-center gap-4 text-xs text-slate-500 mb-3">
-          <span className="flex items-center gap-1"><FileText size={12} className="text-blue-500" /> {lessonsCount} {t('lms.lessons_count')}</span>
-          {modulesCount > 0 && <span className="flex items-center gap-1"><Layers size={12} className="text-purple-500" /> {modulesCount} {t('lms.modules')}</span>}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mb-3">
+          <span className="flex items-center gap-1"><FileText size={12} className="text-blue-500" /> {count(lessonsCount, 'lms.lessons_count')}</span>
+          {modulesCount > 0 && <span className="flex items-center gap-1"><Layers size={12} className="text-purple-500" /> {count(modulesCount, 'lms.modules')}</span>}
           {group.schedule && <span className="flex items-center gap-1"><Clock size={12} className="text-slate-400" /> {group.schedule}</span>}
         </div>
 
@@ -709,8 +758,9 @@ export default function LMSDashboard() {
     addCourse, updateCourse, deleteCourse,
     addLmsLesson, updateLmsLesson, deleteLmsLesson,
     addLmsModule, updateLmsModule, deleteLmsModule,
-    updateGroup,
+    updateGroup, loading,
   } = useData()
+  const count = useCount()
   const navigate = useNavigate()
   const isTeacher = user?.role === 'teacher'
   const isStudent = user?.role === 'student'
@@ -942,6 +992,15 @@ export default function LMSDashboard() {
     await updateGroup(groupId, { openModules: updated })
   }
 
+  // Data still loading — don't flash the "access not activated" screen
+  if (isStudent && loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 border-[3px] border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    )
+  }
+
   // ─── Blocked Screen ─────────────────────────────────────────────────
   if (isBlocked) {
     return (
@@ -1035,7 +1094,7 @@ export default function LMSDashboard() {
     return (
       <div className="min-h-screen">
         {/* Catalog Header */}
-        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 -mx-4 -mt-4 px-4 pt-8 pb-10 md:px-8 md:-mx-8 md:-mt-8 mb-8 relative overflow-hidden">
+        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 -mx-3 -mt-3 sm:-mx-4 sm:-mt-4 px-4 pt-8 pb-10 md:px-8 md:-mx-6 md:-mt-6 mb-8 relative overflow-hidden">
           <div className="absolute inset-0 opacity-10">
             <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
@@ -1073,12 +1132,12 @@ export default function LMSDashboard() {
               </div>
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2.5">
                 <BookOpen size={16} className="text-blue-400" />
-                <span className="text-white text-sm font-medium">{myGroups.length} {t('lms.courses_count')}</span>
+                <span className="text-white text-sm font-medium">{count(myGroups.length, 'lms.courses_count')}</span>
               </div>
               {pendingAssignments.length > 0 && (
                 <div className="flex items-center gap-2 bg-amber-500/20 backdrop-blur-sm rounded-xl px-4 py-2.5">
                   <AlertCircle size={16} className="text-amber-400" />
-                  <span className="text-amber-200 text-sm font-medium">{pendingAssignments.length} {t('lms.pending_tasks')}</span>
+                  <span className="text-amber-200 text-sm font-medium">{count(pendingAssignments.length, 'lms.pending_tasks')}</span>
                 </div>
               )}
             </div>
@@ -1139,7 +1198,7 @@ export default function LMSDashboard() {
                     const group = groups.find(g => g.id === a.groupId)
                     return (
                       <button key={a.id}
-                        onClick={() => navigate(`/lms/course/${a.groupId}?tab=assignments`)}
+                        onClick={() => navigate(`/lms/group/${a.groupId}?tab=assignments`)}
                         className="w-full text-left p-3 rounded-xl hover:bg-slate-50 transition-colors border border-slate-100 group"
                       >
                         <p className="text-sm font-medium text-slate-900 truncate group-hover:text-blue-600 transition-colors">{a.title}</p>
@@ -1196,8 +1255,8 @@ export default function LMSDashboard() {
           </h2>
           <p className="text-slate-500 mt-1">
             {isTeacher
-              ? `${myGroups.length} ${t('lms.groups_count')} · ${myLessons.length} ${t('lms.lessons_count')}`
-              : `${courses.length} ${t('lms.stat_courses')} · ${groups.filter(g => g.status === 'active').length} ${t('lms.active_groups')}`
+              ? `${count(myGroups.length, 'lms.groups_count')} · ${count(myLessons.length, 'lms.lessons_count')}`
+              : `${count(courses.length, 'lms.stat_courses')} · ${groups.filter(g => g.status === 'active').length} ${t('lms.active_groups')}`
             }
           </p>
         </div>
@@ -1303,17 +1362,17 @@ export default function LMSDashboard() {
                   <div key={course.id} className="glass-card rounded-2xl overflow-hidden">
                     {/* Course Header */}
                     <div className="p-5">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-2xl flex-shrink-0">
                             {course.icon || '📚'}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <h4 className="font-bold text-slate-900">{course.name}</h4>
                             <p className="text-sm text-slate-500">{course.duration || '—'}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 ml-auto">
                           {(canManage || canEdit) && (
                             <button onClick={() => setShowLessonModal({ courseId: course.id })}
                               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
@@ -1329,16 +1388,17 @@ export default function LMSDashboard() {
                             </>
                           )}
                           <button onClick={() => setExpandedCourse(isExpanded ? null : course.id)}
+                            title="Программа и тарифы"
                             className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
                             <Settings size={15} />
                           </button>
                         </div>
                       </div>
                       {course.description && <p className="text-sm text-slate-500 mb-3">{course.description}</p>}
-                      <div className="flex items-center gap-5 text-sm text-slate-400">
-                        <span className="flex items-center gap-1.5"><Layers size={14} /> {courseGroups.length} {t('lms.groups_count')}</span>
-                        <span className="flex items-center gap-1.5"><Users size={14} /> {courseStudents.length} {t('lms.students_count')}</span>
-                        <span className="flex items-center gap-1.5"><FileText size={14} /> {courseLessons.length} {t('lms.lessons_count')}</span>
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-slate-400">
+                        <span className="flex items-center gap-1.5"><Layers size={14} /> {count(courseGroups.length, 'lms.groups_count')}</span>
+                        <span className="flex items-center gap-1.5"><Users size={14} /> {count(courseStudents.length, 'lms.students_count')}</span>
+                        <span className="flex items-center gap-1.5"><FileText size={14} /> {count(courseLessons.length, 'lms.lessons_count')}</span>
                       </div>
                     </div>
 
@@ -1348,13 +1408,13 @@ export default function LMSDashboard() {
                         onClick={() => setExpandedGroup(showLessons ? null : `course_${course.id}`)}
                         className="w-full flex items-center justify-between px-5 py-3 bg-slate-50/60 hover:bg-slate-50 transition-colors"
                       >
-                        <div className="flex items-center gap-2">
-                          {showLessons ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+                        <div className="flex items-center gap-2 text-left">
+                          {showLessons ? <ChevronDown size={16} className="text-slate-400 flex-shrink-0" /> : <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />}
                           <span className="text-sm font-semibold text-slate-700">
-                            {t('lms.course_content')} — {courseModules.length} {t('lms.modules')} · {courseLessons.length} {t('lms.lessons_count')}
+                            {t('lms.course_content')} — {count(courseModules.length, 'lms.modules')} · {count(courseLessons.length, 'lms.lessons_count')}
                           </span>
                         </div>
-                        <span className="text-xs text-slate-400">{t('lms.shared_for_all_groups')}</span>
+                        <span className="text-xs text-slate-400 hidden sm:inline">{t('lms.shared_for_all_groups')}</span>
                       </button>
 
                       {showLessons && (
@@ -1421,7 +1481,7 @@ export default function LMSDashboard() {
                                         <button onClick={() => navigate(`/lms/lesson/${lesson.id}`)} className="flex-1 text-left min-w-0">
                                           <p className="text-sm text-slate-800 truncate">{lesson.title}</p>
                                           <div className="flex items-center gap-2 mt-0.5">
-                                            {lesson.videoUrl && <span className="text-[10px] text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded"><Video size={9} className="inline mr-0.5" />Video</span>}
+                                            {lesson.videoUrl && <span className="text-[10px] text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded"><Video size={9} className="inline mr-0.5" />Видео</span>}
                                             {lesson.materials?.length > 0 && <span className="text-[10px] text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded"><File size={9} className="inline mr-0.5" />{lesson.materials.length}</span>}
                                           </div>
                                         </button>
@@ -1462,7 +1522,7 @@ export default function LMSDashboard() {
                                   <button onClick={() => navigate(`/lms/lesson/${lesson.id}`)} className="flex-1 text-left min-w-0">
                                     <p className="text-sm text-slate-800 truncate">{lesson.title}</p>
                                     <div className="flex items-center gap-2 mt-0.5">
-                                      {lesson.videoUrl && <span className="text-[10px] text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded"><Video size={9} className="inline mr-0.5" />Video</span>}
+                                      {lesson.videoUrl && <span className="text-[10px] text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded"><Video size={9} className="inline mr-0.5" />Видео</span>}
                                       {lesson.materials?.length > 0 && <span className="text-[10px] text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded"><File size={9} className="inline mr-0.5" />{lesson.materials.length}</span>}
                                     </div>
                                   </button>
@@ -1596,12 +1656,13 @@ export default function LMSDashboard() {
                         <span className="text-2xl">{course?.icon || '📚'}</span>
                         <div>
                           <h4 className="font-bold text-slate-900 text-sm">{courseName}</h4>
-                          <p className="text-xs text-slate-500">{course?.duration || '—'} · {courseGroups.length} {t('lms.groups_count')}</p>
+                          <p className="text-xs text-slate-500">{course?.duration || '—'} · {count(courseGroups.length, 'lms.groups_count')}</p>
                         </div>
                       </div>
                       <div className="divide-y divide-slate-50">
                         {courseGroups.map(group => {
-                          const groupLessons = myLessons.filter(l => l.groupId === group.id)
+                          // Lessons belong to the course (shared by its groups); legacy ones to a group
+                          const groupLessons = myLessons.filter(l => (course && l.courseId === course.id) || l.groupId === group.id)
                           const groupAssignments = myAssignments.filter(a => a.groupId === group.id)
                           const groupStudents = students.filter(s => s.group === group.name || s.groupId === group.id)
                           return (
@@ -1634,10 +1695,12 @@ export default function LMSDashboard() {
                 <h3 className="text-lg font-semibold text-slate-900 mt-6">{t('lms.recent_lessons')}</h3>
                 <div className="space-y-2">
                   {myLessons.slice(0, 5).map(lesson => {
-                    const group = groups.find(g => g.id === lesson.groupId)
+                    const lessonCourse = courses.find(c => c.id === lesson.courseId)
+                    const group = groups.find(g => g.id === lesson.groupId) ||
+                      myGroups.find(g => g.course === lessonCourse?.name)
                     return (
                       <button key={lesson.id}
-                        onClick={() => navigate(`/lms/group/${lesson.groupId}?lesson=${lesson.id}`)}
+                        onClick={() => navigate(`/lms/lesson/${lesson.id}`)}
                         className="w-full glass-card rounded-xl p-3 flex items-center gap-3 text-left hover:shadow-md transition-all"
                       >
                         <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
@@ -1645,7 +1708,7 @@ export default function LMSDashboard() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-900 truncate">{lesson.title}</p>
-                          <p className="text-xs text-slate-400">{group?.course} · {group?.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{[lessonCourse?.name || group?.course, group?.name].filter(Boolean).join(' · ')}</p>
                         </div>
                         <span className="text-xs text-slate-400">{lesson.date || ''}</span>
                       </button>

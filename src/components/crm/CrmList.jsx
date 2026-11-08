@@ -23,6 +23,11 @@ const COLUMNS = [
   { key: 'task', label: 'Задача' },
 ]
 const inputCls = 'px-3 py-2 bg-white/70 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+// Phones: the column headers (sorting) are hidden in the card view
+const PHONE_SORTS = [
+  ['created:desc', 'Сначала новые'], ['created:asc', 'Сначала старые'], ['amount:desc', 'Сумма ↓'],
+  ['amount:asc', 'Сумма ↑'], ['title:asc', 'Название А–Я'], ['stage:asc', 'По этапам'],
+]
 
 export default function CrmList({ pipeline, query, me, staff, people, allStages, isManager, refreshKey, onOpenLead, onChanged }) {
   const [sort, setSort] = useState({ key: 'created', direction: 'desc' })
@@ -32,6 +37,7 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
   const [allMatching, setAllMatching] = useState(false) // selection = every deal matching the filters
   const [busy, setBusy] = useState(false)
   const [dialog, setDialog] = useState(null) // 'tag-add' | 'tag-remove' | 'task' | { lost: stage }
+  const running = useRef(false) // a double click must not apply a bulk action twice
 
   const params = useMemo(() => ({ pipelineId: pipeline.id, ...query, sort: sort.key, direction: sort.direction }), [pipeline.id, query, sort])
   const paramsKey = JSON.stringify(params)
@@ -85,6 +91,8 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
   const sortBy = (key) => setSort(s => ({ key, direction: s.key === key && s.direction === 'desc' ? 'asc' : 'desc' }))
 
   const run = async (action, value, extra = {}) => {
+    if (running.current) return
+    running.current = true
     setBusy(true)
     try {
       const ids = allMatching ? await crm.leadIds(params) : [...selected]
@@ -96,6 +104,7 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
     } catch (err) {
       toast(err.message, 'error')
     }
+    running.current = false
     setBusy(false)
     setDialog(null)
   }
@@ -154,8 +163,18 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
           </div>
         </div>
       ) : (
-        <div className="flex items-center justify-between px-1">
-          <p className="text-sm text-slate-500">Найдено: {total}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-3">
+            <label className="md:hidden flex items-center gap-1.5 text-sm text-slate-500">
+              <input type="checkbox" checked={pageAllSelected} onChange={togglePage} /> Все
+            </label>
+            <p className="text-sm text-slate-500">Найдено: {total}</p>
+          </div>
+          <select value={`${sort.key}:${sort.direction}`} aria-label="Сортировка"
+            onChange={e => { const [key, direction] = e.target.value.split(':'); setSort({ key, direction }) }}
+            className="md:hidden ml-auto bg-white/50 text-sm rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            {PHONE_SORTS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
           {isManager && total > 0 && (
             <button onClick={exportCsv} disabled={busy}
               className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900 disabled:opacity-50">
@@ -167,7 +186,7 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
 
       {/* Table */}
       <div className="glass-card rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="table-cards w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-100">
               <th className="p-3 w-8"><input type="checkbox" checked={pageAllSelected} onChange={togglePage} aria-label="Выбрать страницу" /></th>
@@ -194,9 +213,9 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
               const checked = allMatching || selected.has(lead.id)
               return (
                 <tr key={lead.id} className={`border-b border-slate-50 hover:bg-white/60 ${checked ? 'bg-blue-50/50' : ''}`}>
-                  <td className="p-3"><input type="checkbox" checked={checked} onChange={() => toggle(lead.id)} /></td>
-                  <td className="p-3 max-w-[280px]">
-                    <button onClick={() => onOpenLead(lead.id)} className="text-left">
+                  <td data-card="select" className="p-3"><input type="checkbox" checked={checked} onChange={() => toggle(lead.id)} aria-label="Выбрать сделку" /></td>
+                  <td data-card="title" className="p-3 max-w-[280px]">
+                    <button onClick={() => onOpenLead(lead.id)} className="block w-full min-w-0 text-left">
                       <p className="font-medium text-slate-800 hover:text-blue-700 truncate">{lead.title || lead.contact?.name || 'Без названия'}</p>
                       <p className="text-xs text-slate-500 truncate">
                         {[lead.contact?.name !== lead.title && lead.contact?.name, formatPhone(lead.contact?.phones?.[0])].filter(Boolean).join(' · ')}
@@ -237,32 +256,32 @@ export default function CrmList({ pipeline, query, me, staff, people, allStages,
       )}
 
       {(dialog === 'tag-add' || dialog === 'tag-remove') && (
-        <TagDialog remove={dialog === 'tag-remove'} count={count} onCancel={() => setDialog(null)}
+        <TagDialog remove={dialog === 'tag-remove'} count={count} busy={busy} onCancel={() => setDialog(null)}
           onConfirm={(tags) => run(dialog === 'tag-add' ? 'addTags' : 'removeTags', tags)} />
       )}
       {dialog === 'task' && (
-        <TaskDialog count={count} me={me} staff={staff} onCancel={() => setDialog(null)} onConfirm={(task) => run('task', task)} />
+        <TaskDialog count={count} me={me} staff={staff} busy={busy} onCancel={() => setDialog(null)} onConfirm={(task) => run('task', task)} />
       )}
       {dialog?.lost && (
-        <LossReasonDialog lead={{ title: `${count} сделок` }} onCancel={() => setDialog(null)}
+        <LossReasonDialog lead={{ title: `${count} сделок` }} busy={busy} onCancel={() => setDialog(null)}
           onConfirm={(reason) => run('stage', dialog.lost.id, { lossReason: reason })} />
       )}
     </div>
   )
 }
 
-function TagDialog({ remove, count, onCancel, onConfirm }) {
+function TagDialog({ remove, count, busy, onCancel, onConfirm }) {
   const [text, setText] = useState('')
   const tags = text.split(',').map(t => t.trim()).filter(Boolean)
   return (
     <Modal isOpen onClose={onCancel} title={remove ? 'Убрать теги' : 'Добавить теги'} size="sm">
       <div className="space-y-3">
         <p className="text-sm text-slate-600">{count} сделок. Несколько тегов — через запятую.</p>
-        <input autoFocus value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && tags.length && onConfirm(tags)}
+        <input autoFocus value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && tags.length && !busy && onConfirm(tags)}
           placeholder="например: весна, пробный" className={inputCls + ' w-full'} />
         <div className="flex justify-end gap-2">
           <button onClick={onCancel} className="px-3 py-2 text-sm rounded-xl text-slate-600 hover:bg-white">Отмена</button>
-          <button disabled={!tags.length} onClick={() => onConfirm(tags)} className="px-4 py-2 text-sm rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+          <button disabled={busy || !tags.length} onClick={() => onConfirm(tags)} className="px-4 py-2 text-sm rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
             {remove ? 'Убрать' : 'Добавить'}
           </button>
         </div>
@@ -271,7 +290,7 @@ function TagDialog({ remove, count, onCancel, onConfirm }) {
   )
 }
 
-function TaskDialog({ count, me, staff, onCancel, onConfirm }) {
+function TaskDialog({ count, me, staff, busy, onCancel, onConfirm }) {
   const tomorrow = new Date(Date.now() + 86400_000)
   tomorrow.setHours(10, 0, 0, 0)
   const [text, setText] = useState('')
@@ -291,7 +310,7 @@ function TaskDialog({ count, me, staff, onCancel, onConfirm }) {
         </div>
         <div className="flex justify-end gap-2">
           <button onClick={onCancel} className="px-3 py-2 text-sm rounded-xl text-slate-600 hover:bg-white">Отмена</button>
-          <button disabled={!text.trim()} onClick={() => onConfirm({ text: text.trim(), dueAt: new Date(dueAt).toISOString(), assigneeId: assigneeId || me })}
+          <button disabled={busy || !text.trim()} onClick={() => onConfirm({ text: text.trim(), dueAt: new Date(dueAt).toISOString(), assigneeId: assigneeId || me })}
             className="px-4 py-2 text-sm rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">Создать</button>
         </div>
       </div>

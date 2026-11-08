@@ -35,7 +35,7 @@ export default function SyncBanner() {
   if (!user || !visible) return null
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-amber-500 text-white shadow-lg shadow-amber-500/30 text-sm font-medium">
+    <div className="fixed bottom-safe left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-amber-500 text-white shadow-lg shadow-amber-500/30 text-sm font-medium">
       <RefreshCw size={15} className="animate-spin" />
       Синхронизация с базой… цифры могут быть временно неполными
     </div>

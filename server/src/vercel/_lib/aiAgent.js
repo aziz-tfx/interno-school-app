@@ -46,6 +46,10 @@ const IG_WINDOW_MS = 23 * 3600_000 // Instagram allows business messages only 24
 const WORK_HOURS = [9, 21]        // follow-ups only in the daytime, Tashkent time (UTC+5)
 const ALERT_COOLDOWN_MS = 30 * 60_000
 const CLOSED_STATUSES = ['142', '143'] // amo «Успешно реализовано» / «Закрыто и не реализовано»
+const CATCHUP_BATCH = 10           // failed conversations answered per sweep, one after another
+const CATCHUP_MAX_AGE_MS = 72 * 3600_000 // Telegram & co.: answer what failed in the last 3 days
+const CATCHUP_SETTLE_MS = 60_000  // leave fresh messages to their own webhook (debounce)
+const CATCHUP_BACKOFF_MS = [5, 10, 20, 40, 60].map(m => m * 60_000)
 
 const TARIFF_LABELS = {
   standard: 'Стандарт', vip: 'VIP', premium: 'Премиум', individual: 'Индивидуальный', budget: 'Бюджет',
@@ -379,7 +383,7 @@ async function callOpenAI(cfg, messages) {
  * One agent turn: history + new client message → reply text (+ amo actions).
  * Returns { reply, actions, handoff, usage }.
  */
-export async function runAgentTurn({ cfg, history, message, followUp, channel = 'instagram', ctx }) {
+export async function runAgentTurn({ cfg, history, message, followUp, lateHours, channel = 'instagram', ctx }) {
   const system = await buildSystemPrompt(cfg, channel)
   const messages = [
     { role: 'system', content: system },
@@ -387,6 +391,8 @@ export async function runAgentTurn({ cfg, history, message, followUp, channel = 
     followUp
       ? { role: 'system', content: followUpInstruction(followUp) }
       : { role: 'user', content: message },
+    // a reply that failed earlier (e.g. amoCRM was unreachable) and is sent now
+    ...(lateHours ? [{ role: 'system', content: lateInstruction(lateHours) }] : []),
   ]
   const state = { actions: [], handoff: null }
   const usage = { prompt: 0, completion: 0 }
@@ -417,6 +423,11 @@ export async function runAgentTurn({ cfg, history, message, followUp, channel = 
   }
 
   return { reply, actions: state.actions, handoff: state.handoff, booking: state.booking || null, usage }
+}
+
+function lateInstruction(hours) {
+  const ago = hours < 1 ? 'меньше часа' : `примерно ${Math.round(hours)} ч`
+  return `Клиент написал ${ago} назад, но из-за технического сбоя ответ не ушёл. Начни с короткого извинения за задержку (одна фраза, без подробностей о сбое) и ответь по существу.`
 }
 
 function followUpInstruction({ hours, number, total }) {
@@ -505,15 +516,16 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
   const amo = createAmoClient(amoCfg)
   const channel = detectChannel(msg.origin)
 
-  // Test mode: only leads tagged with testTag are handled; others aren't even logged
+  // Test mode: only leads tagged with testTag are handled; others aren't even logged.
+  // If amo can't be asked, keep the message anyway so the catch-up sweep answers it later.
+  let testCheckError = null
   if (cfg.testMode) {
     try {
       const lead = await amo.get(`/api/v4/leads/${msg.leadId}`)
       if (!leadTags(lead).includes(cfg.testTag)) return
     } catch (e) {
       console.warn('AI agent test-mode lead check failed:', e.message)
-      await alertError(cfg, amoCfg, msg.leadId, e)
-      return
+      testCheckError = e
     }
   }
 
@@ -535,41 +547,58 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
       processedIds: [...processed, msg.id].filter(Boolean).slice(-PROCESSED_IDS_LIMIT),
       followUpsSent: 0,
       followUpDueAt: null,
+      // this message's own turn answers everything unanswered: no catch-up meanwhile
+      lastError: testCheckError ? String(testCheckError.message).slice(0, 500) : null,
+      retryCount: 0,
+      nextRetryAt: null,
       updatedAt: now,
     })
     return true
   })
   if (!fresh) return
+  if (testCheckError) {
+    await alertError(cfg, amoCfg, msg.leadId, testCheckError)
+    return
+  }
 
   // 2. Debounce: only the newest message of a burst triggers a reply
   if (debounceMs) await sleep(debounceMs)
   const conv = await loadConversation(ref)
-  const messages = conv?.messages || []
-  if (messages.at(-1)?.id !== msg.id) return
+  if ((conv?.messages || []).at(-1)?.id !== msg.id) return
 
+  await answerConversation({ cfg, amoCfg, amo, ref, conv, leadId: msg.leadId, contactId: msg.contactId, channel })
+}
+
+/**
+ * Answers the unanswered tail of client messages in a conversation and
+ * stores the reply. Returns 'sent' or why nothing was sent; on an error
+ * records lastError (the catch-up sweep retries it), alerts and returns 'error'.
+ * lateHours: the reply is a catch-up for a failed one (the model apologizes).
+ */
+async function answerConversation({ cfg, amoCfg, amo, ref, conv, leadId, contactId, channel, lateHours, checkTestTag }) {
+  const db = getDb()
+  const messages = conv?.messages || []
   try {
     // 3. Stop conditions: handed off / paused, reply cap, pause tag or handoff stage in amo
-    let paused = conv.paused || (conv.replies || 0) - (conv.resumedAtReplies || 0) >= cfg.maxRepliesPerLead
-    if (!paused) {
-      const lead = await amo.get(`/api/v4/leads/${msg.leadId}`)
-      const tags = leadTags(lead)
-      if (tags.includes(cfg.pauseTag) || tags.includes(cfg.handoffTag)) paused = true
-      if (cfg.handoffStatusId && String(lead?.status_id) === String(cfg.handoffStatusId)) paused = true
-    }
-    if (paused) return
+    if (conv.paused || (conv.replies || 0) - (conv.resumedAtReplies || 0) >= cfg.maxRepliesPerLead) return 'paused'
+    const lead = await amo.get(`/api/v4/leads/${leadId}`)
+    const tags = leadTags(lead)
+    if (checkTestTag && cfg.testMode && !tags.includes(cfg.testTag)) return 'test mode'
+    if (tags.includes(cfg.pauseTag) || tags.includes(cfg.handoffTag)) return 'paused in amo'
+    if (cfg.handoffStatusId && String(lead?.status_id) === String(cfg.handoffStatusId)) return 'at manager stage'
 
     // 4. Unanswered tail of user messages = this turn's input
     let split = messages.length
     while (split > 0 && messages[split - 1].role === 'user') split--
     const history = messages.slice(0, split)
     const message = messages.slice(split).map(m => clientText(m.text)).join('\n')
-    if (!message) return
+    if (!message) return 'nothing to answer'
 
     const result = await runAgentTurn({
-      cfg, history, message, channel,
-      ctx: { amo, leadId: msg.leadId, contactId: msg.contactId, dryRun: false },
+      cfg, history, message, channel, lateHours,
+      ctx: { amo, leadId, contactId, dryRun: false },
     })
-    if (result.reply) await sendReply(amo, cfg, { leadId: msg.leadId, contactId: msg.contactId }, result.reply)
+    if (result.reply) await sendReply(amo, cfg, { leadId, contactId }, result.reply)
 
     // 5. Persist the answer (merge: new user messages may have arrived meanwhile)
     const replyAt = new Date().toISOString()
@@ -580,7 +609,7 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
       const next = {
         ...cur,
         messages: result.reply
-          ? [...(cur.messages || []), { role: 'assistant', text: result.reply, at: replyAt, actions: result.actions }].slice(-HISTORY_LIMIT)
+          ? [...(cur.messages || []), { role: 'assistant', text: result.reply, at: replyAt, actions: result.actions, ...(lateHours && { late: true }) }].slice(-HISTORY_LIMIT)
           : (cur.messages || []),
         followUpBaseAt: awaitingClient ? replyAt : null,
         followUpDueAt: awaitingClient && followUpsAllowed(cfg, channel) ? followUpDueAt(cfg, replyAt, 0) : null,
@@ -590,6 +619,8 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
         promptTokens: (cur.promptTokens || 0) + result.usage.prompt,
         completionTokens: (cur.completionTokens || 0) + result.usage.completion,
         lastError: null,
+        retryCount: 0,
+        nextRetryAt: null,
         updatedAt: new Date().toISOString(),
       }
       tx.set(ref, next)
@@ -597,11 +628,82 @@ export async function processIncomingMessage({ cfg, amoCfg, msg, debounceMs = DE
     })
     if (result.handoff) await notifyHandoff(cfg, amoCfg, saved, result.handoff)
     if (result.booking) await notifyBooking(cfg, amoCfg, saved, result.booking)
+    return result.reply ? 'sent' : 'empty reply'
   } catch (e) {
     console.error('AI agent error:', e)
     try { await ref.set({ lastError: String(e.message).slice(0, 500), updatedAt: new Date().toISOString() }, { merge: true }) } catch {}
-    await alertError(cfg, amoCfg, msg.leadId, e)
+    await alertError(cfg, amoCfg, leadId, e)
+    return 'error'
   }
+}
+
+// ─── Catch-up: answer the clients a failed turn left without a reply ────
+// A conversation is due when its last message is the client's and the turn
+// failed (lastError), e.g. while amoCRM blocked the server. Each attempt is
+// claimed and backs off (5 → 60 min), until the client's message is too old
+// to answer: Instagram allows replies only within 24 h of it.
+const catchUpMaxAge = (channel) => (channel === 'instagram' || channel === 'comment') ? IG_WINDOW_MS : CATCHUP_MAX_AGE_MS
+
+function catchUpDue(c, nowMs = Date.now()) {
+  const last = (c?.messages || []).at(-1)
+  if (!c?.lastError || c.paused || last?.role !== 'user' || !last.at) return false
+  const age = nowMs - Date.parse(last.at)
+  if (age < CATCHUP_SETTLE_MS || age > catchUpMaxAge(c.channel || detectChannel(c.origin))) return false
+  return !c.nextRetryAt || Date.parse(c.nextRetryAt) <= nowMs
+}
+
+async function catchUpConversation(ref, cfg, amoCfg) {
+  const db = getDb()
+  const conv = await db.runTransaction(async (tx) => {
+    const c = (await tx.get(ref)).data()
+    if (!catchUpDue(c)) return null
+    const retryCount = (c.retryCount || 0) + 1
+    const backoff = CATCHUP_BACKOFF_MS[Math.min(retryCount - 1, CATCHUP_BACKOFF_MS.length - 1)]
+    tx.set(ref, { retryCount, nextRetryAt: new Date(Date.now() + backoff).toISOString() }, { merge: true })
+    return c
+  })
+  if (!conv) return 'claimed elsewhere'
+  const channel = conv.channel || detectChannel(conv.origin)
+  if (!cfg.enabled || !cfg.openaiKey || !replyConfigured(cfg) || !amoCfg.subdomain || !amoCfg.accessToken) return 'agent not configured'
+  if (!cfg[CHANNEL_SETTING[channel]]) return 'channel off'
+
+  const firstUnanswered = [...conv.messages].reverse().find((m, i, arr) => arr[i + 1]?.role !== 'user') || conv.messages.at(-1)
+  const lateHours = (Date.now() - Date.parse(firstUnanswered.at)) / 3600_000
+  const outcome = await answerConversation({
+    cfg, amoCfg, amo: createAmoClient(amoCfg), ref, conv, channel,
+    leadId: conv.leadId, contactId: conv.contactId, lateHours, checkTestTag: true,
+  })
+  // skipped for good (paused, test mode…): leave the catch-up queue
+  if (!['sent', 'empty reply', 'error'].includes(outcome)) {
+    await ref.set({ lastError: null, nextRetryAt: null }, { merge: true })
+  }
+  return outcome
+}
+
+/** Answers failed conversations of all tenants (oldest first). Safe to run concurrently. */
+export async function runCatchUp() {
+  const db = getDb()
+  if (!db) return { due: 0, results: {} }
+  const snap = await db.collection('aiAgentConversations').where('lastError', '!=', null).get()
+  const due = snap.docs
+    .filter(d => catchUpDue(d.data()))
+    .sort((a, b) => String(a.data().messages.at(-1).at).localeCompare(String(b.data().messages.at(-1).at)))
+    .slice(0, CATCHUP_BATCH)
+  const configs = {}
+  const results = {}
+  // one by one: gentle on amoCRM, and a blocked amo fails each in no time
+  for (const doc of due) {
+    const tenantId = doc.data().tenantId || 'default'
+    configs[tenantId] ||= Promise.all([resolveAiAgent(tenantReq(tenantId)), resolveAmo(tenantReq(tenantId))])
+    const [cfg, amoCfg] = await configs[tenantId]
+    let outcome
+    try { outcome = await catchUpConversation(doc.ref, cfg, amoCfg) } catch (e) {
+      console.error('AI agent catch-up failed:', e)
+      outcome = 'error'
+    }
+    results[outcome] = (results[outcome] || 0) + 1
+  }
+  return { due: due.length, results }
 }
 
 // ─── Telegram notifications for managers ────────────────────────────────
@@ -665,6 +767,12 @@ function explainError(message) {
   if (/OpenAI 429/.test(m)) return 'OpenAI временно ограничил число запросов.'
   if (/OpenAI 5\d\d|abort/i.test(m)) return 'OpenAI не ответил — вероятно, временный сбой.'
   if (/amoCRM .*→ 401/.test(m)) return 'Токен amoCRM истёк и не обновился — переподключите amoCRM в «Интеграциях».'
+  // nginx's HTML page instead of amo's JSON: the server's IP is blocked for too many requests
+  if (/amoCRM .*→ 403/.test(m) && /заблокировал IP|<html|nginx/i.test(m)) {
+    return 'amoCRM временно заблокировал IP сервера за слишком частые запросы к API. Сервер сам делает паузу и снизил частоту запросов; блокировка обычно снимается сама. Если не снимется за несколько часов — напишите в поддержку amoCRM.'
+  }
+  if (/amoCRM .*→ 429/.test(m)) return 'amoCRM ограничил число запросов — бот ответит, когда лимит освободится.'
+  if (/amoCRM timeout/.test(m)) return 'amoCRM не ответил вовремя — вероятно, временный сбой.'
   if (/amoCRM .*→ 40[034]/.test(m)) return 'amoCRM отклонил запрос — проверьте ID поля «Ответ ИИ» и ID Salesbot.'
   return 'Неизвестная ошибка.'
 }
@@ -793,7 +901,9 @@ async function sendFollowUp(ref, cfg, amoCfg) {
 export async function runFollowUps() {
   const db = getDb()
   if (!db) return { ok: false, error: 'Firestore unavailable' }
-  if (!isWorkingHours()) return { ok: true, skipped: 'outside working hours' }
+  // clients waiting for an answer get it at any hour; nudges only in the daytime
+  const catchUp = await runCatchUp()
+  if (!isWorkingHours()) return { ok: true, catchUp, skipped: 'outside working hours' }
   const snap = await db.collection('aiAgentConversations')
     .where('followUpDueAt', '<=', new Date().toISOString())
     .orderBy('followUpDueAt')
@@ -808,7 +918,7 @@ export async function runFollowUps() {
     const outcome = await sendFollowUp(doc.ref, cfg, amoCfg)
     results[outcome] = (results[outcome] || 0) + 1
   }))
-  return { ok: true, due: snap.size, results }
+  return { ok: true, catchUp, due: snap.size, results }
 }
 
 let lastSweepAt = 0

@@ -10,11 +10,12 @@
 //   POST /api/public/courses/:id/signup           landing signup → student account
 //   GET  /api/public/contracts/:paymentId         contract to sign (link from the manager)
 //   POST /api/public/contracts/:paymentId/sign    store the signature once
-//   POST /api/public/telegram-login               Telegram mini app → student session
+//   POST /api/public/telegram-login               Telegram mini app → session of the linked account
 
 import { randomInt, createHmac, timingSafeEqual } from 'node:crypto'
 import { tx } from '../db.js'
-import { hashPassword, publicUser, tokenClaims } from '../auth.js'
+import { hashPassword, publicUser, tokenClaims, blockedStatusMessage } from '../auth.js'
+import { loadTelegramConfig } from '../telegram.js'
 import { newDocId } from '../lib/ids.js'
 import { badRequest, notFound, HttpError } from '../lib/errors.js'
 import { createLead } from '../crm/service.js'
@@ -321,9 +322,11 @@ export default async function publicRoutes(app, { pool, config }) {
   // ─── Telegram mini app ────────────────────────────────────────────────
   // The old mini app "logged in" by phone number alone — anyone could open
   // any student's data. Now Telegram's signed initData proves who the user
-  // is, and the student must have linked this Telegram through the bot
-  // (/start st_<studentId> stores telegramChatId; a private chat id is the
-  // user id).
+  // is, and that Telegram account must have been linked beforehand:
+  //   - by anyone, from inside the mini app after a password login
+  //     (POST /api/auth/telegram-link → employees.telegram_user_id);
+  //   - by a student through the bot (/start st_<studentId> stores
+  //     telegramChatId; a private chat id is the user id).
   app.post('/api/public/telegram-login', {
     config: strict(20),
     schema: {
@@ -331,22 +334,34 @@ export default async function publicRoutes(app, { pool, config }) {
     },
   }, async (req, reply) => {
     const tenantId = req.body.tenantId || DEFAULT_TENANT
-    const { rows: [cfg] } = await pool.query('SELECT data FROM tenant_integrations WHERE id = $1', [tenantId])
-    const botToken = cfg?.data?.telegram?.botToken || process.env.TG_BOT_TOKEN
+    const { botToken } = await loadTelegramConfig(pool, tenantId)
     const tgUser = verifyTelegramInitData(req.body.initData, botToken)
     if (!tgUser) return reply.code(401).send({ error: 'Не удалось проверить данные Telegram' })
+
+    const { rows: [linked] } = await pool.query(
+      `SELECT * FROM employees
+        WHERE tenant_id = $1 AND telegram_user_id = $2
+          AND coalesce((data->>'deleted')::boolean, false) = false`,
+      [tenantId, tgUser.id]
+    )
+    if (linked) {
+      const blocked = blockedStatusMessage(linked.status)
+      if (blocked) return reply.code(403).send({ error: blocked })
+      return session(linked)
+    }
 
     const { rows: [emp] } = await pool.query(
       `SELECT e.* FROM students s
          JOIN employees e ON e.tenant_id = s.tenant_id AND e.role = 'student' AND e.data->>'studentId' = s.id
         WHERE s.tenant_id = $1 AND s.data->>'telegramChatId' = $2
           AND coalesce(e.status, '') NOT IN ('fired', 'pending', 'rejected')
+          AND coalesce((e.data->>'deleted')::boolean, false) = false
         LIMIT 1`,
       [tenantId, String(tgUser.id)]
     )
     if (!emp) {
       return reply.code(404).send({
-        error: 'Этот Telegram не привязан к ученику. Войдите по логину и паролю или подключите Telegram в личном кабинете.',
+        error: 'Этот Telegram ещё не привязан к аккаунту. Войдите по логину и паролю — дальше вход будет автоматическим.',
       })
     }
     return session(emp)

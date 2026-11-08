@@ -21,6 +21,16 @@ export function getPromoCourses(courses) {
 }
 
 /**
+ * True when the course was gifted to the student (student.bonusCourses).
+ * A gift may also be the student's MAIN course (a client who got the
+ * course for free) — then debt / payment / schedule gates don't apply.
+ */
+export function hasGiftedCourse(student, courseName) {
+  if (!courseName || !Array.isArray(student?.bonusCourses)) return false
+  return student.bonusCourses.includes(courseName)
+}
+
+/**
  * Build synthetic groups for every promo bonus course granted to the
  * student (student.bonusCourses = ['Курс', ...]). Skips course names
  * already covered by the student's real group.
@@ -236,7 +246,7 @@ export function isLessonAccessible({ lesson, student, group, modules, debt }) {
   // ─── Promo bonus course: full access, no payment/schedule gates ───
   // Granted with a VIP/Premium purchase; the student's debt applies to
   // their MAIN course, not the gift.
-  if (group.bonus) {
+  if (group.bonus || hasGiftedCourse(student, group.course)) {
     return { accessible: true, reason: null }
   }
 

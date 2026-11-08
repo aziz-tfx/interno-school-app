@@ -22,7 +22,7 @@ function tomorrowAt10() {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 }
 
-export default function LeadModal({ leadId, me, isManager, pipelines, allStages, staff, people, courses, fields = [], tags = [], onClose, onOpenContact, onMove, onSale, onChanged }) {
+export default function LeadModal({ leadId, me, isManager, pipelines, allStages, staff, people, courses, fields = [], tags = [], reloadKey = 0, onClose, onOpenContact, onMove, onSale, onChanged }) {
   const [lead, setLead] = useState(null)
   const [activities, setActivities] = useState([])
   const [files, setFiles] = useState([])
@@ -34,6 +34,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
   const [note, setNote] = useState('')
   const [posting, setPosting] = useState(false)
   const [taskForm, setTaskForm] = useState(null) // { text, dueAt, assigneeId }
+  const [savingTask, setSavingTask] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -54,6 +55,8 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
   }, [leadId])
 
   useEffect(() => { setLead(null); setMissing(false); load() }, [load])
+  // A stage move confirmed in a dialog on the page (lost reason, won) → show it here
+  useEffect(() => { if (reloadKey) load() }, [reloadKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Other managers' notes, moves and tasks on this deal appear live
   const timer = useRef(null)
@@ -97,7 +100,8 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
   }
 
   const addTask = async () => {
-    if (!taskForm.text.trim()) return
+    if (!taskForm.text.trim() || savingTask) return
+    setSavingTask(true)
     try {
       await crm.createTask({
         leadId: lead.id, text: taskForm.text.trim(),
@@ -108,6 +112,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
     } catch (err) {
       toast(err.message, 'error')
     }
+    setSavingTask(false)
   }
 
   const toggleTask = async (task) => {
@@ -186,9 +191,9 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
     const contact = lead.contact
 
     return (
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         {/* ── Left: deal ─────────────────────────────────────────── */}
-        <div className="space-y-5">
+        <div className="space-y-5 min-w-0">
           <div className="flex flex-wrap gap-1.5">
             {pipeline?.stages.map(s => {
               const active = s.id === lead.stageId
@@ -237,7 +242,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
           <div className="flex flex-wrap items-center gap-1.5">
             {(lead.tags || []).map(t => (
               <span key={t} className="flex items-center gap-1 text-xs bg-slate-100 text-slate-700 rounded-full pl-2.5 pr-1.5 py-1">
-                {t} <button onClick={() => removeTag(t)} className="text-slate-400 hover:text-slate-700"><X size={12} /></button>
+                {t} <button onClick={() => removeTag(t)} aria-label="Убрать тег" className="p-1 -m-1 text-slate-400 hover:text-slate-700"><X size={12} /></button>
               </span>
             ))}
             <input value={tagInput} onChange={e => setTagInput(e.target.value)} list="crm-tag-suggestions"
@@ -282,7 +287,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
             {contact?.phones?.map(p => (
               <div key={p} className="flex items-center gap-2 text-sm">
                 <a href={`tel:+${p}`} className="text-blue-600 hover:underline">{formatPhone(p)}</a>
-                <button onClick={() => copy(`+${p}`)} title="Скопировать" className="text-slate-400 hover:text-slate-600"><Copy size={13} /></button>
+                <button onClick={() => copy(`+${p}`)} title="Скопировать" aria-label="Скопировать" className="p-1.5 -m-1.5 text-slate-400 hover:text-slate-600"><Copy size={13} /></button>
               </div>
             ))}
             {contact?.instagram && <p className="text-sm text-slate-600">Instagram: {contact.instagram}</p>}
@@ -302,7 +307,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
               <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-2">
                 <input autoFocus className={inputCls} placeholder="Например: перезвонить и пригласить на пробный урок"
                   value={taskForm.text} onChange={e => setTaskForm(f => ({ ...f, text: e.target.value }))}
-                  onKeyDown={e => e.key === 'Enter' && addTask()} />
+                  onKeyDown={e => e.key === 'Enter' && addTask()} disabled={savingTask} />
                 <div className="flex flex-wrap gap-2">
                   <input type="datetime-local" className={inputCls + ' flex-1 min-w-[180px]'} value={taskForm.dueAt}
                     onChange={e => setTaskForm(f => ({ ...f, dueAt: e.target.value }))} />
@@ -313,7 +318,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
                 </div>
                 <div className="flex justify-end gap-2">
                   <button onClick={() => setTaskForm(null)} className="px-3 py-1.5 text-xs rounded-lg text-slate-600 hover:bg-white">Отмена</button>
-                  <button onClick={addTask} disabled={!taskForm.text.trim()}
+                  <button onClick={addTask} disabled={savingTask || !taskForm.text.trim()}
                     className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">Добавить</button>
                 </div>
               </div>
@@ -323,7 +328,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
               const overdue = !t.doneAt && Date.parse(t.dueAt) < Date.now()
               return (
                 <div key={t.id} className="flex items-start gap-2 text-sm">
-                  <button onClick={() => toggleTask(t)} className="mt-0.5 text-slate-400 hover:text-blue-600">
+                  <button onClick={() => toggleTask(t)} aria-label={t.doneAt ? 'Вернуть в работу' : 'Отметить выполненной'} className="p-1.5 -mx-1.5 -mb-1.5 -mt-1 text-slate-400 hover:text-blue-600">
                     {t.doneAt ? <CheckSquare size={16} className="text-emerald-500" /> : <Square size={16} />}
                   </button>
                   <div className="flex-1 min-w-0">
@@ -354,9 +359,9 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
                 <button onClick={() => crm.downloadFile(f).catch(err => toast(err.message, 'error'))}
                   className="flex-1 min-w-0 text-left truncate text-blue-600 hover:underline">{f.name}</button>
                 <span className="text-xs text-slate-400 flex-shrink-0">{f.size > 1048576 ? `${(f.size / 1048576).toFixed(1)} МБ` : `${Math.max(1, Math.round(f.size / 1024))} КБ`}</span>
-                <button onClick={() => crm.downloadFile(f).catch(err => toast(err.message, 'error'))} className="text-slate-400 hover:text-slate-700"><Download size={14} /></button>
+                <button onClick={() => crm.downloadFile(f).catch(err => toast(err.message, 'error'))} aria-label="Скачать" className="p-1.5 -m-1 text-slate-400 hover:text-slate-700 flex-shrink-0"><Download size={14} /></button>
                 {(isManager || f.uploadedBy === me) && (
-                  <button onClick={() => removeFile(f)} className="text-slate-400 hover:text-red-600"><Trash2 size={14} /></button>
+                  <button onClick={() => removeFile(f)} aria-label="Удалить файл" className="p-1.5 -m-1 text-slate-400 hover:text-red-600 flex-shrink-0"><Trash2 size={14} /></button>
                 )}
               </div>
             ))}
@@ -376,7 +381,7 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
         </div>
 
         {/* ── Right: timeline ────────────────────────────────────── */}
-        <div className="space-y-3">
+        <div className="space-y-3 min-w-0">
           <div className="rounded-2xl bg-white/60 border border-slate-100 p-3 space-y-2">
             <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={5000}
               placeholder="Примечание: о чём договорились, что важно клиенту…"
@@ -392,7 +397,9 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
               </button>
             </div>
           </div>
-          <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+          {/* own scroll only beside the deal on wide screens — on phones the sheet scrolls */}
+          <div className="space-y-3 lg:max-h-[55vh] lg:overflow-y-auto lg:pr-1">
+            {activities.length === 0 && <p className="text-xs text-slate-400">Пока пусто — добавьте примечание или звонок</p>}
             {activities.map(renderActivity)}
           </div>
         </div>

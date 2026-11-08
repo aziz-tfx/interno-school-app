@@ -65,6 +65,9 @@ export default function Crm() {
   const [saleFor, setSaleFor] = useState(null) // { lead, stage? }
   // Bumped after a change made here, so the board refreshes immediately
   const [refreshKey, setRefreshKey] = useState(0)
+  // Bumped after a stage move or sale finished outside the open deal card
+  // (loss reason / won dialogs, payment), so the card shows the new stage
+  const [leadReloadKey, setLeadReloadKey] = useState(0)
 
   const me = user?._docId
   const isManager = MANAGER_ROLES.includes(user?.role)
@@ -129,12 +132,21 @@ export default function Crm() {
   }
   const openLead = (id) => setParam('lead', id)
   const openContact = (id) => setParam('contact', id)
+  // From the deal card: the contact card replaces the deal (it would open
+  // underneath it otherwise); back returns to the deal
+  const openContactFromLead = (id) => {
+    const next = new URLSearchParams(params)
+    next.delete('lead')
+    next.set('contact', id)
+    setParams(next)
+  }
 
   // ─── Stage moves (board drag & drop and the deal card share this) ─────
   const applyMove = async (lead, stage, extra = {}) => {
     try {
       await crm.updateLead(lead.id, { stageId: stage.id, ...extra })
       setRefreshKey(k => k + 1)
+      setLeadReloadKey(k => k + 1)
       return true
     } catch (err) {
       toast(err.message, 'error')
@@ -169,6 +181,7 @@ export default function Crm() {
       }
       toast('Оплата проведена, сделка закрыта как успешная', 'success')
       setRefreshKey(k => k + 1)
+      setLeadReloadKey(k => k + 1)
     } catch (err) {
       toast(`Оплата сохранена, но сделку обновить не удалось: ${err.message}`, 'error')
     }
@@ -215,10 +228,10 @@ export default function Crm() {
         </div>
       </div>
 
-      <div className="flex gap-1 glass rounded-xl p-1">
+      <div className="flex gap-1 glass rounded-xl p-1 overflow-x-auto no-scrollbar">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setParam('tab', t.id === 'board' ? '' : t.id)}
-            className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${
+            className={`shrink-0 sm:shrink sm:flex-1 px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
               tab === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}>
             <t.icon size={16} /> {t.label}
@@ -277,9 +290,9 @@ export default function Crm() {
         <LeadModal
           leadId={openLeadId} me={me} isManager={isManager}
           pipelines={pipelines} allStages={allStages} staff={staff} people={people} courses={courses}
-          fields={fields.filter(f => f.entity === 'lead')} tags={tags}
+          fields={fields.filter(f => f.entity === 'lead')} tags={tags} reloadKey={leadReloadKey}
           onClose={() => setParam('lead', '')}
-          onOpenContact={openContact}
+          onOpenContact={openContactFromLead}
           onMove={moveLead}
           onSale={(lead) => setSaleFor({ lead })}
           onChanged={() => setRefreshKey(k => k + 1)}

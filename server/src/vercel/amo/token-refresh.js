@@ -10,6 +10,7 @@
 // On success, the new tokens are persisted back to Firestore so subsequent
 // requests use the refreshed pair automatically.
 
+import { amoFetch } from '../_lib/amoFetch.js'
 import { resolveAmo, saveTenantIntegration, getTenantId } from '../_lib/tenantConfig.js'
 
 export default async function handler(req, res) {
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
     : { grant_type: 'refresh_token', refresh_token: AMO_REFRESH_TOKEN }
 
   try {
-    const tokenRes = await fetch(`https://${AMO_SUBDOMAIN}.amocrm.ru/oauth2/access_token`, {
+    const tokenRes = await amoFetch(`https://${AMO_SUBDOMAIN}.amocrm.ru/oauth2/access_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

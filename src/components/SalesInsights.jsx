@@ -392,13 +392,14 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
                   const convPct = prev > 0 ? Math.round((val / prev) * 100) : null
                   return (
                     <div key={label} className="flex items-center gap-2">
-                      <span className="w-24 text-xs text-slate-500 text-right flex-shrink-0">{label}</span>
+                      <span className="w-20 sm:w-24 text-xs text-slate-500 text-right flex-shrink-0 truncate">{label}</span>
                       <div className="flex-1 h-7 bg-slate-100 rounded-lg overflow-hidden relative">
                         <div className="h-full bg-gradient-to-r from-blue-400 to-violet-500 rounded-lg"
                           style={{ width: `${Math.max(4, (val / funnelMax) * 100)}%` }} />
-                        <span className="absolute inset-y-0 left-2 flex items-center text-xs font-bold text-white drop-shadow">{val}</span>
+                        {/* white on the bar; dark when the bar is too short to hold the number */}
+                        <span className={`absolute inset-y-0 left-2 flex items-center text-xs font-bold ${val / funnelMax >= 0.15 ? 'text-white drop-shadow' : 'text-slate-600'}`}>{val}</span>
                       </div>
-                      <span className="w-12 text-xs text-slate-400 tabular-nums flex-shrink-0">
+                      <span className="w-9 sm:w-12 text-xs text-slate-400 tabular-nums flex-shrink-0">
                         {convPct !== null ? `${convPct}%` : ''}
                       </span>
                     </div>
@@ -519,7 +520,7 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
                     const max = Math.max(1, ...ownerPanel.topCourses.map(([, v]) => v))
                     return ownerPanel.topCourses.map(([course, val]) => (
                       <div key={course} className="flex items-center gap-2">
-                        <span className="w-28 text-xs text-slate-500 text-right truncate flex-shrink-0">{course}</span>
+                        <span className="w-24 sm:w-28 text-xs text-slate-500 text-right truncate flex-shrink-0">{course}</span>
                         <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
                           <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-lg"
                             style={{ width: `${Math.max(4, (val / max) * 100)}%` }} />

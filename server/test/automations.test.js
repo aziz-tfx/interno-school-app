@@ -9,7 +9,9 @@ const webhooks = []
 const telegram = {
   send: async (botToken, chatId, text) => { sent.push({ botToken, chatId: String(chatId), text }); return true },
   setWebhook: async (botToken, params) => { webhooks.push({ botToken, ...params }); return { ok: true } },
+  setMenuButton: async (botToken, params) => { menus.push({ botToken, ...params }); return { ok: true } },
 }
+const menus = []
 const ctx = setup({ telegram, env: { API_DOMAIN: 'api.test' } })
 
 const NOW = new Date('2026-03-10T09:00:00Z') // 14:00 in Tashkent
@@ -128,6 +130,40 @@ test('admin points the bot at this server', async () => {
     botToken: 'tok-a', url: 'https://api.test/api/telegram/webhook?tenantId=school-a',
     secret_token: webhookSecret(ctx.config.jwtSecret, 'school-a'), allowed_updates: ['message'],
   })
+  // no frontend address (no APP_URL, none sent) → webhook only
+  assert.equal(res.json().miniAppUrl, '')
+  assert.equal(menus.length, 0)
   // a school without a bot token gets a clear message
   assert.equal((await ctx.as('otherOwner').post('/api/admin/telegram/webhook', {})).statusCode, 400)
+})
+
+test('admin connects the mini app: menu button + «Открыть» under the bot replies', async () => {
+  // only https pages open inside Telegram
+  assert.equal((await ctx.as('owner').post('/api/admin/telegram/webhook', { appUrl: 'http://app.test' })).json().miniAppUrl, '')
+  const res = await ctx.as('owner').post('/api/admin/telegram/webhook', { appUrl: 'https://app.test/integrations?x=1' })
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.json().miniAppUrl, 'https://app.test/?tenantId=school-a')
+  assert.equal(res.json().menuButton, true)
+  assert.deepEqual(menus.at(-1), {
+    botToken: 'tok-a', menu_button: { type: 'web_app', text: 'INTERNO', web_app: { url: 'https://app.test/?tenantId=school-a' } },
+  })
+  // stored next to the bot settings, which stay intact
+  const cfg = await loadTelegramConfig(ctx.pool, 'school-a')
+  assert.equal(cfg.miniAppUrl, 'https://app.test/?tenantId=school-a')
+  assert.equal(cfg.botToken, 'tok-a')
+
+  const extras = []
+  const secret = webhookSecret(ctx.config.jwtSecret, 'school-a')
+  const orig = telegram.send
+  telegram.send = async (token, chatId, text, extra) => { extras.push(extra); return orig(token, chatId, text) }
+  try {
+    await ctx.app.inject({
+      method: 'POST', url: '/api/telegram/webhook?tenantId=school-a', headers: { 'x-telegram-bot-api-secret-token': secret },
+      payload: { update_id: 2, message: { chat: { id: 6262 }, text: '/start' } },
+    })
+  } finally {
+    telegram.send = orig
+  }
+  assert.match(sent.at(-1).text, /Открыть INTERNO/)
+  assert.deepEqual(extras.at(-1).reply_markup.inline_keyboard[0][0].web_app, { url: 'https://app.test/?tenantId=school-a' })
 })

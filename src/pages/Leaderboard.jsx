@@ -176,17 +176,17 @@ export default function Leaderboard() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Trophy className="text-amber-500" size={26} />
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <Trophy className="text-amber-500 shrink-0" size={26} />
             {t('leaderboard.title')}
           </h1>
           <p className="text-sm text-slate-500 mt-1">{t('leaderboard.subtitle')}</p>
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           {/* Month selector */}
-          <div className="flex items-center gap-1 bg-white rounded-xl border border-slate-200 px-2 py-1.5 shadow-sm">
+          <div className="flex items-center justify-between gap-1 bg-white rounded-xl border border-slate-200 px-2 py-1.5 shadow-sm w-full sm:w-auto">
             <button
               onClick={() => setMonthKey(addMonths(monthKey, -1))}
               className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
@@ -209,7 +209,7 @@ export default function Leaderboard() {
             <select
               value={branchFilter}
               onChange={e => setBranchFilter(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="flex-1 sm:flex-none min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             >
               {BRANCH_OPTIONS.map(b => (
                 <option key={b.slug} value={b.slug}>{b.name[lang] || b.name.ru}</option>
@@ -221,7 +221,7 @@ export default function Leaderboard() {
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value)}
-            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="flex-1 sm:flex-none min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
           >
             <option value="revenue">{t('leaderboard.sort_revenue')}</option>
             <option value="deals">{t('leaderboard.sort_deals')}</option>
@@ -395,13 +395,13 @@ function KpiCard({ icon, color, label, value, hint }) {
     amber:   'from-amber-500 to-orange-600 text-amber-50',
   }
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex items-start gap-3 hover:shadow-md transition-shadow">
-      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${palette[color]} flex items-center justify-center shrink-0 shadow-md`}>
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 sm:p-4 flex flex-col sm:flex-row items-start gap-2 sm:gap-3 hover:shadow-md transition-shadow">
+      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br ${palette[color]} flex items-center justify-center shrink-0 shadow-md`}>
         {icon}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[11px] text-slate-500 uppercase tracking-wide font-medium truncate">{label}</p>
-        <p className="text-xl font-bold text-slate-900 mt-0.5 truncate">{value}</p>
+        <p className="text-lg sm:text-xl font-bold text-slate-900 mt-0.5 truncate">{value}</p>
         {hint && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{hint}</p>}
       </div>
     </div>
@@ -463,15 +463,15 @@ function RankingRow({ row, achievements, isCurrent, t }) {
     'bg-red-50'
 
   return (
-    <div className={`px-5 py-4 flex items-center gap-4 hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-violet-50/60' : ''}`}>
+    <div className={`px-3 sm:px-5 py-3 sm:py-4 flex items-center gap-2.5 sm:gap-4 hover:bg-slate-50 transition-colors ${isCurrent ? 'bg-violet-50/60' : ''}`}>
       {/* Rank */}
-      <div className="w-10 flex items-center justify-center shrink-0">
+      <div className="w-8 sm:w-10 flex items-center justify-center shrink-0">
         {tier ? (
-          <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${tier.bg} flex items-center justify-center text-white font-bold text-sm shadow-md`}>
+          <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br ${tier.bg} flex items-center justify-center text-white font-bold text-sm shadow-md`}>
             {rank}
           </div>
         ) : (
-          <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 font-semibold text-sm">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 font-semibold text-sm">
             {rank}
           </div>
         )}
@@ -479,26 +479,29 @@ function RankingRow({ row, achievements, isCurrent, t }) {
 
       {/* Avatar + name */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center text-white font-bold text-base shrink-0 shadow-sm">
+        {/* the avatar is only an initial — on phones the name needs the room more */}
+        <div className="hidden sm:flex w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-blue-600 items-center justify-center text-white font-bold text-base shrink-0 shadow-sm">
           {manager.avatar || manager.name?.[0]}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="font-semibold text-slate-900 truncate text-sm">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p className="font-semibold text-slate-900 truncate text-sm min-w-0">
               {manager.name}
             </p>
             {isCurrent && (
-              <span className="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-md font-medium">
+              <span className="shrink-0 text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-md font-medium">
                 {t('leaderboard.you')}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 mt-0.5">
-            <span className="text-[11px] text-slate-500 capitalize">
+          <div className="flex items-center gap-2 sm:gap-3 mt-0.5 min-w-0">
+            <span className="text-[11px] text-slate-500 truncate min-w-0">
               {manager.role === 'rop' ? t('role.rop') : t('role.sales')}
+              {/* deals count lives in its own column from md up */}
+              <span className="md:hidden normal-case"> · {dealsCount} {t('leaderboard.deals_short').toLowerCase()}</span>
             </span>
             {achievements.length > 0 && (
-              <div className="flex items-center gap-0.5" title={achievements.map(a => t(a.labelKey)).join(', ')}>
+              <div className="hidden sm:flex items-center gap-0.5 shrink-0" title={achievements.map(a => t(a.labelKey)).join(', ')}>
                 {achievements.slice(0, 5).map(a => (
                   <span key={a.id} className="text-sm">{a.icon}</span>
                 ))}
@@ -521,7 +524,7 @@ function RankingRow({ row, achievements, isCurrent, t }) {
       </div>
 
       {/* Revenue */}
-      <div className="text-right shrink-0 w-24 md:w-28">
+      <div className="text-right shrink-0 md:w-28">
         <p className="text-[10px] text-slate-400 uppercase tracking-wide">{t('leaderboard.revenue')}</p>
         <p className="font-bold text-slate-900 text-sm md:text-base">{formatMoney(revenue)}</p>
         {trend !== 0 && (
@@ -533,7 +536,7 @@ function RankingRow({ row, achievements, isCurrent, t }) {
       </div>
 
       {/* Plan % badge */}
-      <div className={`shrink-0 px-2.5 py-1 rounded-lg ${pctBg} ${pctColor} text-xs font-bold w-14 text-center`}>
+      <div className={`shrink-0 px-2 sm:px-2.5 py-1 rounded-lg ${pctBg} ${pctColor} text-xs font-bold w-12 sm:w-14 text-center`}>
         {perf.percentage}%
       </div>
     </div>

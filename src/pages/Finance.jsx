@@ -20,6 +20,7 @@ import SalesInsights from '../components/SalesInsights'
 import RevenueByCourse from '../components/RevenueByCourse'
 import { toast } from '../components/Toaster'
 import { fetchAmoPerformance, fetchAmoPerformanceV2, fetchAmoCalls } from '../utils/amocrm'
+import useAmoLive from '../hooks/useAmoLive'
 import { sameBranch } from '../utils/branchMatch'
 import { computeCountedSaleIds } from '../utils/countedSales'
 
@@ -243,6 +244,10 @@ export default function Finance() {
   const [amoStatsV2, setAmoStatsV2] = useState(null)
   const [amoCalls, setAmoCalls] = useState(null)
 
+  // Live: amoCRM changes (webhook → server → stream) reload the stats below
+  const [amoTick, setAmoTick] = useState(0)
+  useAmoLive(() => setAmoTick(n => n + 1))
+
   // Load all three sources in parallel for the active month. Each falls
   // back silently — manager cards stay functional without amoCRM.
   useEffect(() => {
@@ -261,7 +266,7 @@ export default function Finance() {
       setAmoCalls(calls.status === 'fulfilled' && calls.value?.success ? calls.value : null)
     })
     return () => { cancelled = true }
-  }, [monthKey, selectedYear, selectedMonth])
+  }, [monthKey, selectedYear, selectedMonth, amoTick])
 
   // Resolve the amoCRM user id for a local employee, with priority:
   //   1. explicit amoUserId
@@ -919,58 +924,61 @@ export default function Finance() {
     <div className="space-y-6">
       {/* ─── Header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
             <DollarSign className="text-blue-600" size={24} />
             {t('finance.title')}
           </h2>
-          <p className="text-slate-500 mt-1">
+          <p className="text-sm md:text-base text-slate-500 mt-1">
             {isSales ? t('finance.subtitle_sales') : t('finance.subtitle_admin')}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Phones: «Новая продажа» and «Доплата» share the row, «Отчёты» shrinks to an icon */}
+        <div className="flex items-center gap-2 md:flex-wrap">
           {/* Action buttons */}
           {canPayments && canSeeSalesList && (
             <>
               <button onClick={openNewSale}
-                className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/25 flex items-center gap-2">
+                className="flex-1 md:flex-none justify-center whitespace-nowrap bg-emerald-600 text-white px-4 py-2.5 md:py-2 rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/25 flex items-center gap-2">
                 <Plus size={16} /> {t('finance.btn_new_sale')}
               </button>
               <button onClick={openDoplata}
-                className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
+                className="flex-1 md:flex-none justify-center whitespace-nowrap bg-blue-600 text-white px-4 py-2.5 md:py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/25 flex items-center gap-2">
                 <CreditCard size={16} /> {t('finance.btn_doplata')}
               </button>
             </>
           )}
           <button onClick={() => navigate('/reports')}
-            className="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors flex items-center gap-2">
-            <FileBarChart size={16} /> {t('finance.btn_reports')}
+            title={t('finance.btn_reports')} aria-label={t('finance.btn_reports')}
+            className={`bg-slate-100 text-slate-700 px-3 md:px-4 py-2.5 md:py-2 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors flex items-center justify-center gap-2 ${canPayments && canSeeSalesList ? 'shrink-0' : 'w-full md:w-auto'}`}>
+            <FileBarChart size={16} />
+            <span className={canPayments && canSeeSalesList ? 'hidden md:inline' : ''}>{t('finance.btn_reports')}</span>
           </button>
         </div>
       </div>
 
       {/* ─── Filters Row ────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2 md:gap-3 md:flex-wrap">
         {/* Month Selector */}
-        <div className="flex items-center gap-2 glass-card rounded-xl px-3 py-2">
-          <CalendarDays size={16} className="text-slate-400" />
-          <button onClick={prevMonth} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
+        <div className="flex items-center gap-1 md:gap-2 glass-card rounded-xl px-1.5 md:px-3 py-1 md:py-2 shrink-0">
+          <CalendarDays size={16} className="text-slate-400 hidden md:block" />
+          <button onClick={prevMonth} aria-label="Предыдущий месяц" className="p-1.5 md:p-1 hover:bg-slate-100 rounded-lg transition-colors">
             <ChevronLeft size={16} />
           </button>
-          <span className="text-sm font-semibold text-slate-700 min-w-[120px] text-center">
+          <span className="text-sm font-semibold text-slate-700 min-w-[104px] md:min-w-[120px] text-center whitespace-nowrap">
             {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
           </span>
-          <button onClick={nextMonth} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
+          <button onClick={nextMonth} aria-label="Следующий месяц" className="p-1.5 md:p-1 hover:bg-slate-100 rounded-lg transition-colors">
             <ChevronRight size={16} />
           </button>
         </div>
 
         {/* Branch filter (admin/owner only) */}
         {(isAdmin || user?.branch === 'all') && (
-          <div className="flex items-center gap-2 glass-card rounded-xl px-3 py-2">
-            <Filter size={16} className="text-slate-400" />
+          <div className="flex items-center gap-2 glass-card rounded-xl px-3 py-2 min-w-0 flex-1 md:flex-none">
+            <Filter size={16} className="text-slate-400 shrink-0" />
             <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}
-              className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer">
+              className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer min-w-0 w-full md:w-auto truncate">
               <option value="all">{t('finance.filter_all_branches')}</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -979,14 +987,14 @@ export default function Finance() {
       </div>
 
       {/* ─── Page tabs ──────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 glass-card rounded-xl p-1 w-fit">
+      <div className="flex items-center gap-1 glass-card rounded-xl p-1 w-full md:w-fit overflow-x-auto no-scrollbar">
         {[
           ['overview', 'Обзор'],
           ['debts', 'Доплаты и долги'],
           ...(isAdmin ? [['analytics', 'Аналитика']] : []),
         ].map(([key, label]) => (
           <button key={key} onClick={() => setPageTab(key)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            className={`flex-1 md:flex-none whitespace-nowrap px-3 md:px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               pageTab === key
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100'
@@ -1092,17 +1100,17 @@ export default function Finance() {
         }
         return (
           <div className="glass-card rounded-2xl p-4 md:p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <TrendingUp size={20} className="text-cyan-600" />
+            <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <TrendingUp size={20} className="text-cyan-600 shrink-0" />
               Прогноз выручки — ожидаемые доплаты
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+            <div className="grid grid-cols-3 gap-2 md:gap-4 mb-5">
               {[
                 ['30 дней', e30], ['60 дней', e60], ['90 дней', e90],
               ].map(([label, val]) => (
-                <div key={label} className="bg-cyan-50/60 border border-cyan-100 rounded-xl p-4 text-center">
-                  <p className="text-xs text-slate-500 mb-1">Ближайшие {label}</p>
-                  <p className="text-xl font-bold text-cyan-700">{formatRevenue(val)} сум</p>
+                <div key={label} className="bg-cyan-50/60 border border-cyan-100 rounded-xl p-2.5 md:p-4 text-center min-w-0">
+                  <p className="text-[11px] md:text-xs text-slate-500 mb-1"><span className="hidden md:inline">Ближайшие </span>{label}</p>
+                  <p className="text-sm md:text-xl font-bold text-cyan-700 leading-tight">{formatRevenue(val)}<span className="hidden md:inline"> сум</span></p>
                 </div>
               ))}
             </div>
@@ -1110,12 +1118,12 @@ export default function Finance() {
               <div className="space-y-2">
                 {bucketEntries.map(([mk, val]) => (
                   <div key={mk} className="flex items-center gap-3">
-                    <span className="w-16 text-xs text-slate-500 text-right flex-shrink-0">{monthLabel(mk)}</span>
+                    <span className="w-12 md:w-16 text-xs text-slate-500 text-right flex-shrink-0">{monthLabel(mk)}</span>
                     <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-lg transition-all"
                         style={{ width: `${Math.max(3, (val / maxBucket) * 100)}%` }} />
                     </div>
-                    <span className="w-24 text-xs font-semibold text-slate-700 tabular-nums flex-shrink-0">{formatRevenue(val)}</span>
+                    <span className="w-16 md:w-24 text-xs font-semibold text-slate-700 tabular-nums flex-shrink-0">{formatRevenue(val)}</span>
                   </div>
                 ))}
                 {noDate > 0 && (
@@ -1158,15 +1166,15 @@ export default function Finance() {
                 {/* Status accent bar */}
                 <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${accent}`} />
 
-                <div className="p-5 pl-6">
-                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="p-4 pl-5 md:p-5 md:pl-6">
+                  <div className="hidden md:block absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     <div className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg shadow-sm border border-slate-200">
                       <Eye size={10} />
                       Продажи
                     </div>
                   </div>
                   {/* Header — name + dominant % */}
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-3 md:mb-4">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${
                         mgr.role === 'rop' ? 'bg-teal-600' : mgr.role === 'branch_director' ? 'bg-indigo-600' : 'bg-emerald-600'
@@ -1192,7 +1200,7 @@ export default function Finance() {
                     <div className="text-right flex-shrink-0 ml-2">
                       {mgr.hasPlan ? (
                         <>
-                          <p className={`text-3xl font-extrabold leading-none ${statusColor(pct)}`}>{pct}<span className="text-lg">%</span></p>
+                          <p className={`text-2xl md:text-3xl font-extrabold leading-none ${statusColor(pct)}`}>{pct}<span className="text-base md:text-lg">%</span></p>
                           <p className="text-[10px] text-slate-400 mt-0.5">{t('finance.plan')}</p>
                         </>
                       ) : (
@@ -1202,7 +1210,7 @@ export default function Finance() {
                   </div>
 
                   {/* Progress bar */}
-                  <div className="mb-4">
+                  <div className="mb-3 md:mb-4">
                     <div className="flex justify-between text-xs text-slate-500 mb-1">
                       <span className="font-medium text-slate-700">{formatRevenue(mgr.actual.revenue)}</span>
                       <span>{t('finance.plan')} {formatRevenue(mgr.plan.revenue)}</span>
@@ -1232,7 +1240,7 @@ export default function Finance() {
                     <div className="bg-slate-50/70 rounded-lg p-2">
                       <div className="flex items-center justify-center gap-1 mb-1">
                         <CreditCard size={11} className="text-amber-400" />
-                        <span className="text-[10px] text-slate-400">{t('finance.expected_doplata_short')}</span>
+                        <span className="text-[10px] text-slate-400 truncate">{t('finance.expected_doplata_short')}</span>
                       </div>
                       <p className="text-sm font-bold text-amber-600">{formatRevenue(mgr.expectedDoplata)}</p>
                     </div>
@@ -1245,28 +1253,28 @@ export default function Finance() {
                         {mgr.actual.sales} <span className="text-xs text-slate-400">/ {mgr.plan.sales}</span>
                       </p>
                     </div>
-                    <div className="bg-slate-50/70 rounded-lg p-2">
+                    <div className="hidden sm:block bg-slate-50/70 rounded-lg p-2">
                       <div className="flex items-center justify-center gap-1 mb-1">
                         <UserCheck size={11} className="text-cyan-400" />
                         <span className="text-[10px] text-slate-400">{t('finance.visited_off')}</span>
                       </div>
                       <p className="text-sm font-bold text-cyan-600">{mgr.actual.visited}</p>
                     </div>
-                    <div className="bg-slate-50/70 rounded-lg p-2">
+                    <div className="hidden sm:block bg-slate-50/70 rounded-lg p-2">
                       <div className="flex items-center justify-center gap-1 mb-1">
                         <Users size={11} className="text-blue-400" />
                         <span className="text-[10px] text-slate-400">{t('finance.sales_off')}</span>
                       </div>
                       <p className="text-sm font-bold text-blue-600">{mgr.offlineSales}</p>
                     </div>
-                    <div className="bg-slate-50/70 rounded-lg p-2">
+                    <div className="hidden sm:block bg-slate-50/70 rounded-lg p-2">
                       <div className="flex items-center justify-center gap-1 mb-1">
                         <Eye size={11} className="text-indigo-400" />
                         <span className="text-[10px] text-slate-400">{t('finance.visited_onl')}</span>
                       </div>
                       <p className="text-sm font-bold text-indigo-600">{mgr.onlineCount}</p>
                     </div>
-                    <div className="bg-slate-50/70 rounded-lg p-2">
+                    <div className="hidden sm:block bg-slate-50/70 rounded-lg p-2">
                       <div className="flex items-center justify-center gap-1 mb-1">
                         <Phone size={11} className="text-slate-400" />
                         <span className="text-[10px] text-slate-400">{t('finance.leads')}</span>
@@ -1275,7 +1283,7 @@ export default function Finance() {
                         {mgr.actual.leads} <span className="text-xs text-slate-400">/ {mgr.plan.leads}</span>
                       </p>
                     </div>
-                    <div className="bg-slate-50/70 rounded-lg p-2">
+                    <div className="hidden sm:block bg-slate-50/70 rounded-lg p-2">
                       <div className="flex items-center justify-center gap-1 mb-1">
                         <Phone size={11} className="text-slate-400" />
                         <span className="text-[10px] text-slate-400">{t('finance.conversations')}</span>
@@ -1284,7 +1292,7 @@ export default function Finance() {
                         {mgr.actual.conversations} <span className="text-xs text-slate-400">/ {mgr.plan.conversations}</span>
                       </p>
                     </div>
-                    <div className="bg-slate-50/70 rounded-lg p-2">
+                    <div className="hidden sm:block bg-slate-50/70 rounded-lg p-2">
                       <div className="flex items-center justify-center gap-1 mb-1">
                         <TrendingUp size={11} className="text-emerald-400" />
                         <span className="text-[10px] text-slate-400">{t('finance.revenue_short')}</span>
@@ -1292,6 +1300,10 @@ export default function Finance() {
                       <p className="text-sm font-bold text-emerald-600">{formatRevenue(mgr.actual.revenue)}</p>
                     </div>
                   </div>
+                  {/* Phones show the 3 key metrics; the rest are one tap away in the manager card */}
+                  <p className="sm:hidden mt-2 flex items-center justify-end gap-1 text-[11px] font-medium text-blue-600">
+                    Продажи и все показатели <ChevronRight size={12} />
+                  </p>
                 </div>
               </div>
             )
@@ -1339,10 +1351,10 @@ export default function Finance() {
       {/* ─── Payment methods of the month ───────────────────────────────── */}
       {pageTab === 'overview' && canSeeSalesList && !isSales && (
       <div className="glass-card rounded-2xl p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-4 flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <CreditCard size={20} className="text-teal-600" />
           Способы оплаты
-          <span className="ml-auto text-xs font-normal text-slate-400">
+          <span className="w-full md:w-auto md:ml-auto text-xs font-normal text-slate-400">
             {MONTH_NAMES[selectedMonth - 1]} {selectedYear} · {formatRevenue(methodStats.total)}
           </span>
         </h3>
@@ -1352,13 +1364,16 @@ export default function Finance() {
           <div className="space-y-2">
             {methodStats.rows.map(([method, v]) => (
               <button key={method} onClick={() => setMethodDetail(method)}
-                className="w-full flex items-center gap-3 rounded-lg -mx-1 px-1 py-0.5 hover:bg-slate-50 transition-colors text-left">
-                <span className="w-28 md:w-40 text-xs md:text-sm text-slate-600 text-right flex-shrink-0 truncate">{method}</span>
-                <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-lg"
+                className="w-full grid grid-cols-[1fr_auto_auto] md:flex items-center gap-x-3 gap-y-1 rounded-lg -mx-1 px-1 py-1 md:py-0.5 hover:bg-slate-50 active:bg-slate-50 transition-colors text-left">
+                {/* Phones: «method · sum · %» on top, the bar full-width below */}
+                <span className="md:w-40 text-sm text-slate-600 md:text-right flex-shrink-0 truncate min-w-0">{method}</span>
+                <div className="col-span-3 order-last md:order-none md:flex-1 h-2.5 md:h-6 bg-slate-100 rounded-full md:rounded-lg overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full md:rounded-lg"
                     style={{ width: `${Math.max(4, (v.sum / methodStats.max) * 100)}%` }} />
                 </div>
-                <span className="w-24 md:w-28 text-xs md:text-sm font-semibold text-slate-700 tabular-nums text-right flex-shrink-0">{formatRevenue(v.sum)}</span>
+                <span className="md:w-28 text-sm font-semibold text-slate-700 tabular-nums text-right flex-shrink-0 whitespace-nowrap">
+                  {formatRevenue(v.sum)}<span className="md:hidden font-normal text-slate-400"> · {v.count}×</span>
+                </span>
                 <span className="w-10 text-xs text-slate-500 tabular-nums text-right flex-shrink-0">
                   {methodStats.total > 0 ? Math.round(v.sum / methodStats.total * 100) : 0}%
                 </span>
@@ -1374,8 +1389,8 @@ export default function Finance() {
       {/* ─── Recent Transactions ─────────────────────────────────────────── */}
       {pageTab === 'overview' && canSeeSalesList && (
       <div className="glass-card rounded-2xl p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-          <ArrowUpRight size={20} className="text-emerald-600" />
+        <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <ArrowUpRight size={20} className="text-emerald-600 shrink-0" />
           {t('finance.recent_sales')}
           <div className="ml-auto flex items-center gap-3">
             {!isSales && (
@@ -1396,10 +1411,13 @@ export default function Finance() {
         {recentTransactions.length === 0 ? (
           <p className="text-sm text-slate-400 text-center py-6">{t('finance.no_sales_period')}</p>
         ) : (
-          <div className={`space-y-2 ${!isSales && recentTransactions.length > 10 ? 'max-h-[600px] overflow-y-auto pr-1' : ''}`}>
+          // No inner scroll box on phones: a scroller inside the page scroller traps the swipe
+          <div className={`space-y-2 ${!isSales && recentTransactions.length > 10 ? 'md:max-h-[600px] md:overflow-y-auto md:pr-1' : ''}`}>
             {recentTransactions.map((p) => (
-              <div key={p.id} className="flex items-center justify-between py-2.5 px-4 bg-emerald-50/60 rounded-xl hover:bg-emerald-50 transition-colors group">
-                <div className="min-w-0">
+              <div key={p.id}
+                onClick={canPayments ? () => { if (window.matchMedia('(max-width: 767px)').matches) openEditPayment(p) } : undefined}
+                className={`flex items-start md:items-center justify-between py-2.5 px-3 md:px-4 bg-emerald-50/60 rounded-xl hover:bg-emerald-50 transition-colors group ${canPayments ? 'max-md:cursor-pointer max-md:active:bg-emerald-100/70' : ''}`}>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-slate-900 truncate">{p.student}</p>
                   <p className="text-xs text-slate-500">
                     {branches.find(b => b.id === p.branch)?.name} · {p.date} · {p.method}
@@ -1417,15 +1435,22 @@ export default function Finance() {
                     </p>
                   )}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 ml-2 md:ml-3">
                   <div className="text-right">
-                    <span className="text-sm font-bold text-emerald-600">+{formatCurrency(p.amount)}</span>
-                    {p.debt > 0 && <p className="text-xs text-red-500">{t('finance.debt_label')} {formatCurrency(p.debt)}</p>}
+                    <span className="text-sm font-bold text-emerald-600 whitespace-nowrap">
+                      <span className="md:hidden">+{formatRevenue(Number(p.amount) || 0)}</span>
+                      <span className="hidden md:inline">+{formatCurrency(p.amount)}</span>
+                    </span>
+                    {p.debt > 0 && (
+                      <p className="text-xs text-red-500 whitespace-nowrap">
+                        {t('finance.debt_label')} <span className="md:hidden">{formatRevenue(Number(p.debt) || 0)}</span><span className="hidden md:inline">{formatCurrency(p.debt)}</span>
+                      </p>
+                    )}
                   </div>
                   {canPayments && (
-                    <button onClick={() => openEditPayment(p)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
-                      title="Редактировать">
+                    <button onClick={(e) => { e.stopPropagation(); openEditPayment(p) }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 md:opacity-0 md:group-hover:opacity-100 transition-all"
+                      title="Редактировать" aria-label="Редактировать">
                       <Pencil size={14} />
                     </button>
                   )}
@@ -1686,9 +1711,9 @@ export default function Finance() {
       {/* ─── Edit Payment Modal ────────────────────────────────────────── */}
       <Modal isOpen={!!editingPayment} onClose={() => setEditingPayment(null)} title="Редактирование продажи" size="lg">
         {editingPayment && (
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
             {/* Student & Contact */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Имя клиента</label>
                 <input type="text" value={editForm.student}
@@ -1704,7 +1729,7 @@ export default function Finance() {
             </div>
 
             {/* Course & Amount */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Курс</label>
                 <select value={editForm.course}
@@ -1723,7 +1748,7 @@ export default function Finance() {
             </div>
 
             {/* Method & Branch */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Способ оплаты</label>
                 <select value={editForm.method}
@@ -1743,8 +1768,8 @@ export default function Finance() {
             </div>
 
             {/* Dates */}
-            <div className="grid grid-cols-3 gap-4">
-              <div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="col-span-2 sm:col-span-1">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Дата оплаты</label>
                 <input type="date" value={editForm.date}
                   onChange={e => setEditForm(prev => ({ ...prev, date: e.target.value }))}
@@ -1765,8 +1790,8 @@ export default function Finance() {
             </div>
 
             {/* Contract, Tariff, Format */}
-            <div className="grid grid-cols-3 gap-4">
-              <div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="col-span-2 sm:col-span-1">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Номер договора</label>
                 <input type="text" value={editForm.contractNumber}
                   onChange={e => setEditForm(prev => ({ ...prev, contractNumber: e.target.value }))}
@@ -1824,7 +1849,7 @@ export default function Finance() {
             </div>
 
             {/* Debt & Comment */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Долг</label>
                 <input type="number" value={editForm.debt}
@@ -1841,16 +1866,16 @@ export default function Finance() {
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-              <div>
+            <div className="form-sticky-footer flex flex-wrap items-center justify-between gap-2 pt-3 sm:pt-4 border-t border-slate-100">
+              <div className={confirmDelete ? 'w-full sm:w-auto' : ''}>
                 {!confirmDelete ? (
                   <button onClick={() => setConfirmDelete(true)}
-                    className="px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1.5">
+                    className="px-3 py-2.5 sm:py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors flex items-center gap-1.5">
                     <Trash2 size={14} /> Удалить
                   </button>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-red-500">Удалить продажу?</span>
+                    <span className="text-xs text-red-500 mr-auto sm:mr-0">Удалить продажу?</span>
                     <button onClick={async () => {
                       await deletePayment(editingPayment.id)
                       setEditingPayment(null)
@@ -1866,13 +1891,13 @@ export default function Finance() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-1 sm:flex-none">
                 <button onClick={() => { setEditingPayment(null); setConfirmDelete(false) }}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1.5">
+                  className="hidden sm:flex px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors items-center gap-1.5">
                   <X size={14} /> Отмена
                 </button>
                 <button onClick={saveEditPayment} disabled={editSaving}
-                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-lg shadow-blue-500/25">
+                  className="flex-1 sm:flex-none justify-center px-5 py-2.5 sm:py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-lg shadow-blue-500/25">
                   {editSaving ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
@@ -2100,10 +2125,10 @@ export default function Finance() {
       {/* ─── Debts tab: full expected-installments list ────────────────── */}
       {pageTab === 'debts' && (
       <div className="glass-card rounded-2xl p-4 md:p-6">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+        <h3 className="text-base md:text-lg font-semibold text-slate-900 mb-4 flex flex-wrap items-center gap-x-2 gap-y-1">
           <CreditCard size={20} className="text-amber-600" />
           {isSales ? 'Мои ожидаемые доплаты' : 'Ожидаемые доплаты'}
-          <span className="ml-auto text-sm font-bold text-amber-600">
+          <span className="w-full sm:w-auto sm:ml-auto text-sm font-bold text-amber-600">
             {formatRevenue(pendingDoplataList.reduce((s, d) => s + d.debt, 0))} сум · {pendingDoplataList.length} учеников
           </span>
         </h3>
@@ -2114,7 +2139,7 @@ export default function Finance() {
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="grid grid-cols-6 gap-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-3 py-1 sticky top-0 bg-white z-10 border-b border-slate-100">
+            <div className="hidden md:grid grid-cols-6 gap-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-3 py-1 sticky top-0 bg-white z-10 border-b border-slate-100">
               <span className="col-span-2">Студент</span>
               <span>Долг</span>
               <span>Оплачено</span>
@@ -2126,24 +2151,37 @@ export default function Finance() {
               const isToday = s.daysUntil === 0
               const isUrgent = s.daysUntil <= 3 && s.daysUntil >= 0
               const urgencyColor = isOverdue ? 'border-l-red-500 bg-red-50/30' : isToday ? 'border-l-amber-500 bg-amber-50/30' : isUrgent ? 'border-l-amber-400' : 'border-l-slate-200'
+              // Phones: a card — name on top, then debt / paid / next payment / manager in two columns
+              const cap = 'md:hidden text-[10px] text-slate-400 leading-4'
               return (
-                <div key={s.id} className={`grid grid-cols-6 gap-2 items-center px-3 py-3 rounded-xl border-l-4 ${urgencyColor} hover:bg-slate-50 transition-colors`}>
-                  <div className="col-span-2 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">{s.name}</p>
-                    <p className="text-xs text-slate-400 truncate">{s.course || '—'} · {s.group || '—'}</p>
+                <div key={s.id} className={`grid grid-cols-2 md:grid-cols-6 gap-x-3 gap-y-2 md:gap-2 items-start md:items-center px-3 py-3 rounded-xl border-l-4 bg-slate-50/50 md:bg-transparent ${urgencyColor} hover:bg-slate-50 transition-colors`}>
+                  <div className="col-span-2 min-w-0 flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900 truncate">{s.name}</p>
+                      <p className="text-xs text-slate-400 truncate">{s.course || '—'} · {s.group || '—'}</p>
+                    </div>
+                    {s.phone && (
+                      <a href={`tel:${String(s.phone).replace(/[^\d+]/g, '')}`} onClick={(e) => e.stopPropagation()}
+                        className="md:hidden shrink-0 p-2 -m-1 rounded-lg text-emerald-600 bg-emerald-50 active:bg-emerald-100" aria-label={`Позвонить ${s.name}`}>
+                        <Phone size={16} />
+                      </a>
+                    )}
                   </div>
                   <div>
+                    <p className={cap}>Долг</p>
                     <p className="text-sm font-bold text-red-600">{formatRevenue(s.debt)}</p>
                     <p className="text-[10px] text-slate-400">из {formatRevenue(s.totalCoursePrice || 0)}</p>
                   </div>
                   <div>
+                    <p className={cap}>Оплачено</p>
                     <p className="text-sm font-semibold text-emerald-600">{formatRevenue(s.totalPaid)}</p>
                     <p className="text-[10px] text-slate-400">{s.trancheCount} транш(ей)</p>
                   </div>
                   <div>
+                    <p className={cap}>Следующий платёж</p>
                     {s.nextPaymentDate ? (
                       <>
-                        <p className={`text-sm font-medium ${isOverdue ? 'text-red-600' : isToday ? 'text-amber-600' : 'text-slate-700'}`}>
+                        <p className={`text-sm font-medium whitespace-nowrap ${isOverdue ? 'text-red-600' : isToday ? 'text-amber-600' : 'text-slate-700'}`}>
                           {s.nextPaymentDate}
                         </p>
                         <p className={`text-[10px] font-semibold ${isOverdue ? 'text-red-500' : isToday ? 'text-amber-500' : isUrgent ? 'text-amber-500' : 'text-slate-400'}`}>
@@ -2154,7 +2192,8 @@ export default function Finance() {
                       <span className="text-xs text-slate-300">не указано</span>
                     )}
                   </div>
-                  <div>
+                  <div className="min-w-0">
+                    <p className={cap}>Менеджер</p>
                     <p className="text-xs text-slate-500 truncate">{s.manager || '—'}</p>
                     <p className="text-[10px] text-slate-400">{s.lastPayDate || ''}</p>
                   </div>

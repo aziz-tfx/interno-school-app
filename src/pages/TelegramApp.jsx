@@ -8,7 +8,7 @@ import {
   ArrowLeft, FileText, Link2, Download, AlertCircle, Shield,
   GraduationCap, BarChart3, User, Phone, Flame, Zap,
 } from 'lucide-react'
-import { isLessonAccessible, isModuleUnlocked, getUnlockedModuleCount } from '../utils/lessonAccess'
+import { isLessonAccessible, isModuleUnlocked, getUnlockedModuleCount, hasGiftedCourse } from '../utils/lessonAccess'
 import { computeXP, getLevel, getLevelProgress } from '../data/gamification'
 
 // ─── Kinescope / YouTube parser ────────────────────────────────────
@@ -634,6 +634,8 @@ export default function TelegramApp() {
 
         {/* Access Banner */}
         {(() => {
+          // Gifted (free) course — no payment / schedule banner
+          if (hasGiftedCourse(student, myGroup?.course)) return null
           const isOnline = student?.learningFormat === 'Онлайн'
           if (!isOnline && studentDebt > 0) {
             const hasPaid = (student?.totalCoursePrice || 0) - studentDebt > 0
@@ -674,7 +676,7 @@ export default function TelegramApp() {
           {lessonsByModule.map(mod => {
             const isOnline = student?.learningFormat === 'Онлайн'
             const hasPaid = (student?.totalCoursePrice || 0) - studentDebt > 0
-            const modLocked = mod.id !== '__ungrouped' && !isModuleUnlocked(mod.order, myGroup?.startDate, isOnline, studentDebt, hasPaid)
+            const modLocked = mod.id !== '__ungrouped' && !hasGiftedCourse(student, myGroup?.course) && !isModuleUnlocked(mod.order, myGroup?.startDate, isOnline, studentDebt, hasPaid)
 
             return (
             <div key={mod.id}>

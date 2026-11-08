@@ -10,6 +10,7 @@ import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import { authenticate } from './auth.js'
 import { createRealtime } from './realtime.js'
+import { createAmoLive } from './amoLive.js'
 import realtimeRoutes from './realtime.js'
 import authRoutes from './routes/auth.js'
 import collectionRoutes from './routes/collections.js'
@@ -22,10 +23,10 @@ import telegramRoutes from './routes/telegram.js'
 import adminRoutes from './routes/admin.js'
 import vercelRoutes from './routes/vercel.js'
 import { initTenantConfig } from './vercel/_lib/tenantConfig.js'
-import { sendTelegram, setTelegramWebhook } from './telegram.js'
+import { sendTelegram, setTelegramWebhook, setTelegramMenuButton } from './telegram.js'
 
 // telegram: injectable so tests don't call the real Bot API
-export async function buildApp({ config, pool, telegram = { send: sendTelegram, setWebhook: setTelegramWebhook } }) {
+export async function buildApp({ config, pool, telegram = { send: sendTelegram, setWebhook: setTelegramWebhook, setMenuButton: setTelegramMenuButton } }) {
   const app = Fastify({
     logger: { level: config.logLevel },
     trustProxy: true, // behind Caddy: real client IP for rate limits
@@ -72,7 +73,9 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
   })
 
   initTenantConfig(pool) // the former Vercel functions read settings and documents through it
-  const deps = { pool, config, realtime, telegram }
+  const amoLive = createAmoLive({ pool })
+  app.addHook('onClose', () => amoLive.stop())
+  const deps = { pool, config, realtime, telegram, amoLive }
   await app.register(authRoutes, deps)
   await app.register(collectionRoutes, deps)
   await app.register(realtimeRoutes, deps)

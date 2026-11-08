@@ -31,6 +31,9 @@ const METRICS_KEYS = [
   { key: 'revenue',     labelKey: 'reports.metric_revenue',                editable: false },
 ]
 
+// Derived percentage rows (sales / revenue are read-only too, but are counts)
+const CONVERSION_KEYS = new Set(['convSignups', 'convVisited', 'convSales'])
+
 const WEEK_RANGES = [
   { label: '1-7',   start: 1,  end: 7 },
   { label: '8-13',  start: 8,  end: 13 },
@@ -155,7 +158,10 @@ export default function Reports() {
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
   const [managerFilter, setManagerFilter] = useState('all')
-  const [periodMode, setPeriodMode] = useState('month') // day | week | month
+  // Table detail: day = weeks + every day, week = week totals only, month = month columns only
+  const [periodMode, setPeriodMode] = useState('day')
+  const showWeeks = periodMode !== 'month'
+  const showDays = periodMode === 'day'
 
   // Data
   const [plans, setPlans] = useState({}) // { manager: { leads, conversations, ... } }
@@ -624,7 +630,7 @@ export default function Reports() {
   // ─── Cell renderer ────────────────────────────────────────────────────────
 
   const renderDayCell = (manager, metric, day) => {
-    const isConversion = !metric.editable
+    const isConversion = CONVERSION_KEYS.has(metric.key)
     const isEditing = editingCell?.manager === manager && editingCell?.metric === metric.key && editingCell?.day === day
 
     if (day > daysInMonth) return <td key={day} className="px-1 py-1 text-center text-xs border-r border-slate-100 bg-slate-50" />
@@ -676,7 +682,7 @@ export default function Reports() {
     return (
       <td
         key={day}
-        className="px-1 py-1 text-center text-xs border-r border-slate-100 cursor-pointer hover:bg-blue-50 transition-colors"
+        className={`px-1 py-1 text-center text-xs border-r border-slate-100 ${metric.editable ? 'cursor-pointer hover:bg-blue-50 transition-colors' : ''}`}
         onClick={() => metric.editable && startEdit(manager, metric.key, day)}
       >
         <span className={rawVal > 0 ? 'text-slate-700' : 'text-slate-300'}>{display}</span>
@@ -719,7 +725,7 @@ export default function Reports() {
       </div>
 
       {/* ─── Filter Bar ──────────────────────────────────────────────────── */}
-      <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center gap-4">
+      <div className="glass-card rounded-2xl p-4 flex flex-col md:flex-row md:flex-wrap items-start md:items-center gap-4">
         {/* Month navigation */}
         <div className="flex items-center gap-2">
           <Calendar size={18} className="text-slate-400" />
@@ -815,20 +821,20 @@ export default function Reports() {
       {/* ─── Main Report Table ───────────────────────────────────────────── */}
       <div className="glass-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: '1400px' }}>
+          <table className="w-full text-sm" style={{ minWidth: showDays ? '1400px' : showWeeks ? '760px' : undefined }}>
             <thead>
               {/* Header row 1: Week groups */}
               <tr className="bg-white/40 border-b border-white/30">
-                <th className="sticky left-0 z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 100 }}>
+                <th className="rpt-c1 sticky left-0 z-20 bg-slate-50 px-2 md:px-3 py-2 text-left text-[11px] md:text-xs font-semibold text-slate-600 border-r border-slate-200">
                   {t('reports.th_manager')}
                 </th>
-                <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200" style={{ minWidth: 160 }}>
+                <th className="rpt-c2 sticky z-20 bg-slate-50 px-2 md:px-3 py-2 text-left text-xs font-semibold text-slate-600 border-r border-slate-200">
                   {t('reports.th_metric')}
                 </th>
                 <th className="px-2 py-2 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 bg-blue-50" colSpan={3}>
                   {t('reports.period_month')}
                 </th>
-                {WEEK_RANGES.map((week, wi) => {
+                {showWeeks && WEEK_RANGES.map((week, wi) => {
                   const maxDay = Math.min(week.end, daysInMonth)
                   if (week.start > daysInMonth) return null
                   const numDays = maxDay - week.start + 1
@@ -836,7 +842,7 @@ export default function Reports() {
                     <th
                       key={wi}
                       className="px-2 py-2 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 bg-slate-100"
-                      colSpan={numDays + 2} // weekPlan + days + weekTotal
+                      colSpan={(showDays ? numDays : 0) + 2} // weekPlan + days + weekTotal
                     >
                       {t('reports.th_week')} {week.label}
                     </th>
@@ -845,14 +851,14 @@ export default function Reports() {
               </tr>
               {/* Header row 2: Individual columns */}
               <tr className="bg-white/40 border-b border-white/30">
-                <th className="sticky left-0 z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
-                <th className="sticky left-[100px] z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
+                <th className="rpt-c1 sticky left-0 z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
+                <th className="rpt-c2 sticky z-20 bg-slate-50 px-3 py-1 border-r border-slate-200" />
                 {/* Month columns */}
                 <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">{t('reports.th_month_plan')}</th>
                 <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-100 bg-blue-50">{t('reports.th_month_fact')}</th>
                 <th className="px-2 py-1 text-center text-[10px] font-medium text-blue-600 border-r border-slate-200 bg-blue-50">%</th>
                 {/* Week columns */}
-                {WEEK_RANGES.map((week, wi) => {
+                {showWeeks && WEEK_RANGES.map((week, wi) => {
                   const maxDay = Math.min(week.end, daysInMonth)
                   if (week.start > daysInMonth) return null
                   const cells = []
@@ -861,7 +867,7 @@ export default function Reports() {
                       {t('reports.th_week_plan')}
                     </th>
                   )
-                  for (let d = week.start; d <= maxDay; d++) {
+                  for (let d = week.start; showDays && d <= maxDay; d++) {
                     const dow = getDayOfWeek(selectedYear, selectedMonth, d)
                     const dayName = DAY_NAMES[dow]
                     cells.push(
@@ -883,7 +889,7 @@ export default function Reports() {
             <tbody>
               {visibleManagers.map((manager, mi) => (
                 METRICS.map((metric, mIdx) => {
-                  const isConversion = !metric.editable
+                  const isConversion = CONVERSION_KEYS.has(metric.key)
                   const isFirstRow = mIdx === 0
                   const isLastRow = mIdx === METRICS.length - 1
                   const rowBg = isConversion ? 'bg-slate-50/70' : 'bg-white'
@@ -909,25 +915,23 @@ export default function Reports() {
                       {/* Manager name (merged visually) */}
                       {isFirstRow ? (
                         <td
-                          className="sticky left-0 z-10 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 border-r border-slate-200 align-top"
+                          className="rpt-c1 sticky left-0 z-10 bg-white px-2 md:px-3 py-1.5 text-[11px] md:text-xs font-bold text-slate-800 border-r border-slate-200 align-top"
                           rowSpan={METRICS.length}
-                          style={{ minWidth: 100 }}
                         >
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs">
+                            <div className="hidden md:flex w-7 h-7 shrink-0 rounded-full bg-blue-100 items-center justify-center text-blue-700 font-bold text-xs">
                               {manager[0]}
                             </div>
-                            {manager}
+                            <span className="min-w-0 [overflow-wrap:break-word]">{manager}</span>
                           </div>
                         </td>
                       ) : null}
 
                       {/* Metric label */}
                       <td
-                        className={`sticky left-[100px] z-10 px-3 py-1.5 text-xs border-r border-slate-200 ${
+                        className={`rpt-c2 sticky z-10 px-2 md:px-3 py-1.5 text-[11px] md:text-xs border-r border-slate-200 ${
                           isConversion ? 'bg-slate-50 text-slate-500 italic' : 'bg-white text-slate-700 font-medium'
                         }`}
-                        style={{ minWidth: 160 }}
                       >
                         {metric.label}
                       </td>
@@ -954,7 +958,7 @@ export default function Reports() {
                       </td>
 
                       {/* Week columns */}
-                      {WEEK_RANGES.map((week, wi) => {
+                      {showWeeks && WEEK_RANGES.map((week, wi) => {
                         const maxDay = Math.min(week.end, daysInMonth)
                         if (week.start > daysInMonth) return null
                         const cells = []
@@ -968,7 +972,7 @@ export default function Reports() {
                         )
 
                         // Individual days
-                        for (let d = week.start; d <= maxDay; d++) {
+                        for (let d = week.start; showDays && d <= maxDay; d++) {
                           cells.push(renderDayCell(manager, metric, d))
                         }
 
@@ -1007,7 +1011,7 @@ export default function Reports() {
                 }`}>
                   {overallPlan > 0 ? `${(overallFact / overallPlan * 100).toFixed(0)}%` : '—'}
                 </td>
-                {WEEK_RANGES.map((week, wi) => {
+                {showWeeks && WEEK_RANGES.map((week, wi) => {
                   const maxDay = Math.min(week.end, daysInMonth)
                   if (week.start > daysInMonth) return null
                   const cells = []
@@ -1021,7 +1025,7 @@ export default function Reports() {
                     </td>
                   )
 
-                  for (let d = week.start; d <= maxDay; d++) {
+                  for (let d = week.start; showDays && d <= maxDay; d++) {
                     let dayTotal = 0
                     managers.forEach(mgr => { dayTotal += getDayValue(mgr, 'revenue', d) })
                     cells.push(

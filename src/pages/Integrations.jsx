@@ -131,6 +131,7 @@ export default function Integrations() {
   const [tgTesting, setTgTesting] = useState(false)
 
   const [amoStatus, setAmoStatus] = useState(null)
+  const [amoInfo, setAmoInfo] = useState(null) // /api/amo/status: { connected, source, account, message }
   const [amoShowToken, setAmoShowToken] = useState(false)
   const [amoRefreshing, setAmoRefreshing] = useState(false)
   const [amoAuthCode, setAmoAuthCode] = useState('')
@@ -177,8 +178,11 @@ export default function Integrations() {
   const connectTgWebhook = async () => {
     setTgHooking(true)
     try {
-      await api('/api/admin/telegram/webhook', { method: 'POST' })
-      toast.success('Бот подключён к серверу: привязка учеников работает')
+      const res = await api('/api/admin/telegram/webhook', { method: 'POST', body: { appUrl: window.location.origin } })
+      if (res?.miniAppUrl) setCfg(prev => ({ ...prev, telegram: { ...prev.telegram, miniAppUrl: res.miniAppUrl } }))
+      toast.success(res?.menuButton
+        ? 'Бот подключён: кнопка «INTERNO» в боте открывает приложение'
+        : 'Бот подключён к серверу: привязка учеников работает')
     } catch (e) {
       toast.error(e.message)
     }
@@ -228,9 +232,21 @@ export default function Integrations() {
     try { await saveIntegrationSection(tenantId, 'amocrm', cfg.amocrm) } catch {}
     try {
       const data = await checkAmoStatus()
+      setAmoInfo(data)
       setAmoStatus(data.connected ? 'ok' : 'error')
     } catch { setAmoStatus('error') }
   }
+
+  // Show the live state on open (no save): the main school may run on the
+  // server's .env keys while every field here is empty.
+  useEffect(() => {
+    let cancelled = false
+    setAmoStatus('checking')
+    checkAmoStatus()
+      .then(data => { if (!cancelled) { setAmoInfo(data); setAmoStatus(data.connected ? 'ok' : 'error') } })
+      .catch(() => { if (!cancelled) setAmoStatus(null) })
+    return () => { cancelled = true }
+  }, [tenantId])
 
   const doAmoRefresh = async () => {
     setAmoRefreshing(true)
@@ -400,10 +416,18 @@ export default function Integrations() {
               {!USE_SERVER && <> Не забудьте зарегистрировать webhook: <code className="font-mono">/api/telegram/notify?tenantId={tenantId}</code></>}
             </p>
             {USE_SERVER && (
-              <button onClick={connectTgWebhook} disabled={tgHooking}
-                className="mt-2 px-4 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl text-sm font-medium hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5">
-                <Plug size={14} /> {tgHooking ? 'Подключение...' : 'Подключить бота к серверу'}
-              </button>
+              <>
+                <button onClick={connectTgWebhook} disabled={tgHooking}
+                  className="mt-2 px-4 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl text-sm font-medium hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5">
+                  <Plug size={14} /> {tgHooking ? 'Подключение...' : 'Подключить бота и мини-приложение'}
+                </button>
+                <p className="text-xs text-slate-400 mt-1.5">
+                  В боте появится кнопка меню «INTERNO» — она открывает эту систему прямо в Telegram
+                  {cfg.telegram.miniAppUrl && <> (<code className="font-mono break-all">{cfg.telegram.miniAppUrl}</code>)</>}.
+                  Сотрудники и ученики входят один раз по логину и паролю, дальше — автоматически через Telegram.
+                  Нажимайте кнопку с основного адреса системы: его и откроет бот.
+                </p>
+              </>
             )}
           </div>
 
@@ -647,8 +671,28 @@ export default function Integrations() {
             </div>
           </div>
 
-          {amoStatus === 'ok' && <div className="text-sm text-emerald-600 flex items-center gap-1.5"><CheckCircle size={14} /> Подключено</div>}
-          {amoStatus === 'error' && <div className="text-sm text-red-500 flex items-center gap-1.5"><XCircle size={14} /> Ошибка подключения. Проверьте токен.</div>}
+          {USE_SERVER && <AmoLiveBlock />}
+
+          {amoStatus === 'ok' && (
+            <div className="text-sm text-emerald-600 flex items-start gap-1.5">
+              <CheckCircle size={14} className="mt-0.5 shrink-0" />
+              <span>
+                Подключено{amoInfo?.account ? ` к «${amoInfo.account}»` : ''}{amoInfo?.subdomain ? ` (${amoInfo.subdomain}.amocrm.ru)` : ''}
+                {amoInfo?.source === 'env' && (
+                  <span className="block text-xs text-slate-500 mt-0.5">
+                    Используются ключи из настроек сервера (.env), поэтому поля выше пустые — заполнять их не нужно.
+                    Если заполнить и сохранить, будут использоваться ключи с этой страницы.
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+          {amoStatus === 'error' && (
+            <div className="text-sm text-red-500 flex items-start gap-1.5">
+              <XCircle size={14} className="mt-0.5 shrink-0" />
+              <span>{amoInfo?.message || 'Ошибка подключения. Проверьте токен.'}</span>
+            </div>
+          )}
 
           <div className="flex flex-wrap justify-between items-center gap-2">
             <div className="flex gap-2">
@@ -857,6 +901,81 @@ export default function Integrations() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// amoCRM → INTERNO webhook: amoCRM reports every deal / task / note change,
+// and the amoCRM screens update at once instead of polling (server/src/amoLive.js).
+function AmoLiveBlock() {
+  const [info, setInfo] = useState(null) // { lastEventAt, webhookUrl }
+  const [busy, setBusy] = useState(false)
+  const [manual, setManual] = useState(false)
+
+  useEffect(() => {
+    api('/api/amo/live').then(setInfo).catch(() => setInfo({}))
+  }, [])
+
+  const connect = async () => {
+    setBusy(true)
+    try {
+      const res = await api('/api/admin/amo/webhook', { method: 'POST' })
+      setInfo(prev => ({ ...prev, webhookUrl: res.webhookUrl }))
+      toast.success('Готово: изменения из amoCRM будут приходить сразу')
+    } catch (e) {
+      if (e.body?.webhookUrl) setInfo(prev => ({ ...prev, webhookUrl: e.body.webhookUrl }))
+      setManual(true)
+      toast.error(e.message)
+    }
+    setBusy(false)
+  }
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(info.webhookUrl); toast.success('Адрес скопирован') } catch { /* select manually */ }
+  }
+
+  const lastEvent = info?.lastEventAt ? new Date(info.lastEventAt).toLocaleString('ru-RU') : null
+  return (
+    <div className="bg-slate-50 rounded-xl p-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Живые обновления (вебхук amoCRM)</label>
+          <p className="text-xs text-slate-500">
+            amoCRM сам сообщает о каждом изменении сделок, задач и примечаний — экраны «amoCRM эффективность»
+            и карточки менеджеров в «Продажах» обновляются сразу, без ожидания минуты.
+          </p>
+          <p className={`text-xs mt-1.5 flex items-center gap-1.5 ${lastEvent ? 'text-emerald-600' : 'text-slate-400'}`}>
+            <span className={`w-2 h-2 rounded-full ${lastEvent ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+            {lastEvent ? `Работает · последнее событие ${lastEvent}` : 'Событий от amoCRM пока не было'}
+          </p>
+        </div>
+        <button onClick={connect} disabled={busy}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5 shrink-0">
+          <RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> {busy ? 'Подключение...' : 'Включить'}
+        </button>
+      </div>
+      {info?.webhookUrl && (
+        <div className="mt-3">
+          <button onClick={() => setManual(v => !v)} className="text-xs text-indigo-600 hover:text-indigo-800">
+            {manual ? 'Скрыть' : 'Подключить вручную'}
+          </button>
+          {manual && (
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-slate-500">
+                amoCRM → Настройки → Интеграции → Web hooks → «Добавить хук»: вставьте адрес и отметьте события
+                сделок (добавлены, изменены, смена статуса, смена ответственного, удалены), примечания и задачи.
+              </p>
+              <div className="flex gap-2">
+                <input readOnly value={info.webhookUrl} onFocus={(e) => e.target.select()}
+                  className="flex-1 min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono" />
+                <button onClick={copy} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium hover:bg-slate-100 shrink-0">
+                  Копировать
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

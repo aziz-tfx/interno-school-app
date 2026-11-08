@@ -17,6 +17,8 @@ import { getCollection, canRead, TABLE_TO_COLLECTION, isStudent } from './collec
 const TICKET_TTL_MS = 60_000
 const HEARTBEAT_MS = 25_000 // keep proxies from closing idle streams
 const CRM_TABLES = new Set(['crm_leads', 'crm_tasks', 'crm_activities', 'crm_stages', 'crm_files', 'crm_contacts'])
+// Staff-only channels that aren't tables: 'amo' = "the school's amoCRM changed" (amoLive.js)
+const STAFF_CHANNELS = new Set([...CRM_TABLES, 'amo'])
 
 export function createRealtime({ databaseUrl, log }) {
   const tickets = new Map()     // ticket → { user, expiresAt }
@@ -78,7 +80,7 @@ export function createRealtime({ databaseUrl, log }) {
   function allowedTables(user, names) {
     const tables = new Set()
     for (const name of names) {
-      if (CRM_TABLES.has(name)) {
+      if (STAFF_CHANNELS.has(name)) {
         if (!isStudent(user)) tables.add(name)
         continue
       }

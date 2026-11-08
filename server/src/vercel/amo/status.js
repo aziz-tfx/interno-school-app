@@ -1,6 +1,7 @@
 // Vercel Serverless Function — check amoCRM connection status
 // GET /api/amo/status
 
+import { amoFetch } from '../_lib/amoFetch.js'
 import { resolveAmo } from '../_lib/tenantConfig.js'
 
 export default async function handler(req, res) {
@@ -22,14 +23,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    const accountRes = await fetch(`https://${AMO_SUBDOMAIN}.amocrm.ru/api/v4/account`, {
+    const accountRes = await amoFetch(`https://${AMO_SUBDOMAIN}.amocrm.ru/api/v4/account`, {
       headers: { 'Authorization': `Bearer ${AMO_ACCESS_TOKEN}` },
     })
 
     if (!accountRes.ok) {
       return res.status(200).json({
         connected: false,
-        message: 'Токен amoCRM невалиден или истёк. Обновите AMO_ACCESS_TOKEN.',
+        source: amo.source,
+        subdomain: AMO_SUBDOMAIN,
+        canRefresh: Boolean(amo.refreshToken && amo.clientId && amo.clientSecret),
+        message: amo.source === 'env'
+          ? `amoCRM ответил ${accountRes.status}: токен из настроек сервера (.env) невалиден или истёк. Подключите интеграцию заново на этой странице.`
+          : `amoCRM ответил ${accountRes.status}: токен невалиден или истёк. Нажмите «Обновить токен» или получите новый код авторизации.`,
       })
     }
 
@@ -37,14 +43,17 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       connected: true,
+      source: amo.source,
       account: account.name,
       subdomain: AMO_SUBDOMAIN,
+      canRefresh: Boolean(amo.refreshToken && amo.clientId && amo.clientSecret),
       message: `Подключено к ${account.name}`,
     })
 
   } catch (err) {
     return res.status(200).json({
       connected: false,
+      source: amo.source,
       message: `Ошибка подключения: ${err.message}`,
     })
   }

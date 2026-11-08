@@ -19,16 +19,30 @@ import { formatCurrency } from '../data/mockData'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtShort = (n, t) => {
+  const sign = n < 0 ? '-' : ''
+  const a = Math.abs(n)
   if (t) {
-    if (n >= 1e9) return (n / 1e9).toFixed(1) + ' ' + t('dashboard.fmt_billion')
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + ' ' + t('dashboard.fmt_million')
-    if (n >= 1e3) return (n / 1e3).toFixed(0) + ' ' + t('dashboard.fmt_thousand')
+    if (a >= 1e9) return sign + (a / 1e9).toFixed(1) + ' ' + t('dashboard.fmt_billion')
+    if (a >= 1e6) return sign + (a / 1e6).toFixed(1) + ' ' + t('dashboard.fmt_million')
+    if (a >= 1e3) return sign + (a / 1e3).toFixed(0) + ' ' + t('dashboard.fmt_thousand')
   } else {
-    if (n >= 1e9) return (n / 1e9).toFixed(1) + ' млрд'
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + ' млн'
-    if (n >= 1e3) return (n / 1e3).toFixed(0) + ' тыс'
+    if (a >= 1e9) return sign + (a / 1e9).toFixed(1) + ' млрд'
+    if (a >= 1e6) return sign + (a / 1e6).toFixed(1) + ' млн'
+    if (a >= 1e3) return sign + (a / 1e3).toFixed(0) + ' тыс'
   }
   return String(n)
+}
+
+// Local YYYY-MM-DD (toISOString() is UTC — wrong date until 05:00 in Tashkent)
+const localISODate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+// Russian plural: 1 оплата, 2 оплаты, 5 оплат
+const ruPlural = (n, one, few, many) => {
+  const m10 = n % 10, m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+  return many
 }
 
 const pct = (a, b) => b > 0 ? Math.round((a / b) * 100) : 0
@@ -152,7 +166,7 @@ function BranchScoreRow({ branch, students, teachers, payments, rank, t }) {
 
   return (
     <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-      <td className="py-4 px-4">
+      <td data-card="title" className="py-4 px-4">
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${
             rank === 0 ? 'from-amber-400 to-amber-500' : rank === 1 ? 'from-slate-300 to-slate-400' : 'from-orange-300 to-orange-400'
@@ -204,7 +218,8 @@ function BranchScoreRow({ branch, students, teachers, payments, rank, t }) {
 export default function Dashboard() {
   const { user, hasPermission, employees } = useAuth()
   const { branches, students, teachers, payments, courses, getDebtors, getBranchName } = useData()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const chartLocale = language === 'uz' ? 'uz-UZ' : 'ru-RU'
 
   const TABS = [
     { id: 'executive', label: t('dashboard.tab_executive') },
@@ -240,14 +255,18 @@ export default function Dashboard() {
   const [customTo, setCustomTo] = useState('')
   const [showTimePicker, setShowTimePicker] = useState(false)
   const timePickerBtnRef = useRef(null)
-  const [pickerPos, setPickerPos] = useState({ top: 0, left: 0, width: 0 })
+  const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 })
 
   useEffect(() => {
     if (!showTimePicker) return
     const updatePos = () => {
       const r = timePickerBtnRef.current?.getBoundingClientRect()
       if (!r) return
-      setPickerPos({ top: r.bottom + 8, right: window.innerWidth - r.right })
+      // Right-aligned to the button, but clamped so the 280px popover never
+      // leaves the screen when the button wraps to the left on phones.
+      const w = 280
+      const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))
+      setPickerPos({ top: r.bottom + 8, left })
     }
     updatePos()
     window.addEventListener('scroll', updatePos, true)
@@ -286,6 +305,8 @@ export default function Dashboard() {
   const scopedTeachers  = user.branch === 'all' ? teachers  : teachers.filter(t => t.branch === user.branch)
   const allScopedPayments  = user.branch === 'all' ? payments  : payments.filter(p => p.branch === user.branch)
   const scopedPayments = filterByDate(allScopedPayments)
+  // All branches' payments within the selected period (Филиалы tab)
+  const periodPayments = filterByDate(payments)
   const debtors = getDebtors(user.branch)
 
   // ── Computed metrics ─────────────────────────────────────────────────
@@ -369,7 +390,7 @@ export default function Dashboard() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .map(d => ({
         ...d,
-        label: new Date(d.month + '-01').toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' }),
+        label: new Date(d.month + '-01').toLocaleDateString(chartLocale, { month: 'short', year: '2-digit' }),
         incomeM: Math.round(d.income / 1e6),
         expenseM: Math.round(d.expense / 1e6),
         profitM: Math.round(d.profit / 1e6),
@@ -389,13 +410,13 @@ export default function Dashboard() {
     const branchRevenueData = Object.values(branchRevenue)
       .sort((a, b) => a.month.localeCompare(b.month))
       .map(d => {
-        const row = { label: new Date(d.month + '-01').toLocaleDateString('ru-RU', { month: 'short' }) }
+        const row = { label: new Date(d.month + '-01').toLocaleDateString(chartLocale, { month: 'short' }) }
         branches.forEach(b => { row[b.id] = Math.round((d[b.id] || 0) / 1e6) })
         return row
       })
 
     // Today's activity
-    const today = new Date().toISOString().split('T')[0]
+    const today = localISODate()
     const todayPayments = scopedPayments.filter(p => p.date === today)
     const todayIncome = todayPayments.filter(p => p.type === 'income').reduce((s, p) => s + p.amount, 0)
     const todayCount  = todayPayments.filter(p => p.type === 'income').length
@@ -421,7 +442,7 @@ export default function Dashboard() {
       monthlyTrend, branchRevenueData,
       todayIncome, todayCount, totalEmployees,
     }
-  }, [scopedStudents, scopedTeachers, scopedPayments, branches, payments, employees, courses, user.branch, filterByDate, t])
+  }, [scopedStudents, scopedTeachers, scopedPayments, branches, payments, employees, courses, user.branch, filterByDate, t, chartLocale])
 
   // ── Visible tabs ─────────────────────────────────────────────────────
   const visibleTabs = TABS.filter(t => {
@@ -467,7 +488,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Time Filter Bar ── */}
+      {/* ── Time Filter Bar ── (the Sales tab has its own month picker) */}
+      {activeTab !== 'sales' && (
       <div className="glass-card rounded-2xl p-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-slate-500 mr-1">
@@ -527,10 +549,12 @@ export default function Dashboard() {
         </div>
       </div>
 
+      )}
+
       {/* ── Tab bar ── */}
       <div className="flex gap-1 glass rounded-xl p-1">
         {visibleTabs.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+          <button key={tab.id} onClick={() => { setActiveTab(tab.id); setShowTimePicker(false) }}
             className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all ${
               activeTab === tab.id
                 ? 'bg-white text-slate-900 shadow-sm'
@@ -550,7 +574,7 @@ export default function Dashboard() {
           {/* Row 1: Primary KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <KpiCard title={t('dashboard.kpi_total_income')} value={fmtShort(metrics.totalIncome, t)} icon={DollarSign} color="green"
-              subtitle={`${metrics.todayCount} ${t('dashboard.kpi_today_payments')}`}
+              subtitle={`${metrics.todayCount} ${language === 'uz' ? t('dashboard.kpi_today_payments') : ruPlural(metrics.todayCount, 'оплата сегодня', 'оплаты сегодня', 'оплат сегодня')}`}
               trendLabel={`${t('dashboard.kpi_today')} ${fmtShort(metrics.todayIncome, t)}`} />
 
             {canFullPnL && (
@@ -768,12 +792,12 @@ export default function Dashboard() {
               <div className="glass-card rounded-2xl p-6">
                 <h3 className="text-base font-semibold text-slate-900 mb-3">{t('dashboard.recent_operations')}</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {scopedPayments.slice(0, 8).map((p) => (
+                  {[...scopedPayments].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 8).map((p) => (
                     <div key={p.id} className={`flex items-center justify-between py-2 px-3 rounded-lg ${
                       p.type === 'income' ? 'bg-emerald-50' : 'bg-red-50'
                     }`}>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{p.student}</p>
+                        <p className="text-sm font-medium truncate">{p.student || p.category || p.description || '—'}</p>
                         <p className="text-[10px] text-slate-400">{getBranchName(p.branch)} &middot; {p.date}</p>
                       </div>
                       <span className={`text-sm font-bold whitespace-nowrap ml-2 ${
@@ -823,10 +847,10 @@ export default function Dashboard() {
             <KpiCard title={t('dashboard.branches_tab_count')} value={visibleBranches.length} icon={Building2} color="blue" />
             <KpiCard title={t('dashboard.branches_total_capacity')} value={visibleBranches.reduce((s, b) => s + (b.capacity || 0), 0)} icon={Users} color="purple"
               subtitle={`${t('dashboard.load')}: ${metrics.utilization}%`} />
-            <KpiCard title={t('dashboard.branches_total_income')} value={fmtShort(allScopedPayments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0), t)} icon={DollarSign} color="green" />
+            <KpiCard title={t('dashboard.branches_total_income')} value={fmtShort(scopedPayments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0), t)} icon={DollarSign} color="green" />
             <KpiCard title={t('dashboard.branches_total_profit')} value={fmtShort(
-              allScopedPayments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
-              - allScopedPayments.filter(p => p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
+              scopedPayments.filter(p => p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
+              - scopedPayments.filter(p => p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
             , t)} icon={TrendingUp} color="teal" />
           </div>
 
@@ -837,7 +861,7 @@ export default function Dashboard() {
               <p className="text-xs text-slate-400">{t('dashboard.scoreboard_subtitle')}</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="table-cards table-cards-3 w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100">
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('dashboard.th_branch')}</th>
@@ -855,11 +879,11 @@ export default function Dashboard() {
                   {[...visibleBranches]
                     .map(b => ({
                       branch: b,
-                      income: payments.filter(p => p.branch === b.id && p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0),
+                      income: periodPayments.filter(p => p.branch === b.id && p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0),
                     }))
                     .sort((a, b) => b.income - a.income)
                     .map((row, i) => (
-                      <BranchScoreRow key={row.branch.id} branch={row.branch} students={students} teachers={teachers} payments={payments} rank={i} t={t} />
+                      <BranchScoreRow key={row.branch.id} branch={row.branch} students={students} teachers={teachers} payments={periodPayments} rank={i} t={t} />
                     ))}
                 </tbody>
               </table>
@@ -899,8 +923,8 @@ export default function Dashboard() {
               <p className="text-xs text-slate-400 mb-4">{t('dashboard.profitability_subtitle')}</p>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={visibleBranches.map(b => {
-                  const inc = payments.filter(p => p.branch === b.id && p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
-                  const exp = payments.filter(p => p.branch === b.id && p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
+                  const inc = periodPayments.filter(p => p.branch === b.id && p.type === 'income').reduce((s, p) => s + (p.amount || 0), 0)
+                  const exp = periodPayments.filter(p => p.branch === b.id && p.type === 'expense').reduce((s, p) => s + (p.amount || 0), 0)
                   return {
                     name: b.name,
                     income: Math.round(inc / 1e6),
@@ -979,8 +1003,8 @@ export default function Dashboard() {
       {showTimePicker && createPortal(
         <div
           data-timepicker-popover
-          className="fixed glass-strong rounded-xl shadow-xl p-4 min-w-[280px]"
-          style={{ top: pickerPos.top, right: pickerPos.right, zIndex: 9999 }}
+          className="fixed glass-strong rounded-xl shadow-xl p-4 w-[280px]"
+          style={{ top: pickerPos.top, left: pickerPos.left, zIndex: 9999 }}
         >
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">{t('dashboard.custom_period')}</p>
           <div className="space-y-3">

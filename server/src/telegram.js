@@ -2,25 +2,10 @@
 
 import { createHash } from 'node:crypto'
 
-/** Send an HTML message; never throws (notifications are best-effort). */
-export async function sendTelegram(botToken, chatId, text) {
-  if (!botToken || !chatId) return false
+/** Call a Bot API method; returns Telegram's answer ({ ok, description, result }). Never throws. */
+async function callBotApi(botToken, method, params) {
   try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
-/** Point the bot's updates at a URL; returns Telegram's answer ({ ok, description }). */
-export async function setTelegramWebhook(botToken, params) {
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -29,6 +14,49 @@ export async function setTelegramWebhook(botToken, params) {
   } catch (err) {
     return { ok: false, description: err.message }
   }
+}
+
+/**
+ * Send an HTML message; never throws (notifications are best-effort).
+ * extra — more sendMessage fields, e.g. { reply_markup } for a mini app button.
+ */
+export async function sendTelegram(botToken, chatId, text, extra = {}) {
+  if (!botToken || !chatId) return false
+  const result = await callBotApi(botToken, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', ...extra })
+  return Boolean(result?.ok)
+}
+
+/** Point the bot's updates at a URL; returns Telegram's answer ({ ok, description }). */
+export function setTelegramWebhook(botToken, params) {
+  return callBotApi(botToken, 'setWebhook', params)
+}
+
+/** The bot's menu button (left of the message field) → opens the mini app. */
+export function setTelegramMenuButton(botToken, params) {
+  return callBotApi(botToken, 'setChatMenuButton', params)
+}
+
+/** Inline keyboard with one button that opens the mini app; {} without a URL. */
+export function miniAppKeyboard(url, text = '📱 Открыть INTERNO') {
+  if (!url) return {}
+  return { reply_markup: { inline_keyboard: [[{ text, web_app: { url } }]] } }
+}
+
+/**
+ * The address the bot's mini app opens: the frontend origin + this school's
+ * tenantId (the app needs it to check Telegram's signature with the right bot).
+ * Telegram only opens https pages. Returns '' for anything else.
+ */
+export function miniAppUrl(appUrl, tenantId) {
+  let origin
+  try {
+    const u = new URL(String(appUrl || ''))
+    if (u.protocol !== 'https:') return ''
+    origin = u.origin
+  } catch {
+    return ''
+  }
+  return `${origin}/?tenantId=${encodeURIComponent(tenantId)}`
 }
 
 /**

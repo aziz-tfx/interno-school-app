@@ -41,7 +41,7 @@ export default function Toaster() {
   if (toasts.length === 0) return null
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-md pointer-events-none">
+    <div className="fixed bottom-safe left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-md pointer-events-none">
       {toasts.map(t => {
         const s = STYLES[t.type] || STYLES.info
         const Icon = s.icon

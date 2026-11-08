@@ -4,6 +4,14 @@ import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { sameBranch } from '../utils/branchMatch'
 import { useLanguage } from '../contexts/LanguageContext'
+import { toast } from '../components/Toaster'
+
+// Today in the device's time zone (toISOString() is UTC — before 05:00 in
+// Tashkent it gave yesterday's date)
+function localToday() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function Attendance() {
   const { t } = useLanguage()
@@ -11,7 +19,7 @@ export default function Attendance() {
   const { students, teachers, branches, markAttendance, getAttendanceByGroup, getAttendanceStats } = useData()
   const canMark = hasPermission('attendance', 'mark')
   const canEdit = hasPermission('attendance', 'edit')
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(localToday)
   const [selectedGroup, setSelectedGroup] = useState('')
 
   // Get groups based on role
@@ -23,7 +31,7 @@ export default function Attendance() {
     } else {
       relevantStudents = user.branch === 'all' ? students : students.filter(s => sameBranch(s.branch, user.branch, branches))
     }
-    const groups = [...new Set(relevantStudents.map(s => s.group))].sort()
+    const groups = [...new Set(relevantStudents.map(s => s.group).filter(Boolean))].sort()
     return groups
   }, [students, user])
 
@@ -39,12 +47,15 @@ export default function Attendance() {
   }
 
   const handleMark = (studentId, status) => {
-    markAttendance({
+    Promise.resolve(markAttendance({
       date: selectedDate,
       groupName: activeGroup,
       studentId,
       status,
       teacherId: user.teacherId || user.id,
+    })).catch((err) => {
+      console.error(err)
+      toast.error('Не удалось сохранить отметку. Проверьте интернет и попробуйте ещё раз.')
     })
   }
 
@@ -113,7 +124,7 @@ export default function Attendance() {
       {activeGroup && groupStudents.length > 0 ? (
         <div className="glass-card rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="table-cards w-full text-sm">
               <thead>
                 <tr className="bg-white/40 border-b border-white/30">
                   <th className="text-left py-3 px-4 text-slate-500 font-medium w-8">{t('attendance.th_number')}</th>
@@ -129,8 +140,8 @@ export default function Attendance() {
                   const stats = getAttendanceStats(student.id)
                   return (
                     <tr key={student.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4 text-slate-400">{idx + 1}</td>
-                      <td className="py-3 px-4">
+                      <td data-card="hide" className="py-3 px-4 text-slate-400">{idx + 1}</td>
+                      <td data-card="title" className="py-3 px-4">
                         <p className="font-medium text-slate-900">{student.name}</p>
                         <p className="text-xs text-slate-400">{student.phone}</p>
                       </td>
@@ -147,7 +158,7 @@ export default function Attendance() {
                           <span className="text-xs text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="py-4 px-4">
+                      <td data-card="wide" className="py-4 px-4">
                         <div className="flex items-center justify-center gap-2">
                           {Object.entries(statusIcons).map(([status, { icon: Icon, color, label }]) => {
                             const isMarked = currentStatus === status
@@ -157,7 +168,7 @@ export default function Attendance() {
                                 key={status}
                                 onClick={() => canChange && handleMark(student.id, status)}
                                 disabled={!canChange}
-                                className={`flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-2 md:px-3 py-2 md:py-1.5 rounded-lg text-xs font-medium border transition-all ${
                                   isMarked
                                     ? `${color} border-current shadow-sm scale-105`
                                     : canChange
@@ -166,7 +177,7 @@ export default function Attendance() {
                                 }`}
                               >
                                 <Icon size={14} />
-                                <span className="hidden md:inline">{label}</span>
+                                <span className="hidden min-[380px]:inline md:inline">{label}</span>
                               </button>
                             )
                           })}

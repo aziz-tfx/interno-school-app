@@ -1,8 +1,12 @@
 // Vercel Serverless Function — push sale data to amoCRM
 // POST /api/amo/push-sale
 
+import { amoFetch } from '../_lib/amoFetch.js'
 import { resolveAmo, getTenantId } from '../_lib/tenantConfig.js'
 import { ensureAmoToken } from '../_lib/amoClient.js'
+
+// a sale being recorded goes ahead of queued report downloads
+const HIGH = { priority: 'high' }
 
 export default async function handler(req, res) {
   // CORS
@@ -61,7 +65,7 @@ export default async function handler(req, res) {
     let contactId = null
 
     if (phone) {
-      const searchRes = await fetch(`${BASE}/contacts?query=${encodeURIComponent(phone)}`, { headers })
+      const searchRes = await amoFetch(`${BASE}/contacts?query=${encodeURIComponent(phone)}`, { headers }, HIGH)
       if (searchRes.ok) {
         const searchData = await searchRes.json()
         if (searchData?._embedded?.contacts?.length > 0) {
@@ -83,11 +87,11 @@ export default async function handler(req, res) {
         ],
       }]
 
-      const createRes = await fetch(`${BASE}/contacts`, {
+      const createRes = await amoFetch(`${BASE}/contacts`, {
         method: 'POST',
         headers,
         body: JSON.stringify(contactPayload),
-      })
+      }, HIGH)
 
       if (!createRes.ok) {
         const err = await createRes.text()
@@ -99,11 +103,11 @@ export default async function handler(req, res) {
       contactId = createData?._embedded?.contacts?.[0]?.id
     } else {
       // Update existing contact name
-      await fetch(`${BASE}/contacts/${contactId}`, {
+      await amoFetch(`${BASE}/contacts/${contactId}`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ name: clientName }),
-      })
+      }, HIGH)
     }
 
     // Build note text with all sale details (shared between create & reuse paths)
@@ -128,7 +132,7 @@ export default async function handler(req, res) {
     let leadId = null
     let reusedExisting = false
     try {
-      const contactRes = await fetch(`${BASE}/contacts/${contactId}?with=leads`, { headers })
+      const contactRes = await amoFetch(`${BASE}/contacts/${contactId}?with=leads`, { headers }, HIGH)
       if (contactRes.ok) {
         const contactData = await contactRes.json()
         const leadRefs = contactData?._embedded?.leads || []
@@ -138,7 +142,7 @@ export default async function handler(req, res) {
           const leadDetails = await Promise.all(
             leadRefs.slice(-10).map(async (l) => {
               try {
-                const r = await fetch(`${BASE}/leads/${l.id}`, { headers })
+                const r = await amoFetch(`${BASE}/leads/${l.id}`, { headers }, HIGH)
                 if (!r.ok) return null
                 return await r.json()
               } catch { return null }
@@ -164,16 +168,16 @@ export default async function handler(req, res) {
       // Do NOT change status — respect manual placement by the manager.
       // Bump price to sum of tranches (if new amount is higher) and add a note.
       try {
-        const existingRes = await fetch(`${BASE}/leads/${leadId}`, { headers })
+        const existingRes = await amoFetch(`${BASE}/leads/${leadId}`, { headers }, HIGH)
         const existing = existingRes.ok ? await existingRes.json() : null
         const existingPrice = Number(existing?.price) || 0
         const newPrice = Math.max(existingPrice, Number(amount) || 0)
         if (newPrice !== existingPrice) {
-          await fetch(`${BASE}/leads/${leadId}`, {
+          await amoFetch(`${BASE}/leads/${leadId}`, {
             method: 'PATCH',
             headers,
             body: JSON.stringify({ price: newPrice }),
-          })
+          }, HIGH)
         }
       } catch (err) {
         console.warn('amo: failed to update existing lead price:', err.message)
@@ -197,11 +201,11 @@ export default async function handler(req, res) {
         },
       }]
 
-      const leadRes = await fetch(`${BASE}/leads`, {
+      const leadRes = await amoFetch(`${BASE}/leads`, {
         method: 'POST',
         headers,
         body: JSON.stringify(leadPayload),
-      })
+      }, HIGH)
 
       if (!leadRes.ok) {
         const err = await leadRes.text()
@@ -218,14 +222,14 @@ export default async function handler(req, res) {
       const noteHeader = reusedExisting
         ? `💰 Оплата зарегистрирована в INTERNO App (транш №${trancheNumber || 1})\n\n`
         : ''
-      await fetch(`${BASE}/leads/${leadId}/notes`, {
+      await amoFetch(`${BASE}/leads/${leadId}/notes`, {
         method: 'POST',
         headers,
         body: JSON.stringify([{
           note_type: 'common',
           params: { text: noteHeader + noteLines },
         }]),
-      })
+      }, HIGH)
     }
 
     return res.status(200).json({

@@ -144,6 +144,8 @@ export async function runAutomations(pool, { now = new Date(), send: realSend, l
         const graceDays = settings.debtorGraceDays || 0
         for (const student of students) {
           if (student.status !== 'active') continue
+          // Main course gifted for free (bonusCourses) — nothing is owed
+          if (Array.isArray(student.bonusCourses) && student.course && student.bonusCourses.includes(student.course)) continue
           const pays = paymentsOf(payments, student.id)
           const coursePrice = num(student.totalCoursePrice)
           if (coursePrice <= 0 || pays.reduce((s, p) => s + p.amount, 0) >= coursePrice) continue

@@ -7,7 +7,7 @@ import {
   User, Phone, BookOpen, Calendar, CreditCard, FileText,
   Image, Download, AlertTriangle, CheckCircle, Clock, Plus,
   ChevronDown, ChevronUp, Paperclip, Eye, Monitor, ToggleLeft, ToggleRight,
-  FileDown, ExternalLink, Link2, Copy, Check, KeyRound, RefreshCw,
+  FileDown, ExternalLink, Link2, Copy, Check, KeyRound, RefreshCw, Pencil, X,
 } from 'lucide-react'
 import Modal from './Modal'
 import PaymentForm from './PaymentForm'
@@ -31,6 +31,22 @@ export default function StudentProfile({ student, onClose }) {
   const [editingPrice, setEditingPrice] = useState(false)
   const [coursePrice, setCoursePrice] = useState(student.totalCoursePrice || '')
   const [resettingPwd, setResettingPwd] = useState(false)
+  const [savingPrice, setSavingPrice] = useState(false)
+
+  const fmtDate = (d) => {
+    if (!d) return ''
+    const dt = new Date(d)
+    return isNaN(dt) ? String(d) : dt.toLocaleDateString('ru-RU')
+  }
+
+  const copyText = async (text, okMsg) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(okMsg)
+    } catch {
+      toast.error('Не удалось скопировать — скопируйте вручную: ' + text)
+    }
+  }
 
   // Reset (or create) the student's LMS login credentials
   const handleResetCredentials = async () => {
@@ -105,9 +121,23 @@ export default function StudentProfile({ student, onClose }) {
     (p.files || []).map(f => ({ ...f, paymentId: p.id, paymentDate: p.date, tranche: p.trancheNumber }))
   )
 
-  const handleSaveCoursePrice = () => {
-    updateStudent(student.id, { totalCoursePrice: Number(coursePrice) || 0 })
-    setEditingPrice(false)
+  const handleSaveCoursePrice = async () => {
+    if (savingPrice) return
+    setSavingPrice(true)
+    try {
+      await updateStudent(student.id, { totalCoursePrice: Number(coursePrice) || 0 })
+      setEditingPrice(false)
+    } catch (err) {
+      console.error('Save course price failed:', err)
+      toast.error('Не удалось сохранить стоимость курса. Попробуйте ещё раз.')
+    } finally {
+      setSavingPrice(false)
+    }
+  }
+
+  const startEditPrice = () => {
+    setCoursePrice(student.totalCoursePrice || '')
+    setEditingPrice(true)
   }
 
   const getFileIcon = (type) => {
@@ -125,18 +155,20 @@ export default function StudentProfile({ student, onClose }) {
       {/* Student Header */}
       <div className="flex items-start gap-4">
         <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-          {student.name.charAt(0)}
+          {(student.name || '?').charAt(0)}
         </div>
-        <div className="flex-1">
-          <h3 className="text-xl font-bold text-slate-900">{student.name}</h3>
-          <div className="flex flex-wrap gap-3 mt-1 text-sm text-slate-500">
-            <span className="flex items-center gap-1"><Phone size={13} />{student.phone}</span>
-            <span className="flex items-center gap-1"><BookOpen size={13} />{student.course}</span>
-            <span className="flex items-center gap-1"><Calendar size={13} />{t('studentProfile.since')} {student.startDate}</span>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-xl font-bold text-slate-900 break-words">{student.name}</h3>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-sm text-slate-500">
+            {student.phone && (
+              <a href={`tel:${student.phone.replace(/[^\d+]/g, '')}`} className="flex items-center gap-1 hover:text-blue-600"><Phone size={13} />{student.phone}</a>
+            )}
+            {student.course && <span className="flex items-center gap-1"><BookOpen size={13} />{student.course}</span>}
+            {student.startDate && <span className="flex items-center gap-1"><Calendar size={13} />{t('studentProfile.since')} {fmtDate(student.startDate)}</span>}
           </div>
           <div className="flex flex-wrap gap-2 mt-2">
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{branchName}</span>
-            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">{student.group}</span>
+            {branchName && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{branchName}</span>}
+            {student.group && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">{student.group}</span>}
             <span className={`text-xs px-2 py-0.5 rounded-full ${
               student.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
               student.status === 'debtor' ? 'bg-red-100 text-red-700' :
@@ -172,7 +204,8 @@ export default function StudentProfile({ student, onClose }) {
         </div>
         {canPayments && (
           <button
-            onClick={() => updateStudent(student.id, { lmsAccess: !student.lmsAccess })}
+            onClick={() => updateStudent(student.id, { lmsAccess: !student.lmsAccess })
+              .catch(err => { console.error('LMS toggle failed:', err); toast.error('Не удалось изменить доступ к LMS.') })}
             className="flex-shrink-0"
             title={student.lmsAccess ? t('studentProfile.lms_disable') : t('studentProfile.lms_enable')}
           >
@@ -204,14 +237,14 @@ export default function StudentProfile({ student, onClose }) {
             <span className="text-slate-500">{t('studentProfile.lms_login')}</span>
             <span className="font-mono font-bold text-slate-900 flex items-center gap-1.5">
               {student.lmsLogin}
-              <button onClick={() => { navigator.clipboard?.writeText(student.lmsLogin); toast.success('Логин скопирован') }}
-                className="text-slate-400 hover:text-blue-600"><Copy size={12} /></button>
+              <button onClick={() => copyText(student.lmsLogin, 'Логин скопирован')} aria-label="Скопировать логин"
+                className="p-2 -m-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-100/60"><Copy size={14} /></button>
             </span>
             <span className="text-slate-500">{t('studentProfile.lms_password')}</span>
             <span className="font-mono font-bold text-slate-900 flex items-center gap-1.5">
               {student.lmsPassword}
-              <button onClick={() => { navigator.clipboard?.writeText(student.lmsPassword); toast.success('Пароль скопирован') }}
-                className="text-slate-400 hover:text-blue-600"><Copy size={12} /></button>
+              <button onClick={() => copyText(student.lmsPassword, 'Пароль скопирован')} aria-label="Скопировать пароль"
+                className="p-2 -m-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-100/60"><Copy size={14} /></button>
             </span>
           </div>
         </div>
@@ -239,21 +272,38 @@ export default function StudentProfile({ student, onClose }) {
             )}
           </div>
           <p className="text-xs text-slate-500 mb-3">
-            Полный бесплатный доступ в кабинете студента, независимо от долга по основному курсу.
+            Полный бесплатный доступ в кабинете студента, без оплаты. Можно подарить и основной курс студента.
           </p>
           <div className="flex flex-wrap gap-2">
-            {getPromoCourses(courses)
-              .filter(c => c.name !== student.course)
+            {[
+              // The student's own main course can be gifted too (a client who
+              // got it for free) — then it opens without any payment.
+              ...courses.filter(c => c.name === student.course),
+              ...getPromoCourses(courses).filter(c => c.name !== student.course),
+            ]
               .map(c => {
                 const granted = (student.bonusCourses || []).includes(c.name)
+                const isMain = c.name === student.course
                 return (
                   <button key={c.id} type="button" disabled={!canEditStudents}
+                    title={isMain ? 'Основной курс студента — открыть бесплатно' : undefined}
                     onClick={async () => {
                       if (!canEditStudents) return
                       const cur = student.bonusCourses || []
                       const next = granted ? cur.filter(n => n !== c.name) : [...cur, c.name]
+                      // Granting a gift must also let the student into the cabinet
+                      // (it's blocked while lmsAccess is off); a gifted MAIN course
+                      // means there's nothing to owe, so lift the debtor status.
+                      const patch = { bonusCourses: next }
+                      if (!granted) {
+                        if (student.lmsAccess !== true) {
+                          patch.lmsAccess = true
+                          patch.lmsAccessGrantedAt = new Date().toISOString()
+                        }
+                        if (isMain && student.status === 'debtor') patch.status = 'active'
+                      }
                       try {
-                        await updateStudent(student.id, { bonusCourses: next })
+                        await updateStudent(student.id, patch)
                         toast.success(granted ? `Курс «${c.name}» отозван` : `🎁 Курс «${c.name}» открыт студенту`)
                       } catch (err) {
                         toast.error('Не удалось сохранить: ' + (err?.message || ''))
@@ -264,7 +314,7 @@ export default function StudentProfile({ student, onClose }) {
                         ? 'bg-violet-600 border-violet-600 text-white'
                         : 'bg-white border-slate-200 text-slate-600 hover:bg-violet-100'
                     } ${!canEditStudents ? 'opacity-60 cursor-default' : ''}`}>
-                    {granted ? '✓ ' : ''}{c.icon ? `${c.icon} ` : ''}{c.name}
+                    {granted ? '✓ ' : ''}{c.icon ? `${c.icon} ` : ''}{c.name}{isMain ? ' (основной)' : ''}
                   </button>
                 )
               })}
@@ -276,16 +326,26 @@ export default function StudentProfile({ student, onClose }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-slate-50 rounded-lg p-3">
           <p className="text-xs text-slate-500 mb-1">{t('studentProfile.course_price')}</p>
-          {editingPrice ? (
+          {editingPrice && canEditStudents ? (
             <div className="flex gap-1">
-              <input type="number" value={coursePrice} onChange={(e) => setCoursePrice(e.target.value)}
-                className="w-full px-2 py-1 border border-blue-300 rounded text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+              <input type="number" inputMode="numeric" value={coursePrice} onChange={(e) => setCoursePrice(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); handleSaveCoursePrice() }
+                  if (e.key === 'Escape') setEditingPrice(false)
+                }}
+                className="w-full min-w-0 px-2 py-1 border border-blue-300 rounded text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
                 placeholder="7 200 000" autoFocus />
-              <button onClick={handleSaveCoursePrice} className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">OK</button>
+              <button onClick={handleSaveCoursePrice} disabled={savingPrice} className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50">OK</button>
+              <button onClick={() => setEditingPrice(false)} aria-label="Отмена" className="px-1.5 py-1 text-slate-400 hover:text-slate-600"><X size={14} /></button>
             </div>
-          ) : (
-            <p className="text-sm font-bold text-slate-900 cursor-pointer hover:text-blue-600" onClick={() => setEditingPrice(true)}>
+          ) : canEditStudents ? (
+            <button type="button" onClick={startEditPrice} className="flex items-center gap-1.5 text-sm font-bold text-slate-900 hover:text-blue-600 text-left">
               {totalCoursePrice > 0 ? formatCurrency(totalCoursePrice) : <span className="text-blue-500 text-xs">{t('studentProfile.click_to_set')}</span>}
+              <Pencil size={12} className="text-slate-400 shrink-0" />
+            </button>
+          ) : (
+            <p className="text-sm font-bold text-slate-900">
+              {totalCoursePrice > 0 ? formatCurrency(totalCoursePrice) : '—'}
             </p>
           )}
         </div>
@@ -305,7 +365,7 @@ export default function StudentProfile({ student, onClose }) {
             {isOverdue ? t('studentProfile.overdue') : t('studentProfile.next_payment')}
           </p>
           <p className={`text-sm font-bold ${isOverdue ? 'text-amber-700' : 'text-blue-700'}`}>
-            {nextPaymentDate || '—'}
+            {nextPaymentDate ? fmtDate(nextPaymentDate) : '—'}
           </p>
           {isOverdue && <AlertTriangle size={12} className="text-amber-500 mt-0.5" />}
         </div>
@@ -369,7 +429,7 @@ export default function StudentProfile({ student, onClose }) {
                         {p.trancheNumber || studentPayments.length - idx}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-900">{p.date}</p>
+                        <p className="text-sm font-medium text-slate-900">{fmtDate(p.date)}</p>
                         <p className="text-xs text-slate-500">{p.method}{p.contractNumber ? ` · ${t('studentProfile.contract_label')} ${p.contractNumber}` : ''}</p>
                       </div>
                     </div>
@@ -418,7 +478,7 @@ export default function StudentProfile({ student, onClose }) {
                           <>
                             <div className="text-slate-500">{t('studentProfile.next_payment_date')}</div>
                             <div className={`font-medium ${new Date(p.nextPaymentDate) < new Date() ? 'text-red-500' : 'text-blue-600'}`}>
-                              {p.nextPaymentDate}
+                              {fmtDate(p.nextPaymentDate)}
                               {new Date(p.nextPaymentDate) < new Date() && ` ${t('studentProfile.overdue_marker')}`}
                             </div>
                           </>
@@ -476,7 +536,7 @@ export default function StudentProfile({ student, onClose }) {
                   {getFileIcon(f.type)}
                   <div className="min-w-0">
                     <p className="text-sm text-slate-700 truncate">{f.name}</p>
-                    <p className="text-xs text-slate-400">{t('studentProfile.tranche_label')} {f.tranche} · {f.paymentDate}</p>
+                    <p className="text-xs text-slate-400">{t('studentProfile.tranche_label')} {f.tranche} · {fmtDate(f.paymentDate)}</p>
                   </div>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
@@ -508,9 +568,9 @@ export default function StudentProfile({ student, onClose }) {
               return (
                 <div key={p.id} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
                   {/* Contract header row */}
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isSigned ? 'bg-emerald-100' : 'bg-blue-100'}`}>
+                  <div className="flex items-center justify-between gap-2 px-4 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-9 h-9 shrink-0 rounded-lg flex items-center justify-center ${isSigned ? 'bg-emerald-100' : 'bg-blue-100'}`}>
                         {isSigned
                           ? <CheckCircle size={18} className="text-emerald-600" />
                           : <FileText size={18} className="text-blue-600" />
@@ -518,7 +578,7 @@ export default function StudentProfile({ student, onClose }) {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-slate-900">Шартнома №{p.contractNumber}</p>
-                        <p className="text-xs text-slate-500">{p.date} · {p.course} · {formatCurrency(p.amount)}</p>
+                        <p className="text-xs text-slate-500">{fmtDate(p.date)} · {p.course} · {formatCurrency(p.amount)}</p>
                       </div>
                     </div>
                     {isSigned ? (
@@ -533,7 +593,7 @@ export default function StudentProfile({ student, onClose }) {
                   </div>
 
                   {/* Action buttons */}
-                  <div className="flex items-center gap-2 px-4 py-2.5 bg-white border-t border-slate-100">
+                  <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-white border-t border-slate-100">
                     {/* View contract */}
                     <button onClick={() => setViewingContract(p)}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors">
@@ -541,10 +601,14 @@ export default function StudentProfile({ student, onClose }) {
                     </button>
 
                     {/* Copy signing link */}
-                    <button onClick={() => {
-                      navigator.clipboard.writeText(signLink)
-                      setCopiedLink(p.id)
-                      setTimeout(() => setCopiedLink(null), 2000)
+                    <button onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(signLink)
+                        setCopiedLink(p.id)
+                        setTimeout(() => setCopiedLink(null), 2000)
+                      } catch {
+                        toast.error('Не удалось скопировать — ссылка: ' + signLink)
+                      }
                     }}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         isCopied
@@ -573,7 +637,10 @@ export default function StudentProfile({ student, onClose }) {
                           learningFormat: p.learningFormat || '',
                           lang: p.contractLang || 'uz',
                         })
-                      } catch (err) { console.error(err) }
+                      } catch (err) {
+                        console.error(err)
+                        toast.error('Не удалось сформировать .docx. Попробуйте ещё раз.')
+                      }
                       setGeneratingDocx(false)
                     }}
                       disabled={generatingDocx}

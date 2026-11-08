@@ -156,7 +156,7 @@ export default function RevenueByCourse({
         <p className="text-sm text-slate-400 py-8 text-center">За этот период оплат нет</p>
       ) : (
         <div className="overflow-x-auto -mx-4 md:mx-0">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="table-cards table-cards-3 w-full text-sm min-w-[720px]">
             <thead>
               <tr className="text-xs text-slate-500 border-b border-slate-100">
                 <th className="text-left font-medium py-2 px-3">Направление</th>
@@ -177,7 +177,7 @@ export default function RevenueByCourse({
                   <Fragment key={r.name}>
                     <tr onClick={() => setExpanded(open ? null : r.name)}
                       className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer">
-                      <td className="py-2.5 px-3">
+                      <td data-card="title" className="py-2.5 px-3">
                         <div className="flex items-center gap-2 min-w-0">
                           {open ? <ChevronDown size={14} className="text-slate-400 flex-shrink-0" /> : <ChevronRight size={14} className="text-slate-400 flex-shrink-0" />}
                           <span className="flex-shrink-0">{r.icon}</span>
@@ -185,7 +185,7 @@ export default function RevenueByCourse({
                         </div>
                       </td>
                       <td className="py-2.5 px-3 text-right font-semibold text-slate-900 whitespace-nowrap">{fmt(r.revenue)}</td>
-                      <td className="py-2.5 px-3">
+                      <td data-card="wide" className="py-2.5 px-3">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${r.revenue / maxRevenue * 100}%` }} />

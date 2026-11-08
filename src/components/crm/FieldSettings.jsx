@@ -57,14 +57,15 @@ export default function FieldSettings({ fields, onClose, onChanged }) {
           {list.map((f, i) => (
             <div key={f.id} className="rounded-xl bg-white/60 border border-slate-100 p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <input defaultValue={f.label} disabled={busy} className={inputCls + ' flex-1'}
+                <input defaultValue={f.label} disabled={busy} className={inputCls + ' flex-1 min-w-0'}
                   onBlur={e => e.target.value.trim() && e.target.value.trim() !== f.label && run(() => crm.updateField(f.id, { label: e.target.value.trim() }))} />
-                <span className="text-xs text-slate-500 w-24">{typeLabel[f.type]}</span>
-                <button disabled={busy || i === 0} onClick={() => move(i, -1)} className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"><ArrowUp size={15} /></button>
-                <button disabled={busy || i === list.length - 1} onClick={() => move(i, 1)} className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"><ArrowDown size={15} /></button>
+                <span className="hidden sm:inline text-xs text-slate-500 w-24 shrink-0">{typeLabel[f.type]}</span>
+                <button disabled={busy || i === 0} onClick={() => move(i, -1)} aria-label="Выше" className="shrink-0 p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"><ArrowUp size={15} /></button>
+                <button disabled={busy || i === list.length - 1} onClick={() => move(i, 1)} aria-label="Ниже" className="shrink-0 p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"><ArrowDown size={15} /></button>
                 <button disabled={busy} onClick={() => window.confirm(`Удалить поле «${f.label}»? Заполненные значения перестанут показываться.`) && run(() => crm.deleteField(f.id))}
-                  className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={15} /></button>
+                  aria-label="Удалить поле" className="shrink-0 p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={15} /></button>
               </div>
+              <p className="sm:hidden text-xs text-slate-400">{typeLabel[f.type]}</p>
               {hasOptions(f.type) && (
                 <label className="block text-xs text-slate-500">Варианты (каждый с новой строки)
                   <textarea defaultValue={f.options.join('\n')} rows={Math.min(6, f.options.length + 1)} disabled={busy}
