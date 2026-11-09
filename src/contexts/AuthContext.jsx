@@ -101,7 +101,7 @@ export const DEFAULT_PERMISSIONS = {
     students:  { view: true, add: true, edit: true, delete: false },
     teachers:  { view: true, add: false, edit: false, delete: false, salaries: false },
     courses:   { view: true, add: false, edit: false },
-    finance:   { view: true, fullPnL: false, expenses: false, payments: true },
+    finance:   false, // «Продажи» and taking payments: front desk doesn't handle sales
     employees: { view: true, add: false, edit: false, delete: false },
     attendance: { view: true, mark: true, edit: true },
     lms:       { view: true, create_content: false, grade: true, manage: false },
