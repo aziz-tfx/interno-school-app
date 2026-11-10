@@ -25,7 +25,7 @@ export default function Students() {
     students, branches, payments, groups, teachers, courses, rooms: dataRooms,
     addStudent, updateStudent, deleteStudent, deleteGroup, updateGroup,
     getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
-    getBranchName, getStudentIncome, getStudentById,
+    getBranchName, getStudentIncome, getStudentById, loading,
   } = useData()
 
   // Deep-link support from global search: /students?tab=groups&q=...
@@ -286,12 +286,15 @@ export default function Students() {
   const autoSyncedRef = useRef(false)
   useEffect(() => {
     if (autoSyncedRef.current) return
-    if (!students.length && !payments.length) return // wait for data
+    // Wait until BOTH lists have arrived. Payments landing a moment before
+    // students made every payment look orphaned, and a duplicate student
+    // (no phone, no course price) was created for each client.
+    if (loading || !students.length) return
     if (orphanPayments.length === 0) return
     autoSyncedRef.current = true
     handleSync().catch(err => console.warn('Auto orphan sync failed:', err))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [students.length, payments.length, orphanPayments.length])
+  }, [loading, students.length, payments.length, orphanPayments.length])
 
   // ─── Bulk Actions ───
   const toggleSelect = (id) => {
@@ -306,6 +309,9 @@ export default function Students() {
       setSelectedIds(new Set())
     } else {
       setSelectedIds(new Set(filtered.map(s => s.id)))
+      // «all» means every matching row — draw them all, so that a bulk
+      // action never touches a row that is not on the screen
+      setVisibleCount(filtered.length)
     }
   }
   const clearSelection = () => { setSelectedIds(new Set()); setBulkAction(null) }
