@@ -7,7 +7,6 @@ import {
   Percent, CalendarDays, Pencil, Save, X, Trash2, CheckCircle, Download,
   FileSpreadsheet, FileText,
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -42,7 +41,7 @@ export default function Finance() {
   const navigate = useNavigate()
   const { user, hasPermission, employees, getSalesStaff } = useAuth()
   const tenantId = user?.tenantId || 'default'
-  const { branches, payments, students, getSalesPlan, getManagerPerf, setSalesPlan, updatePayment, deletePayment, courses } = useData()
+  const { branches, payments, students, getSalesPlan, getManagerPerf, setSalesPlan, updatePayment, deletePayment, courses, getStudentIncome, getStudentById } = useData()
 
   function formatRevenue(val) {
     if (val == null || val === 0) return '0'
@@ -435,7 +434,7 @@ export default function Finance() {
     // managerId/createdBy, so look at the linked student record (the
     // student is typically created by the manager who closed the deal).
     if (p.studentId) {
-      const stu = students.find(s => String(s.id) === String(p.studentId))
+      const stu = getStudentById(p.studentId)
       if (stu) {
         if (stu.createdBy) {
           const o = employees.find(e => e.id === stu.createdBy && isSalesCapable(e))
@@ -662,12 +661,12 @@ export default function Finance() {
         if ((isRop || isBranchDirector) && user?.branch !== 'all' && !sameBranch(s.branch, user?.branch, branches)) return false
         const price = s.totalCoursePrice || 0
         if (price <= 0) return false
-        const paid = payments.filter(p => p.type === 'income' && String(p.studentId) === String(s.id))
+        const paid = getStudentIncome(s.id)
           .reduce((sum, p) => sum + (p.amount || 0), 0)
         return paid > 0 && paid < price
       })
       .map(s => {
-        const studentPays = payments.filter(p => p.type === 'income' && String(p.studentId) === String(s.id))
+        const studentPays = [...getStudentIncome(s.id)]
           .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
         const totalPaid = studentPays.reduce((sum, p) => sum + (p.amount || 0), 0)
         const debt = (s.totalCoursePrice || 0) - totalPaid
@@ -856,7 +855,7 @@ export default function Finance() {
     return `${exportFrom || '...'}_${exportTo || '...'}`
   }
 
-  const runExport = () => {
+  const runExport = async () => {
     const list = buildExportableSales()
     if (list.length === 0) {
       toast.error(t('finance.no_sales_period') || 'Нет продаж за период')
@@ -867,6 +866,14 @@ export default function Finance() {
     const baseName = `sales${ownerTag}_${periodSuffix()}`
 
     if (exportFormat === 'xlsx') {
+      // The spreadsheet library is big — loaded only when someone exports
+      let XLSX
+      try {
+        XLSX = await import('xlsx')
+      } catch {
+        toast.error('Не удалось загрузить модуль экспорта. Проверьте интернет и попробуйте ещё раз.')
+        return
+      }
       const aoa = [headers, ...rows, totalsRow]
       const ws = XLSX.utils.aoa_to_sheet(aoa)
       ws['!cols'] = [

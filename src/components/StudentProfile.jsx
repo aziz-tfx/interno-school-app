@@ -12,8 +12,10 @@ import {
 import Modal from './Modal'
 import PaymentForm from './PaymentForm'
 import { useLanguage } from '../contexts/LanguageContext'
-import { generateContract } from '../utils/generateContract'
+// The contract builder pulls in the .docx library — loaded on first use
+const generateContract = (data) => import('../utils/generateContract').then(m => m.generateContract(data))
 import { toast } from './Toaster'
+import { ClientCrmHistory, ClientAttendance, ClientLearning, useClientTabs } from './ClientCard'
 
 export default function StudentProfile({ student, onClose }) {
   const { payments, branches, courses, updateStudent } = useData()
@@ -32,6 +34,17 @@ export default function StudentProfile({ student, onClose }) {
   const [coursePrice, setCoursePrice] = useState(student.totalCoursePrice || '')
   const [resettingPwd, setResettingPwd] = useState(false)
   const [savingPrice, setSavingPrice] = useState(false)
+
+  // The client card: money and contracts (as before), plus the CRM history,
+  // attendance and LMS progress of the same person — see ./ClientCard.jsx
+  const clientTabs = useClientTabs()
+  const [tab, setTab] = useState('overview')
+  const tabs = [
+    { id: 'overview', label: t('client.tab_overview') },
+    clientTabs.crm && { id: 'crm', label: t('client.tab_crm') },
+    clientTabs.attendance && { id: 'attendance', label: t('client.tab_attendance') },
+    clientTabs.learning && { id: 'learning', label: t('client.tab_learning') },
+  ].filter(Boolean)
 
   const fmtDate = (d) => {
     if (!d) return ''
@@ -180,6 +193,24 @@ export default function StudentProfile({ student, onClose }) {
         </div>
       </div>
 
+      {tabs.length > 1 && (
+        <div className="flex gap-1 glass rounded-xl p-1 overflow-x-auto no-scrollbar" role="tablist">
+          {tabs.map(x => (
+            <button key={x.id} type="button" role="tab" aria-selected={tab === x.id} onClick={() => setTab(x.id)}
+              className={`shrink-0 sm:shrink sm:flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
+                tab === x.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}>
+              {x.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'crm' && <ClientCrmHistory student={student} />}
+      {tab === 'attendance' && <ClientAttendance student={student} />}
+      {tab === 'learning' && <ClientLearning student={student} />}
+
+      {tab === 'overview' && (<>
       {/* LMS Access Toggle */}
       <div className={`flex items-center justify-between rounded-xl p-4 ${student.lmsAccess ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
         <div className="flex items-center gap-3">
@@ -654,6 +685,8 @@ export default function StudentProfile({ student, onClose }) {
           </div>
         </div>
       )}
+
+      </>)}
 
       {/* Close */}
       <div className="flex justify-end pt-4 border-t border-slate-100">

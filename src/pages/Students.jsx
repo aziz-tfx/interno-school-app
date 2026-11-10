@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, Filter, Pencil, Trash2, Plus, Eye, AlertTriangle, Users, Wifi, Clock, BookOpen, User, Monitor, X, Calendar, DoorOpen, ChevronDown, ChevronUp, Phone, LayoutGrid, CalendarRange, CheckSquare, Square, UserMinus, ArrowRightLeft, Snowflake } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -13,6 +13,11 @@ import StudentProfile from '../components/StudentProfile'
 import GroupForm from '../components/GroupForm'
 import { toast } from '../components/Toaster'
 
+// Rows drawn at once. A few thousand table rows made the page slow to open
+// and to type in; the rest appear with «Показать ещё» (search and filters
+// always work on the whole list).
+const PAGE_SIZE = 100
+
 export default function Students() {
   const { t } = useLanguage()
   const { user, hasPermission } = useAuth()
@@ -20,7 +25,7 @@ export default function Students() {
     students, branches, payments, groups, teachers, courses, rooms: dataRooms,
     addStudent, updateStudent, deleteStudent, deleteGroup, updateGroup,
     getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
-    getBranchName,
+    getBranchName, getStudentIncome, getStudentById,
   } = useData()
 
   // Deep-link support from global search: /students?tab=groups&q=...
@@ -42,6 +47,7 @@ export default function Students() {
   const [editingStudent, setEditingStudent] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [profileStudent, setProfileStudent] = useState(null)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   // Group modals & state
   const [groupModalOpen, setGroupModalOpen] = useState(false)
@@ -78,6 +84,7 @@ export default function Students() {
   // selection whenever the visible set changes.
   useEffect(() => {
     setSelectedIds(new Set()); setBulkAction(null); setBulkTarget('')
+    setVisibleCount(PAGE_SIZE)
   }, [search, branchFilter, statusFilter, groupFilter])
   useEffect(() => {
     setSelectedGroupIds(new Set()); setGroupBulkAction(null); setGroupBulkTarget('')
@@ -90,7 +97,7 @@ export default function Students() {
   // ── Scoped data ──
   // Show students from user's branch + students this user created or took
   // payments for (cross-branch sales, e.g. a Tashkent manager's Samarkand client)
-  const myPaidStudentIds = studentIdsWithMyPayments(payments, user)
+  const myPaidStudentIds = useMemo(() => studentIdsWithMyPayments(payments, user), [payments, user])
   const allStudents = user.branch !== 'all'
     ? students.filter(s => isMyStudent(s, user, branches, myPaidStudentIds))
     : students
@@ -205,11 +212,11 @@ export default function Students() {
   }
 
   const getStudentDebtInfo = (student) => {
-    const studentPays = payments.filter(p => p.type === 'income' && String(p.studentId) === String(student.id))
+    const studentPays = getStudentIncome(student.id)
     const totalPaid = studentPays.reduce((sum, p) => sum + p.amount, 0)
     const totalCoursePrice = student.totalCoursePrice || 0
     const debt = totalCoursePrice > 0 ? Math.max(0, totalCoursePrice - totalPaid) : 0
-    const lastPayment = studentPays.sort((a, b) => new Date(b.date) - new Date(a.date))[0]
+    const lastPayment = [...studentPays].sort((a, b) => new Date(b.date) - new Date(a.date))[0]
     const nextPaymentDate = lastPayment?.nextPaymentDate
     const isOverdue = nextPaymentDate && new Date(nextPaymentDate) < new Date()
     return { totalPaid, debt, nextPaymentDate, isOverdue, trancheCount: studentPays.length }
@@ -222,12 +229,13 @@ export default function Students() {
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
 
-  const orphanPayments = payments.filter(p => {
+  const orphanPayments = useMemo(() => payments.filter(p => {
     if (p.type !== 'income' || !p.student) return false
     // No studentId at all, or studentId doesn't match any student
     if (!p.studentId) return true
-    return !students.find(s => String(s.id) === String(p.studentId))
-  })
+    return !getStudentById(p.studentId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [payments, students])
 
   const handleSync = async () => {
     setSyncing(true)
@@ -564,7 +572,7 @@ export default function Students() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((student) => {
+                  {filtered.slice(0, visibleCount).map((student) => {
                     const info = getStudentDebtInfo(student)
                     const isOnline = student.learningFormat === 'Онлайн'
                     return (
@@ -665,6 +673,19 @@ export default function Students() {
             </div>
             {filtered.length === 0 && (
               <div className="text-center py-12 text-slate-400">{t('students.empty')}</div>
+            )}
+            {filtered.length > visibleCount && (
+              <div className="flex flex-wrap items-center justify-center gap-3 py-4 border-t border-slate-100 text-sm">
+                <span className="text-slate-400">Показано {visibleCount} из {filtered.length}</span>
+                <button type="button" onClick={() => setVisibleCount(n => n + PAGE_SIZE)}
+                  className="px-4 py-2 rounded-xl bg-white/70 border border-slate-200 text-slate-700 font-medium hover:bg-white transition-colors">
+                  Показать ещё {Math.min(PAGE_SIZE, filtered.length - visibleCount)}
+                </button>
+                <button type="button" onClick={() => setVisibleCount(filtered.length)}
+                  className="px-3 py-2 text-blue-600 hover:text-blue-700 font-medium">
+                  Показать все
+                </button>
+              </div>
             )}
           </div>
         </>

@@ -59,7 +59,7 @@ function Tile({ icon: Icon, tone, label, value, sub, onClick }) {
 export default function BranchOps() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { branches, groups, students, teachers, rooms, schedule, attendance, payments } = useData()
+  const { branches, groups, students, rooms, schedule, attendance, payments, getStudentIncome } = useData()
 
   const lockedBranch = user?.branch && user.branch !== 'all' ? user.branch : null
   const [branchSel, setBranchSel] = useState('')
@@ -159,8 +159,8 @@ export default function BranchOps() {
     for (const s of branchStudents) {
       const price = Number(s.totalCoursePrice) || 0
       if (price <= 0) continue
-      const paid = payments
-        .filter(p => p.type === 'income' && !p.cancelled && String(p.studentId) === String(s.id))
+      const paid = getStudentIncome(s.id)
+        .filter(p => !p.cancelled)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
       const debt = price - paid
       if (debt > 0 && paid > 0) {

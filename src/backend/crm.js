@@ -68,6 +68,11 @@ export const crm = {
   downloadFile: (file) => download(`/api/crm/files/${file.id}`, file.name),
   deleteFile: (id) => api(`/api/crm/files/${id}`, { method: 'DELETE' }),
 
+  // The CRM history of a student for the client card (contacts, deals, timeline)
+  studentHistory: (studentId) => api(`/api/crm/students/${encodeURIComponent(studentId)}/history`),
+  // CRM items for the notification centre — see server/src/routes/workday.js
+  notifications: () => api('/api/notifications'),
+
   callRecord: (activityId) => api(`/api/crm/activities/${activityId}/record`),
   syncCalls: () => api('/api/crm/calls/sync', { method: 'POST' }),
 }

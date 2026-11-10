@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
@@ -8,6 +8,15 @@ import { useTableCardLabels } from '../utils/tableCards'
 
 // Dialogs render in a portal on <body>, so captions are kept in sync there, not just in <main>
 const BODY = { get current() { return typeof document !== 'undefined' ? document.body : null } }
+
+// Shown in place of a page while its code is being downloaded
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center py-24" role="status" aria-label="Загрузка">
+      <div className="w-7 h-7 border-[3px] border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+    </div>
+  )
+}
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -34,7 +43,9 @@ export default function Layout() {
         <main ref={mainRef} className="app-main flex-1 min-w-0 overflow-y-auto overscroll-contain px-3 pt-3 sm:px-4 sm:pt-4 md:p-6">
           {/* key forces remount on route change → page-in animation */}
           <div key={location.pathname} className="page-transition">
-            <Outlet />
+            <Suspense fallback={<PageLoader />}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

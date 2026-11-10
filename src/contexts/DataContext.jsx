@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react'
 import { db } from '../firebase'
 import {
   collection,
@@ -23,6 +23,10 @@ import { USE_SERVER, api } from '../backend/api'
 const BRANCH_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16']
 
 const DataContext = createContext(null)
+
+const NO_PAYMENTS = Object.freeze([])
+// How long staff keep the LMS collections after leaving the LMS screens
+const LMS_LINGER_MS = 2 * 60 * 1000
 
 
 export function DataProvider({ children, currentUser }) {
@@ -64,6 +68,11 @@ export function DataProvider({ children, currentUser }) {
   // Video watch progress (lmsVideoProgress)
   const [lmsVideoProgress, setLmsVideoProgress] = useState([])
 
+  // LMS data (lessons, progress, submissions, chat, streaks) is loaded for
+  // staff only while an LMS screen is open — see the LMS effect below.
+  const [lmsUsers, setLmsUsers] = useState(0)
+  const [lmsReady, setLmsReady] = useState(false)
+
   // Collections still waiting for their FIRST server-confirmed snapshot.
   // With IndexedDB persistence the first snapshot comes from cache and can
   // be incomplete (partial data cached during an outage). Until the server
@@ -89,10 +98,7 @@ export function DataProvider({ children, currentUser }) {
   // (auditLog, messages, lmsProgress, …) for every user regardless of
   // role burns through it fast. Everyone gets the essentials, and the
   // rest is gated by role.
-  const needsLms       = ['owner', 'admin', 'teacher', 'student'].includes(role)
-  const needsMessages  = ['owner', 'admin', 'teacher', 'student'].includes(role)
   const needsAudit     = ['owner', 'admin'].includes(role)
-  const needsGame      = ['owner', 'admin', 'teacher', 'student'].includes(role)
   const needsSchedule  = role !== 'anonymous'
 
   useEffect(() => {
@@ -242,28 +248,12 @@ export function DataProvider({ children, currentUser }) {
     if (needsSchedule) subscribeCollection('schedule', setSchedule, 'schedule')
     else skipCollection('schedule')
 
-    // LMS collections — only for LMS-active roles (owner/admin/teacher/student)
-    if (needsLms) {
-      subscribeCollection('lmsLessons', setLmsLessons, 'lmsLessons')
-      subscribeCollection('lmsAssignments', setLmsAssignments, 'lmsAssignments')
-      subscribeCollection('lmsSubmissions', setLmsSubmissions, 'lmsSubmissions')
-      subscribeCollection('lmsAnnouncements', setLmsAnnouncements, 'lmsAnnouncements')
-      subscribeCollection('lmsModules', setLmsModules, 'lmsModules')
-      subscribeCollection('lmsProgress', setLmsProgress, 'lmsProgress')
-      subscribeCollection('lmsVideoProgress', setLmsVideoProgress, 'lmsVideoProgress')
-    } else {
-      skipCollection('lmsLessons')
-      skipCollection('lmsAssignments')
-      skipCollection('lmsSubmissions')
-      skipCollection('lmsAnnouncements')
-      skipCollection('lmsModules')
-      skipCollection('lmsProgress')
-      skipCollection('lmsVideoProgress')
+    // LMS collections, gamification and the student ↔ teacher chat are
+    // subscribed in their own effect below (for staff — only while an LMS
+    // screen is open). They never block the loading gate.
+    for (const key of ['lmsLessons', 'lmsAssignments', 'lmsSubmissions', 'lmsAnnouncements', 'lmsModules', 'lmsProgress', 'lmsVideoProgress', 'studentGameData', 'messages']) {
+      skipCollection(key)
     }
-
-    // Gamification streak data — only for LMS users
-    if (needsGame) subscribeCollection('studentGameData', setStudentGameData, 'studentGameData')
-    else skipCollection('studentGameData')
 
     // Audit log is subscribed LAZILY in its own effect below — only when
     // the Audit page actually asks for it (enableAuditLogs). Loading up to
@@ -271,16 +261,79 @@ export function DataProvider({ children, currentUser }) {
     // read-quota consumers. Never block the loading gate on it:
     skipCollection('auditLogs')
 
-    // Student ↔ teacher chat — only for LMS-participating roles
-    if (needsMessages) subscribeCollection('messages', setMessages, 'messages')
-    else skipCollection('messages')
-
     return () => {
       cancelled = true
       activeUnsubs.forEach(unsub => unsub())
       activeUnsubs.clear()
     }
-  }, [tenantId, role, needsLms, needsMessages, needsGame, needsSchedule, !!currentUser])
+  }, [tenantId, role, needsSchedule, !!currentUser])
+
+  // ─── LMS data: on demand for staff ─────────────────────────────────
+  // Lessons, progress, video progress, submissions, the chat and streaks are
+  // the busiest collections (every student watching a video writes to them)
+  // and only the LMS screens read them. Loading them at login for every
+  // owner / admin / teacher slowed the start and re-rendered the whole app
+  // on each student's progress tick. Now:
+  //   • students — subscribed from login (their cabinet is the LMS);
+  //   • staff — subscribed while a screen that called useLmsData() is open,
+  //     and for a couple of minutes after, so going back is instant.
+  // No role list here: the LMS routes are already behind the «lms» permission,
+  // so whoever can open the screen gets its data (the old list left a branch
+  // admin with LMS access looking at an empty LMS).
+  const lmsActive = !!currentUser && (role === 'student' || lmsUsers > 0)
+  useEffect(() => {
+    if (!lmsActive) { setLmsReady(false); return }
+    let cancelled = false
+    const unsubs = new Map()
+    const waiting = new Set()
+    const delay = (attempt, err) =>
+      err?.code === 'resource-exhausted' ? 5 * 60 * 1000 : Math.min(15000, 1000 * 2 ** attempt)
+    const first = (name) => {
+      if (waiting.delete(name) && waiting.size === 0 && !cancelled) setLmsReady(true)
+    }
+    const subscribe = (name, setter, attempt = 0) => {
+      if (cancelled) return
+      const q = query(collection(db, name), where('tenantId', '==', tenantId))
+      const unsub = onSnapshot(q, (snapshot) => {
+        attempt = 0
+        setter(snapshot.docs.map(d => ({ ...d.data(), id: d.id })))
+        first(name)
+      }, (err) => {
+        console.error(`Collection ${name} error (retry in ${delay(attempt, err)}ms):`, err)
+        first(name) // a dead listener must not keep the LMS screens on a spinner
+        unsubs.delete(name)
+        setTimeout(() => subscribe(name, setter, attempt + 1), delay(attempt, err))
+      })
+      unsubs.set(name, unsub)
+    }
+    const wanted = [
+      ['lmsLessons', setLmsLessons], ['lmsAssignments', setLmsAssignments], ['lmsSubmissions', setLmsSubmissions],
+      ['lmsAnnouncements', setLmsAnnouncements], ['lmsModules', setLmsModules], ['lmsProgress', setLmsProgress],
+      ['lmsVideoProgress', setLmsVideoProgress],
+      ['studentGameData', setStudentGameData], // streaks / XP
+      ['messages', setMessages],               // student ↔ teacher chat
+    ]
+    setLmsReady(false)
+    wanted.forEach(([name]) => waiting.add(name))
+    wanted.forEach(([name, setter]) => subscribe(name, setter))
+    return () => {
+      cancelled = true
+      unsubs.forEach(unsub => unsub())
+      unsubs.clear()
+    }
+  }, [tenantId, lmsActive])
+
+  // Screens that read LMS data hold it while mounted (see useLmsData)
+  const retainLms = useRef(() => {
+    setLmsUsers(n => n + 1)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      // Keep the data a little longer: going back to the LMS is instant
+      setTimeout(() => setLmsUsers(n => Math.max(0, n - 1)), LMS_LINGER_MS)
+    }
+  }).current
 
   // ─── Lazy audit log subscription ──────────────────────────────────
   // Starts only after the Audit page mounts and calls enableAuditLogs().
@@ -708,6 +761,28 @@ export function DataProvider({ children, currentUser }) {
     return { total, present, late, absent, rate: total > 0 ? Math.round(((present + late) / total) * 100) : 0 }
   }
 
+  // ─── Lookups ────────────────────────────────────────────────────────
+  // Lists used to do `payments.filter(p => p.studentId === s.id)` for every
+  // student on every render — students × payments comparisons, which froze
+  // typing in a search box once a school had a few thousand of each. These
+  // maps are built once per data change and make the lookup instant.
+  const incomeByStudent = useMemo(() => {
+    const map = new Map()
+    for (const p of paymentsList) {
+      if (p.type !== 'income' || p.studentId == null || p.studentId === '') continue
+      const key = String(p.studentId)
+      const list = map.get(key)
+      if (list) list.push(p)
+      else map.set(key, [p])
+    }
+    return map
+  }, [paymentsList])
+  const studentsById = useMemo(() => new Map(students.map(s => [String(s.id), s])), [students])
+
+  /** Income payments of a student (cancelled ones included). Do not mutate — copy before sorting. */
+  const getStudentIncome = (studentId) => incomeByStudent.get(String(studentId)) || NO_PAYMENTS
+  const getStudentById = (studentId) => (studentId == null ? undefined : studentsById.get(String(studentId)))
+
   // --- Stats ---
   const getStudentsByBranch = (branchId) => {
     return students.filter(s => s.branch === branchId)
@@ -951,6 +1026,7 @@ export function DataProvider({ children, currentUser }) {
       courses, addCourse, updateCourse, deleteCourse,
       groups, addGroup, updateGroup, deleteGroup, getGroupOfflineCount, getGroupOnlineCount, getGroupStudents,
       students, addStudent, updateStudent, deleteStudent,
+      getStudentIncome, getStudentById,
       teachers, addTeacher, updateTeacher, deleteTeacher,
       payments: paymentsList, addPayment, updatePayment, deletePayment,
       attendance, markAttendance, getAttendanceByGroup, getAttendanceStats,
@@ -972,6 +1048,9 @@ export function DataProvider({ children, currentUser }) {
       enableAuditLogs: () => setAuditWanted(true),
       tenantId,
       loading,
+      // LMS collections: retainLms() subscribes (returns a release function),
+      // lmsReady — their first snapshot has arrived. Use useLmsData().
+      retainLms, lmsReady,
       // true while any subscribed collection is still cache-only (no
       // server-confirmed snapshot yet) — totals may be incomplete
       syncPending: pendingServerSync > 0,
@@ -982,3 +1061,15 @@ export function DataProvider({ children, currentUser }) {
 }
 
 export const useData = () => useContext(DataContext)
+
+/**
+ * useData() for screens that read LMS collections (lmsLessons, lmsProgress,
+ * lmsSubmissions, messages, studentGameData, …). Staff get those only while
+ * such a screen is open; `lmsReady` is false until they have arrived.
+ */
+export function useLmsData() {
+  const data = useContext(DataContext)
+  const retain = data.retainLms
+  useEffect(() => retain(), [retain])
+  return data
+}

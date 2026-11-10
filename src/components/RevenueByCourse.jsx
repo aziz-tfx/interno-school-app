@@ -1,6 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
 import { Layers, ChevronDown, ChevronRight, ArrowUpRight, ArrowDownRight, Download } from 'lucide-react'
-import * as XLSX from 'xlsx'
 import { branchKey } from '../utils/branchMatch'
 
 // ─── Выручка по направлениям (курсам) ──────────────────────────────────────
@@ -100,7 +99,9 @@ export default function RevenueByCourse({
   const maxRevenue = Math.max(1, ...data.list.map(r => r.revenue))
   const totalDelta = delta(data.total, data.prevTotal)
 
-  const exportXlsx = () => {
+  const exportXlsx = async () => {
+    // The spreadsheet library is big — loaded only when someone exports
+    const XLSX = await import('xlsx')
     const header = ['Направление', `Выручка (${periodLabel})`, 'Доля, %', 'Продаж', 'Доплаты/брони', 'Платежей', 'Учеников', 'Оффлайн', 'Онлайн', `Выручка (${prevLabel})`, 'Изменение, %']
     const body = data.list.map(r => [
       r.name, r.revenue, data.total ? +(r.revenue / data.total * 100).toFixed(1) : 0, r.sales, r.doplata,

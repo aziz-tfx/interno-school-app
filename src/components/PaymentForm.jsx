@@ -3,7 +3,6 @@ import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
 import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor, Search, ChevronDown, Check } from 'lucide-react'
-import { generateContract, buildContractBlob } from '../utils/generateContract'
 import { listTemplates, renderTemplateBlob, renderTemplateAndDownload } from '../utils/contractTemplates'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { pushSaleToTelegram } from '../utils/telegram'
@@ -20,6 +19,10 @@ import Modal from './Modal'
 import SaleCelebration from './SaleCelebration'
 import { toast } from './Toaster'
 import { useLanguage } from '../contexts/LanguageContext'
+
+// The contract builder pulls in the .docx library — loaded on first use
+const generateContract = (data) => import('../utils/generateContract').then(m => m.generateContract(data))
+const buildContractBlob = (data) => import('../utils/generateContract').then(m => m.buildContractBlob(data))
 
 const METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Alif', 'Paynet', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 const MAX_FILES = 5

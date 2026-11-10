@@ -1,39 +1,43 @@
+import { Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
+import { useLmsData } from './contexts/DataContext'
 import Layout from './components/Layout'
 import Logo from './components/Logo'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Branches from './pages/Branches'
-import Students from './pages/Students'
-import Teachers from './pages/Teachers'
-import Courses from './pages/Courses'
-import Finance from './pages/Finance'
-import Attendance from './pages/Attendance'
-import BranchOps from './pages/BranchOps'
-import Employees from './pages/Employees'
-import Profile from './pages/Profile'
-import Reports from './pages/Reports'
-import Leaderboard from './pages/Leaderboard'
-import LMSDashboard from './pages/lms/LMSDashboard'
-import LMSGroupView from './pages/lms/LMSGroupView'
-import LMSCourseView from './pages/lms/LMSCourseView'
-import LMSLessonView from './pages/lms/LMSLessonView'
-import Integrations from './pages/Integrations'
-import AiAgent from './pages/AiAgent'
-import ContractTemplates from './pages/ContractTemplates'
-import AmoPerformance from './pages/AmoPerformance'
-import Crm from './pages/Crm'
-import Schedule from './pages/Schedule'
-import AuditLog from './pages/AuditLog'
-import Automations from './pages/Automations'
-import SuperAdmin from './pages/SuperAdmin'
-import ContractSign from './pages/ContractSign'
-import StudentCabinet from './pages/StudentCabinet'
-import Register from './pages/Register'
-import RegisterSchool from './pages/RegisterSchool'
-import CourseLanding from './pages/CourseLanding'
-import TelegramApp from './pages/TelegramApp'
+import { lazyPage } from './utils/lazyPage'
+const Dashboard = lazyPage(() => import('./pages/Dashboard'))
+const MyDay = lazyPage(() => import('./pages/MyDay'))
+const Branches = lazyPage(() => import('./pages/Branches'))
+const Students = lazyPage(() => import('./pages/Students'))
+const Teachers = lazyPage(() => import('./pages/Teachers'))
+const Courses = lazyPage(() => import('./pages/Courses'))
+const Finance = lazyPage(() => import('./pages/Finance'))
+const Attendance = lazyPage(() => import('./pages/Attendance'))
+const BranchOps = lazyPage(() => import('./pages/BranchOps'))
+const Employees = lazyPage(() => import('./pages/Employees'))
+const Profile = lazyPage(() => import('./pages/Profile'))
+const Reports = lazyPage(() => import('./pages/Reports'))
+const Leaderboard = lazyPage(() => import('./pages/Leaderboard'))
+const LMSDashboard = lazyPage(() => import('./pages/lms/LMSDashboard'))
+const LMSGroupView = lazyPage(() => import('./pages/lms/LMSGroupView'))
+const LMSCourseView = lazyPage(() => import('./pages/lms/LMSCourseView'))
+const LMSLessonView = lazyPage(() => import('./pages/lms/LMSLessonView'))
+const Integrations = lazyPage(() => import('./pages/Integrations'))
+const AiAgent = lazyPage(() => import('./pages/AiAgent'))
+const ContractTemplates = lazyPage(() => import('./pages/ContractTemplates'))
+const AmoPerformance = lazyPage(() => import('./pages/AmoPerformance'))
+const Crm = lazyPage(() => import('./pages/Crm'))
+const Schedule = lazyPage(() => import('./pages/Schedule'))
+const AuditLog = lazyPage(() => import('./pages/AuditLog'))
+const Automations = lazyPage(() => import('./pages/Automations'))
+const SuperAdmin = lazyPage(() => import('./pages/SuperAdmin'))
+const ContractSign = lazyPage(() => import('./pages/ContractSign'))
+const StudentCabinet = lazyPage(() => import('./pages/StudentCabinet'))
+const Register = lazyPage(() => import('./pages/Register'))
+const RegisterSchool = lazyPage(() => import('./pages/RegisterSchool'))
+const CourseLanding = lazyPage(() => import('./pages/CourseLanding'))
+const TelegramApp = lazyPage(() => import('./pages/TelegramApp'))
 import { USE_SERVER } from './backend/api'
 
 function ProtectedRoute({ children, permission }) {
@@ -54,6 +58,19 @@ function TelegramEntry() {
   return <Navigate to={`/${search}`} replace />
 }
 
+// LMS screens: staff get the LMS collections only while one of these is
+// open (see DataContext) — hold the page until the data has arrived instead
+// of flashing «ничего нет».
+function LmsData({ children }) {
+  const { lmsReady } = useLmsData()
+  if (lmsReady) return children
+  return (
+    <div className="flex items-center justify-center py-24" role="status" aria-label="Загрузка">
+      <div className="w-7 h-7 border-[3px] border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+    </div>
+  )
+}
+
 function SplashScreen() {
   return (
     <div className="h-[100dvh] flex flex-col items-center justify-center gap-4">
@@ -71,6 +88,7 @@ export default function App() {
 
   if (!user) {
     return (
+      <Suspense fallback={<SplashScreen />}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -80,12 +98,16 @@ export default function App() {
         <Route path="/tg" element={<TelegramEntry />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
+      </Suspense>
     )
   }
 
   const homePage = user.role === 'student' ? <StudentCabinet /> : user.role === 'teacher' ? <Attendance /> : <Dashboard />
 
+  // Pages inside <Layout> have their own Suspense there (the menu stays on
+  // screen while a page loads); this one covers the full-screen routes.
   return (
+    <Suspense fallback={<SplashScreen />}>
     <Routes>
       <Route path="/login" element={<Navigate to="/" />} />
       <Route path="/contract/:paymentId" element={<ContractSign />} />
@@ -93,6 +115,8 @@ export default function App() {
       <Route path="/tg" element={<TelegramEntry />} />
       <Route path="/" element={<Layout />}>
         <Route index element={homePage} />
+        {/* «Мой день» — every staff role; students have their cabinet */}
+        <Route path="today" element={user.role === 'student' ? <Navigate to="/" /> : <MyDay />} />
         <Route path="dashboard" element={
           <ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>
         } />
@@ -125,16 +149,16 @@ export default function App() {
           <ProtectedRoute permission="finance"><Leaderboard /></ProtectedRoute>
         } />
         <Route path="lms" element={
-          <ProtectedRoute permission="lms"><LMSDashboard /></ProtectedRoute>
+          <ProtectedRoute permission="lms"><LmsData><LMSDashboard /></LmsData></ProtectedRoute>
         } />
         <Route path="lms/group/:groupId" element={
-          <ProtectedRoute permission="lms"><LMSGroupView /></ProtectedRoute>
+          <ProtectedRoute permission="lms"><LmsData><LMSGroupView /></LmsData></ProtectedRoute>
         } />
         <Route path="lms/course/:courseId" element={
-          <ProtectedRoute permission="lms"><LMSCourseView /></ProtectedRoute>
+          <ProtectedRoute permission="lms"><LmsData><LMSCourseView /></LmsData></ProtectedRoute>
         } />
         <Route path="lms/lesson/:lessonId" element={
-          <ProtectedRoute permission="lms"><LMSLessonView /></ProtectedRoute>
+          <ProtectedRoute permission="lms"><LmsData><LMSLessonView /></LmsData></ProtectedRoute>
         } />
         <Route path="schedule" element={
           <ProtectedRoute permission="schedule"><Schedule /></ProtectedRoute>
@@ -166,5 +190,6 @@ export default function App() {
         <Route path="profile" element={<Profile />} />
       </Route>
     </Routes>
+    </Suspense>
   )
 }
