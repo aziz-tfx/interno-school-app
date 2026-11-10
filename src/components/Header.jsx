@@ -1,15 +1,15 @@
-import { Bell, Shield } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Shield } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import Logo from './Logo'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import GlobalSearch from './GlobalSearch'
+import NotificationCenter from './NotificationCenter'
 
 export default function Header() {
-  const { user, getRoleLabel, hasPermission } = useAuth()
-  const navigate = useNavigate()
-  const { getDebtors, getBranchName } = useData()
+  const { user, getRoleLabel } = useAuth()
+  const { getBranchName } = useData()
   const { t, language, setLanguage } = useLanguage()
 
   const locale = language === 'uz' ? 'uz-UZ' : 'ru-RU'
@@ -19,12 +19,6 @@ export default function Header() {
     month: 'long',
     day: 'numeric',
   })
-
-  const debtorCount = getDebtors(user?.branch).length
-  // The bell lists debtors: open the students list (status=debtor is the
-  // filter Students offers), or Finance for roles without student access.
-  const debtorsTarget = hasPermission('students') ? '/students?status=debtor'
-    : hasPermission('finance') ? '/finance' : null
 
   return (
     <header className="app-header glass-strong sticky top-0 z-30 shrink-0">
@@ -68,16 +62,8 @@ export default function Header() {
           </button>
         </div>
 
-        <button type="button" onClick={() => debtorsTarget && navigate(debtorsTarget)} disabled={!debtorsTarget}
-          aria-label={`${debtorCount} ${t('header.debtors_tooltip')}`}
-          className="relative p-2 md:p-2.5 glass-btn rounded-xl transition-all disabled:cursor-default" title={`${debtorCount} ${t('header.debtors_tooltip')}`}>
-          <Bell size={18} className="text-slate-600" />
-          {debtorCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1 shadow-lg shadow-red-200">
-              {debtorCount}
-            </span>
-          )}
-        </button>
+        {/* Students get their notifications inside the cabinet */}
+        {user?.role !== 'student' && <NotificationCenter />}
         <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 glass-btn px-3 py-1.5 rounded-xl font-medium">
           <Shield size={12} />
           {getRoleLabel()}

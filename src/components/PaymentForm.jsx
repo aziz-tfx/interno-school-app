@@ -2,8 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../data/mockData'
-import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor, Search, ChevronDown, Check } from 'lucide-react'
-import { generateContract, buildContractBlob } from '../utils/generateContract'
+import { Receipt, Printer, Paperclip, X, FileText, Image, FileDown, Monitor, Search, ChevronDown, Check, ChevronLeft, ChevronRight, History, UserCheck } from 'lucide-react'
 import { listTemplates, renderTemplateBlob, renderTemplateAndDownload } from '../utils/contractTemplates'
 import { DEFAULT_TENANT_ID } from '../utils/tenancy'
 import { pushSaleToTelegram } from '../utils/telegram'
@@ -20,6 +19,10 @@ import Modal from './Modal'
 import SaleCelebration from './SaleCelebration'
 import { toast } from './Toaster'
 import { useLanguage } from '../contexts/LanguageContext'
+
+// The contract builder pulls in the .docx library — loaded on first use
+const generateContract = (data) => import('../utils/generateContract').then(m => m.generateContract(data))
+const buildContractBlob = (data) => import('../utils/generateContract').then(m => m.buildContractBlob(data))
 
 const METHODS = ['Наличные', 'Терминал', 'Payme', 'Click', 'Uzum', 'Alif', 'Paynet', 'Перечисление', 'Рассрочка (Uzum)', 'Рассрочка (Paylater)', 'Рассрочка (Alif)']
 const MAX_FILES = 5
@@ -58,9 +61,54 @@ const FORMAT_OPTIONS = [
   { value: 'Онлайн', tKey: 'paymentForm.format_online' },
 ]
 
-// prefill: { clientName, phone, course } — e.g. from a CRM deal.
+// ─── A new sale is filled in four steps ─────────────────────────────────
+// The form used to be one screen two thousand pixels long. Now: who buys →
+// what and at which price → the money → the contract. Доплата and expenses
+// are short and stay on one screen.
+const STEPS = [
+  { id: 'client', tKey: 'pay.step_client' },
+  { id: 'course', tKey: 'pay.step_course' },
+  { id: 'payment', tKey: 'pay.step_payment' },
+  { id: 'contract', tKey: 'pay.step_contract' },
+]
+const LAST_STEP = STEPS.length - 1
+
+// ─── Draft of an unfinished sale ────────────────────────────────────────
+// A closed tab, a dropped connection or a click outside the dialog used to
+// lose everything typed. The form is now saved in this browser as it is
+// filled in (per employee and per deal / student it was opened for) and
+// offered back the next time; it is deleted once the sale is saved.
+// Attached files cannot be kept — they are attached again.
+const DRAFT_TTL_MS = 3 * 24 * 60 * 60 * 1000
+const draftStorageKey = (user, draftKey) =>
+  `interno_pay_draft:${user?.tenantId || DEFAULT_TENANT_ID}:${user?._docId || user?.id || 'anon'}:${draftKey || 'new'}`
+
+function readDraft(key) {
+  try {
+    const d = JSON.parse(localStorage.getItem(key) || 'null')
+    if (!d?.form || !d.savedAt || Date.now() - d.savedAt > DRAFT_TTL_MS) {
+      if (d) localStorage.removeItem(key)
+      return null
+    }
+    // nothing worth restoring
+    const f = d.form
+    if (!f.clientName && !f.phone && !f.groupId && !f.amount && !f.passport && !f.comment) return null
+    return d
+  } catch {
+    return null
+  }
+}
+function writeDraft(key, draft) {
+  try { localStorage.setItem(key, JSON.stringify(draft)) } catch { /* private mode / quota: no draft */ }
+}
+function dropDraft(key) {
+  try { localStorage.removeItem(key) } catch { /* nothing to drop */ }
+}
+
+// prefill: { clientName, phone, course, branch } — e.g. from a CRM deal.
+// draftKey: what the form was opened for ('lead:<id>'), so each deal keeps its own draft.
 // onSaved({ paymentId, studentId }) — called once the payment is stored.
-export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new', prefill, onSaved }) {
+export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new', prefill, onSaved, draftKey }) {
   const isDoplata = mode === 'doplata'
   const { branches, students, payments, addPayment, updatePayment, addStudent, updateStudent, groups, courses, getSalesPlan } = useData()
   const { user, hasPermission, employees } = useAuth()
@@ -99,7 +147,8 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     discount: 'full',
     learningFormat: 'Оффлайн',
     comment: '',
-    branch: user?.branch !== 'all' ? user.branch : 'tashkent',
+    // a deal knows the branch the client is going to study in
+    branch: prefill?.branch || (user?.branch !== 'all' ? user.branch : 'tashkent'),
     nextPaymentDate: '',
     expenseDescription: '',
     passport: '',
@@ -115,6 +164,13 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     payerCompanyPhone: '',
   })
 
+  // True for the one render in which a saved draft is put back: the
+  // auto-fill effects below must not overwrite what the draft holds.
+  const restoringRef = useRef(false)
+  // Set by anything the person does in the form — only then is a draft saved
+  // (opening and closing the form must not leave an empty draft behind).
+  const touchedRef = useRef(false)
+
   // Optional split between multiple sales-capable managers.
   // [] means no split (legacy single-manager attribution applies).
   const [splits, setSplits] = useState([])
@@ -127,7 +183,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const [bonusCourses, setBonusCourses] = useState([])
   const promoDefaults = useMemo(() => getPromoCourses(courses).map(c => c.name), [courses])
   useEffect(() => {
-    if (isDoplata) return
+    if (isDoplata || restoringRef.current) return
     if (isPromoTariff) {
       setBonusCourses(prev => prev.length ? prev : promoDefaults.filter(n => n !== form.course))
     } else {
@@ -141,6 +197,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     && splitsTotal === Number(form.amount || 0))
 
   const addSplitRow = () => {
+    touchedRef.current = true
     if (splits.length === 0) {
       // Initialize with the current user as the first split (full amount).
       const me = splitCandidates.find(e => e.id === user?.id)
@@ -153,9 +210,11 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
   }
   const updateSplit = (i, patch) => {
+    touchedRef.current = true
     setSplits(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s))
   }
   const removeSplit = (i) => {
+    touchedRef.current = true
     setSplits(prev => {
       const next = prev.filter((_, idx) => idx !== i)
       return next.length < 2 ? [] : next
@@ -335,6 +394,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   const branchTouchedRef = useRef(false)
   const lastGroupIdRef = useRef(form.groupId)
   useEffect(() => {
+    if (restoringRef.current) return
     if (form.groupId) {
       const group = groups.find(g => g.id === form.groupId)
       const groupChanged = lastGroupIdRef.current !== form.groupId
@@ -366,6 +426,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   // When the user picks a tariff (without changing group), still update
   // durationMonths if the chosen tariff has its own per-tariff override.
   useEffect(() => {
+    if (restoringRef.current) return
     if (!form.course || !form.tariff) return
     const c = courses.find(cc => cc.name === form.course)
     const tariffDur = c?.pricing?.[region]?.[form.tariff]?.durationMonths
@@ -386,25 +447,163 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   }, [form.tariff, form.course, region])
 
   // Auto-generate unique contract number
+  const nextContractNumber = () => {
+    const now = new Date()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const year = String(now.getFullYear()).slice(-2)
+    // Count existing contracts this month to get next sequential number
+    const prefix = `${month}/${year}`
+    const existingThisMonth = payments.filter(p =>
+      p.contractNumber && p.contractNumber.includes(`/${year}`)
+    )
+    const maxNum = existingThisMonth.reduce((max, p) => {
+      const match = p.contractNumber.match(/^(\d+)\//)
+      return match ? Math.max(max, parseInt(match[1])) : max
+    }, 0)
+    return `${maxNum + 1}/${prefix}`
+  }
   useEffect(() => {
     if (!form.contractNumber) {
-      const now = new Date()
-      const month = String(now.getMonth() + 1).padStart(2, '0')
-      const year = String(now.getFullYear()).slice(-2)
-      // Count existing contracts this month to get next sequential number
-      const prefix = `${month}/${year}`
-      const existingThisMonth = payments.filter(p =>
-        p.contractNumber && p.contractNumber.includes(`/${year}`)
-      )
-      const maxNum = existingThisMonth.reduce((max, p) => {
-        const match = p.contractNumber.match(/^(\d+)\//)
-        return match ? Math.max(max, parseInt(match[1])) : max
-      }, 0)
-      setForm(prev => prev.contractNumber ? prev : { ...prev, contractNumber: `${maxNum + 1}/${prefix}` })
+      const number = nextContractNumber()
+      setForm(prev => prev.contractNumber ? prev : { ...prev, contractNumber: number })
     }
   }, [payments])
 
-  const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
+  // Declared after the auto-fill effects on purpose: effects run in order,
+  // so they have all seen the flag by the time this clears it.
+  useEffect(() => { restoringRef.current = false })
+
+  const set = (field, value) => {
+    touchedRef.current = true
+    setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  // ─── Steps (new sale only) ────────────────────────────────────────────
+  const stepped = form.type === 'income' && !isDoplata
+  const [step, setStep] = useState(0)
+  const formTopRef = useRef(null)
+  const showStep = (n) => !stepped || step === n
+
+  /** What is still missing on a step, as a message for the person — or null. */
+  const stepError = (n) => {
+    if (n === 0) {
+      if (!form.clientName.trim()) return t('pay.err_name')
+      if (!String(form.phone || '').trim()) return t('pay.err_phone')
+    } else if (n === 1) {
+      if (!form.course) return t('pay.err_course')
+      if (!form.groupId || !groups.some(g => g.id === form.groupId)) return t('pay.err_group')
+    } else if (n === 2) {
+      if (!form.paymentDate) return t('pay.err_date')
+      if (form.amount === '' || Number.isNaN(Number(form.amount)) || Number(form.amount) < 0) return t('pay.err_amount')
+      if (splits.length > 0 && !splitsValid) return t('pay.err_splits')
+      if (files.length === 0) return t('pay.err_files')
+    }
+    return null
+  }
+  const scrollToTop = () => formTopRef.current?.closest('.overflow-y-auto')?.scrollTo({ top: 0 })
+  const goToStep = (target) => {
+    // back — freely; forward — only past steps that are filled in
+    for (let i = 0; i < target; i++) {
+      const err = stepError(i)
+      if (err) {
+        setStep(i)
+        if (i >= step) toast.error(err)
+        scrollToTop()
+        return false
+      }
+    }
+    setStep(target)
+    scrollToTop()
+    return true
+  }
+  const goNext = () => goToStep(Math.min(LAST_STEP, step + 1))
+  const goBack = () => { setStep(n => Math.max(0, n - 1)); scrollToTop() }
+  // «Сохранить» appears where «Далее» was: a double click on «Далее» must
+  // not land on it and save the sale by accident.
+  const [saveArmed, setSaveArmed] = useState(true)
+  useEffect(() => {
+    if (step !== LAST_STEP) return
+    setSaveArmed(false)
+    const timer = setTimeout(() => setSaveArmed(true), 600)
+    return () => clearTimeout(timer)
+  }, [step])
+  // Enter in a field goes on to the next step (on the last one it saves, as a form does)
+  const onFormKeyDown = (e) => {
+    if (!stepped || step >= LAST_STEP || e.key !== 'Enter' || e.target.tagName !== 'INPUT') return
+    if (groupOpen || studentOpen) return // typing in a picker's search box
+    e.preventDefault()
+    goNext()
+  }
+
+  // ─── Draft ───────────────────────────────────────────────────────────
+  const draftStore = draftStorageKey(user, draftKey || (preselectedStudentId ? `student:${preselectedStudentId}` : ''))
+  const [draftOffer, setDraftOffer] = useState(() => (isDoplata ? null : readDraft(draftStore)))
+  const [draftSavedAt, setDraftSavedAt] = useState(null)
+  const discardDraft = () => {
+    dropDraft(draftStore)
+    setDraftOffer(null)
+    setDraftSavedAt(null)
+  }
+
+  // Opened for a known client (from the student's card or a CRM deal): start
+  // at the first step that still needs something instead of «Клиент».
+  const autoStepDoneRef = useRef(false)
+  useEffect(() => {
+    if (autoStepDoneRef.current || !stepped || draftOffer) return
+    if (!preselectedStudentId && !prefill) { autoStepDoneRef.current = true; return }
+    if (preselectedStudentId && !form.clientName) return // the student's data is still being filled in
+    autoStepDoneRef.current = true
+    let first = 0
+    while (first < 2 && !stepError(first)) first++
+    if (first > 0) setStep(first)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.clientName, form.groupId, form.course, draftOffer, stepped])
+
+  // A client typed in by hand who is already in the base (same phone)
+  const knownByPhone = useMemo(() => {
+    if (isDoplata || form.studentId) return null
+    const tail = String(form.phone || '').replace(/\D/g, '').slice(-9)
+    if (tail.length < 9) return null
+    return students.find(s => s.status !== 'archived' && String(s.phone || '').replace(/\D/g, '').slice(-9) === tail) || null
+  }, [form.phone, form.studentId, students, isDoplata])
+
+  const restoreDraft = () => {
+    const d = draftOffer
+    if (!d) return
+    restoringRef.current = true
+    branchTouchedRef.current = !!d.branchTouched
+    lastGroupIdRef.current = d.form.groupId || ''
+    // someone may have taken the draft's contract number since
+    const numberTaken = !!d.form.contractNumber && payments.some(p => p.contractNumber === d.form.contractNumber)
+    setForm(prev => ({
+      ...prev, ...d.form, type: 'income',
+      contractNumber: numberTaken ? nextContractNumber() : (d.form.contractNumber || prev.contractNumber),
+    }))
+    setSplits(Array.isArray(d.splits) ? d.splits : [])
+    setBonusCourses(Array.isArray(d.bonusCourses) ? d.bonusCourses : [])
+    if (typeof d.selectedTemplateId === 'string' && (d.selectedTemplateId === '' ? isDefaultTenant : customTemplates.some(tpl => tpl.id === d.selectedTemplateId))) {
+      setSelectedTemplateId(d.selectedTemplateId)
+    }
+    setStep(Math.min(LAST_STEP, Math.max(0, Number(d.step) || 0)))
+    touchedRef.current = true
+    autoStepDoneRef.current = true
+    setDraftOffer(null)
+  }
+
+  // Save as the form is filled in (not while an older draft is still on offer —
+  // it would be overwritten before the person decided what to do with it)
+  useEffect(() => {
+    if (!stepped || !touchedRef.current || draftOffer || showReceipt) return
+    const timer = setTimeout(() => {
+      const savedAt = Date.now()
+      writeDraft(draftStore, {
+        savedAt, form, splits, bonusCourses, step, selectedTemplateId, branchTouched: branchTouchedRef.current,
+      })
+      setDraftSavedAt(savedAt)
+    }, 500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, splits, bonusCourses, step, selectedTemplateId, draftOffer, stepped, showReceipt])
 
   const handleFileAdd = (e) => {
     const selectedFiles = Array.from(e.target.files)
@@ -493,6 +692,22 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     if (submittingRef.current) {
       console.warn('PaymentForm: ignoring duplicate submit while previous is in progress')
       return
+    }
+
+    // New sale in steps: Enter in a field moves on; saving checks every
+    // step and opens the first one that is not filled in (the browser's own
+    // "required" check can't point at a field on a hidden step).
+    if (stepped) {
+      if (step < LAST_STEP) { goNext(); return }
+      for (let i = 0; i <= LAST_STEP; i++) {
+        const err = stepError(i)
+        if (err) {
+          setStep(i)
+          toast.error(err)
+          scrollToTop()
+          return
+        }
+      }
     }
 
     // Duplicate check (only for new income payments, not for explicit "doplata" mode)
@@ -656,6 +871,10 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
     }
 
     const saved = await addPayment(paymentData)
+
+    // The sale is stored — its draft is no longer needed
+    touchedRef.current = false
+    dropDraft(draftStore)
 
     // LMS credentials returned directly from addPayment if account was created
     const lmsCredentials = saved?.lmsCredentials || null
@@ -1252,8 +1471,37 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
   // ========== Form View ==========
   return (
     <>
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} onKeyDown={onFormKeyDown} noValidate={stepped} className="space-y-4">
+      <div ref={formTopRef} hidden />
+
+      {/* An unfinished sale saved earlier in this browser */}
+      {draftOffer && stepped && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <History size={16} className="text-amber-600 shrink-0" />
+          <div className="flex-1 min-w-[12rem]">
+            <p className="text-sm font-medium text-amber-900">
+              {t('pay.draft_found', { date: new Date(draftOffer.savedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })}
+            </p>
+            <p className="text-xs text-amber-700 truncate">
+              {[draftOffer.form.clientName, draftOffer.form.course, draftOffer.form.amount && formatCurrency(Number(draftOffer.form.amount))].filter(Boolean).join(' · ') || t('pay.draft_untitled')}
+              {' · '}{t('pay.draft_files_note')}
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button type="button" onClick={discardDraft}
+              className="px-3 py-1.5 text-xs font-medium text-amber-800 rounded-lg hover:bg-amber-100">
+              {t('pay.draft_discard')}
+            </button>
+            <button type="button" onClick={restoreDraft}
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 rounded-lg hover:bg-amber-700">
+              {t('pay.draft_restore')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Type selector — only show expense tab if user has permission & not doplata */}
+      <div hidden={stepped && step > 0}>
       {isDoplata ? (
         <div className="bg-blue-50 rounded-lg py-2.5 px-4 text-sm font-medium text-blue-700 text-center">
           {t('paymentForm.doplata_title')}
@@ -1272,6 +1520,53 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       ) : (
         <div className="bg-emerald-50 rounded-lg py-2.5 px-4 text-sm font-medium text-emerald-700 text-center">
           {t('paymentForm.type_income')}
+        </div>
+      )}
+      </div>
+
+      {/* Steps of a new sale: where you are, what is done; a click goes there */}
+      {stepped && (
+        <ol className="flex items-start gap-1" aria-label={t('pay.steps')}>
+          {STEPS.map((st, i) => {
+            const done = i < step && !stepError(i)
+            const current = i === step
+            return (
+              <li key={st.id} className="flex-1 min-w-0">
+                <button type="button" onClick={() => goToStep(i)} aria-current={current ? 'step' : undefined}
+                  className="w-full flex flex-col items-center gap-1 group">
+                  <span className="flex items-center w-full">
+                    <span className={`h-0.5 flex-1 ${i === 0 ? 'opacity-0' : i <= step ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                    <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                      current ? 'bg-emerald-600 text-white ring-4 ring-emerald-100'
+                        : done ? 'bg-emerald-500 text-white'
+                        : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'
+                    }`}>
+                      {done ? <Check size={14} /> : i + 1}
+                    </span>
+                    <span className={`h-0.5 flex-1 ${i === LAST_STEP ? 'opacity-0' : i < step ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                  </span>
+                  <span className={`text-[11px] sm:text-xs leading-tight text-center truncate max-w-full ${current ? 'font-semibold text-slate-900' : 'text-slate-500'}`}>
+                    {t(st.tKey)}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+
+      {/* What has been chosen so far — stays in sight on the later steps */}
+      {stepped && step > 0 && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs text-slate-600">
+          <span className="font-semibold text-slate-800">{form.clientName || '—'}</span>
+          {form.phone && <span>· {form.phone}</span>}
+          {step > 1 && form.course && <span>· {form.course}</span>}
+          {step > 1 && form.groupId && <span>· {groups.find(g => g.id === form.groupId)?.name}</span>}
+          {step > 1 && courseFullPrice > 0 && <span className="font-semibold text-blue-700">· {formatCurrency(courseFullPrice)}</span>}
+          {step > 2 && form.amount !== '' && <span className="font-semibold text-emerald-700">· {t('pay.summary_paying', { sum: formatCurrency(Number(form.amount) || 0) })}</span>}
+          {step > 2 && <span>· {form.method}</span>}
+          {step > 2 && totalCoursePrice > 0 && autoDebt > 0 && <span className="text-red-600">· {t('pay.summary_debt', { sum: formatCurrency(autoDebt) })}</span>}
+          {step > 2 && form.nextPaymentDate && <span>· {t('pay.summary_next', { date: form.nextPaymentDate })}</span>}
         </div>
       )}
 
@@ -1445,7 +1740,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
             <>
               {/* ═══ NEW SALE MODE: full form ═══ */}
               {/* Section: Client Info */}
-              <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+              <div hidden={!showStep(0)} className="bg-slate-50 rounded-lg p-4 space-y-3">
                 <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('paymentForm.client_info')}</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
@@ -1453,11 +1748,28 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
                     <select value={form.studentId} onChange={(e) => set('studentId', e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="">{t('paymentForm.or_new_client')}</option>
+                      {/* picked by phone from outside this list (another branch) */}
+                      {selectedStudent && !branchStudents.some(s => String(s.id) === String(selectedStudent.id)) && (
+                        <option value={selectedStudent.id}>{selectedStudent.name} — {selectedStudent.course} ({selectedStudent.group})</option>
+                      )}
                       {branchStudents.map(s => (
                         <option key={s.id} value={s.id}>{s.name} — {s.course} ({s.group})</option>
                       ))}
                     </select>
                   </div>
+                  {knownByPhone && (
+                    <div className="col-span-2 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                      <UserCheck size={16} className="text-blue-600 shrink-0" />
+                      <p className="flex-1 min-w-[10rem] text-xs text-blue-900">
+                        {t('pay.known_client')}: <span className="font-semibold">{knownByPhone.name}</span>
+                        {[knownByPhone.course, knownByPhone.group].filter(Boolean).length > 0 && ` (${[knownByPhone.course, knownByPhone.group].filter(Boolean).join(', ')})`}
+                      </p>
+                      <button type="button" onClick={() => set('studentId', String(knownByPhone.id))}
+                        className="shrink-0 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                        {t('pay.known_client_pick')}
+                      </button>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_fullname')}</label>
                     <input type="text" value={form.clientName} onChange={(e) => set('clientName', e.target.value)} required
@@ -1474,7 +1786,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               </div>
 
               {/* Section: Course & Group */}
-              <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+              <div hidden={!showStep(1)} className="bg-slate-50 rounded-lg p-4 space-y-3">
                 <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('paymentForm.payment_details')}</h4>
                 <div className="grid grid-cols-2 gap-3">
                   {/* Course selection */}
@@ -1701,7 +2013,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
               </div>
 
               {/* Section: Contract / Shartnoma Info */}
-              <div className="bg-purple-50 rounded-lg p-4 space-y-3">
+              <div hidden={!showStep(3)} className="bg-purple-50 rounded-lg p-4 space-y-3">
                 <h4 className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Данные для договора (Шартнома)</h4>
 
                 {/* Template selector (custom tenant templates) */}
@@ -1821,7 +2133,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           )}
 
           {/* ═══ SHARED: Payment Info (both modes) ═══ */}
-          <div className="bg-emerald-50 rounded-lg p-4 space-y-3">
+          <div hidden={!showStep(2)} className="bg-emerald-50 rounded-lg p-4 space-y-3">
             <h4 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Информация об оплате</h4>
 
             {/* Show previous tranches info — only in new sale mode */}
@@ -1943,7 +2255,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           </div>
 
           {/* ═══ SHARED: File Attachments — MANDATORY ═══ */}
-          <div className={`rounded-lg p-4 space-y-3 ${files.length === 0 ? 'bg-red-50 border border-red-200' : 'bg-slate-50'}`}>
+          <div hidden={!showStep(2)} className={`rounded-lg p-4 space-y-3 ${files.length === 0 ? 'bg-red-50 border border-red-200' : 'bg-slate-50'}`}>
             <div className="flex items-center justify-between">
               <h4 className={`text-xs font-semibold uppercase tracking-wide ${files.length === 0 ? 'text-red-600' : 'text-slate-500'}`}>
                 {t('paymentForm.label_files')} *
@@ -1983,7 +2295,7 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
           </div>
 
           {/* Comment */}
-          <div>
+          <div hidden={!showStep(2)}>
             <label className="block text-sm font-medium text-slate-700 mb-1">{t('paymentForm.label_comment')}</label>
             <textarea value={form.comment} onChange={(e) => set('comment', e.target.value)}
               rows={2} placeholder="Дополнительная информация..."
@@ -2030,34 +2342,72 @@ export default function PaymentForm({ onClose, preselectedStudentId, mode = 'new
       {/* Footer — on phones it sticks to the bottom of the sheet, so «Сохранить»
           is always under the thumb; «Отмена» there is the sheet's ✕. */}
       <div className="form-sticky-footer flex justify-between items-center gap-2 sm:gap-3 pt-3 sm:pt-4 border-t border-slate-100">
-        {form.type === 'income' && !isDoplata && (
-          <button type="button" onClick={handleGenerateContract} disabled={generatingContract || !form.clientName}
-            title={t('paymentForm.btn_generate_contract')}
-            className="shrink-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-40">
-            <FileDown size={16} />
-            <span className="sm:hidden">{generatingContract ? '…' : 'Договор'}</span>
-            <span className="hidden sm:inline">{generatingContract ? t('paymentForm.btn_generating') : t('paymentForm.btn_generate_contract')}</span>
-          </button>
-        )}
-        {(form.type !== 'income' || isDoplata) && <div className="hidden sm:block" />}
-        <div className="flex gap-3 flex-1 sm:flex-none min-w-0">
-          <button type="button" onClick={onClose} className="hidden sm:block px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
-            {t('paymentForm.btn_cancel')}
-          </button>
-          <button type="submit" disabled={submitting || (form.type === 'income' && (files.length === 0 || (isDoplata && !form.studentId) || (!isDoplata && !form.groupId)))}
-            className={`flex-1 sm:flex-none min-w-0 justify-center px-4 py-2.5 sm:py-2 text-sm font-semibold sm:font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
-            {submitting ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        {stepped ? (
+          <>
+            <div className="flex items-center gap-2 min-w-0">
+              {step > 0 ? (
+                <button type="button" onClick={goBack}
+                  className="shrink-0 flex items-center gap-1 px-3 py-2.5 sm:py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+                  <ChevronLeft size={16} /> <span className="hidden sm:inline">{t('pay.back')}</span>
+                </button>
+              ) : (
+                <button type="button" onClick={onClose} className="hidden sm:block px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+                  {t('paymentForm.btn_cancel')}
+                </button>
+              )}
+              {step === LAST_STEP && (
+                <button type="button" onClick={handleGenerateContract} disabled={generatingContract || !form.clientName}
+                  title={t('paymentForm.btn_generate_contract')}
+                  className="shrink-0 flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-40">
+                  <FileDown size={16} />
+                  <span className="sm:hidden">{generatingContract ? '…' : 'Договор'}</span>
+                  <span className="hidden sm:inline">{generatingContract ? t('paymentForm.btn_generating') : t('paymentForm.btn_generate_contract')}</span>
+                </button>
+              )}
+              {draftSavedAt && step < LAST_STEP && (
+                <span className="hidden sm:inline text-[11px] text-slate-400 truncate">{t('pay.draft_saved')}</span>
+              )}
+            </div>
+            {step < LAST_STEP ? (
+              <button key="next" type="button" onClick={goNext}
+                className="flex-1 sm:flex-none min-w-0 justify-center px-4 py-2.5 sm:py-2 text-sm font-semibold sm:font-medium text-white rounded-lg transition-colors flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+                <span className="truncate">{t('pay.next')}: {t(STEPS[step + 1].tKey)}</span> <ChevronRight size={16} className="shrink-0" />
+              </button>
             ) : (
-              <Receipt size={16} />
+              <button key="save" type="submit" disabled={submitting || !saveArmed}
+                className="flex-1 sm:flex-none min-w-0 justify-center px-4 py-2.5 sm:py-2 text-sm font-semibold sm:font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-600 hover:bg-emerald-700">
+                {submitting ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Receipt size={16} />
+                )}
+                {submitting ? 'Сохранение...' : t('paymentForm.btn_submit')}
+              </button>
             )}
-            {submitting
-              ? 'Сохранение...'
-              : form.type === 'income'
-                ? (isDoplata && !form.studentId ? t('paymentForm.select_student') : files.length === 0 ? t('paymentForm.attach_files') : isDoplata ? t('paymentForm.btn_submit') : t('paymentForm.btn_submit'))
-                : t('paymentForm.btn_submit_expense')}
-          </button>
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="hidden sm:block" />
+            <div className="flex gap-3 flex-1 sm:flex-none min-w-0">
+              <button type="button" onClick={onClose} className="hidden sm:block px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+                {t('paymentForm.btn_cancel')}
+              </button>
+              <button type="submit" disabled={submitting || (form.type === 'income' && (files.length === 0 || (isDoplata && !form.studentId)))}
+                className={`flex-1 sm:flex-none min-w-0 justify-center px-4 py-2.5 sm:py-2 text-sm font-semibold sm:font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed ${form.type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                {submitting ? (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Receipt size={16} />
+                )}
+                {submitting
+                  ? 'Сохранение...'
+                  : form.type === 'income'
+                    ? (isDoplata && !form.studentId ? t('paymentForm.select_student') : files.length === 0 ? t('paymentForm.attach_files') : t('paymentForm.btn_submit'))
+                    : t('paymentForm.btn_submit_expense')}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </form>
 

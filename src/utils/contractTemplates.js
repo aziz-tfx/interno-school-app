@@ -9,9 +9,6 @@ import {
 import {
   ref as storageRef, uploadBytes, getDownloadURL, deleteObject,
 } from 'firebase/storage'
-import PizZip from 'pizzip'
-import Docxtemplater from 'docxtemplater'
-import { saveAs } from 'file-saver'
 
 // Список плейсхолдеров, которые можно использовать в шаблоне договора
 export const TEMPLATE_PLACEHOLDERS = [
@@ -177,6 +174,10 @@ export async function renderTemplateBlob(template, data) {
   if (!response.ok) throw new Error(`Не удалось скачать шаблон: ${response.status}`)
   const arrayBuffer = await response.arrayBuffer()
 
+  // The .docx libraries are big — loaded only when a contract is rendered
+  const [{ default: PizZip }, { default: Docxtemplater }] = await Promise.all([
+    import('pizzip'), import('docxtemplater'),
+  ])
   const zip = new PizZip(arrayBuffer)
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
@@ -201,6 +202,7 @@ export async function renderTemplateBlob(template, data) {
 
 export async function renderTemplateAndDownload(template, data) {
   const { blob, fileName } = await renderTemplateBlob(template, data)
+  const { saveAs } = await import('file-saver')
   saveAs(blob, fileName)
   return fileName
 }

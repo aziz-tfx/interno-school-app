@@ -357,7 +357,10 @@ export default function Crm() {
               clientName: saleFor.lead.contact?.name || saleFor.lead.title,
               phone: formatPhone(saleFor.lead.contact?.phones?.[0]),
               course: courses.find(c => c.id === saleFor.lead.courseId)?.name || '',
+              branch: saleFor.lead.branchId || undefined,
             }}
+            // each deal keeps its own unfinished sale
+            draftKey={`lead:${saleFor.lead.id}`}
             onSaved={onSaleSaved}
           />
         )}

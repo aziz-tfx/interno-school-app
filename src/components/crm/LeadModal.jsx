@@ -11,6 +11,7 @@ import Modal from '../Modal'
 import { toast } from '../Toaster'
 import { crm, watchCrm, sourceMeta, formatPhone, formatSum, formatDateTime } from '../../backend/crm'
 import ActivityItem from './ActivityItem'
+import { StudentSnapshot } from '../ClientCard'
 
 const inputCls = 'w-full px-3 py-2 bg-white/70 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
@@ -293,6 +294,9 @@ export default function LeadModal({ leadId, me, isManager, pipelines, allStages,
             {contact?.instagram && <p className="text-sm text-slate-600">Instagram: {contact.instagram}</p>}
             {contact?.telegramUsername && <p className="text-sm text-slate-600">Telegram: @{contact.telegramUsername}</p>}
           </div>
+
+          {/* The same person as a student: payments, debt, attendance, full profile */}
+          <StudentSnapshot studentId={lead.studentId || contact?.studentId} phones={contact?.phones} />
 
           {/* Tasks */}
           <div className="space-y-2">

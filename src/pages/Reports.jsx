@@ -134,7 +134,7 @@ function distributeSeedData(totals, year, month) {
 export default function Reports() {
   const { t } = useLanguage()
   const { user, employees } = useAuth()
-  const { setSalesPlan, payments, students } = useData()
+  const { setSalesPlan, payments, students, getStudentById } = useData()
   const METRICS = useMemo(() => METRICS_KEYS.map(m => ({ ...m, label: t(m.labelKey) })), [t])
   const isAdmin = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'rop'
   const isSales = user?.role === 'sales'
@@ -310,7 +310,7 @@ export default function Reports() {
     // owner's createdBy/managerId, try to follow the linked student record —
     // the student is usually created by the manager who closed the deal.
     if (p.studentId) {
-      const stu = students.find(s => String(s.id) === String(p.studentId))
+      const stu = getStudentById(p.studentId)
       if (stu) {
         if (stu.createdBy) {
           const o = employees.find(e => e.id === stu.createdBy && isSalesCapable(e))

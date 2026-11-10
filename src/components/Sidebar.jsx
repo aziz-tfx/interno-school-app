@@ -32,6 +32,7 @@ import {
   MessageCircle,
   Bot,
   SquareKanban,
+  CalendarCheck,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -78,6 +79,8 @@ export default function Sidebar({ open, onClose }) {
   // section; its children are listed as leaf links when expanded.
   // Flat leaves (no `group`) still render as a single link.
   const allNavItems = [
+    // What this person has to do today — every staff role has one
+    { to: '/today', icon: CalendarCheck, label: t('sidebar.my_day'), permission: null },
     { to: '/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard'), permission: 'dashboard' },
     { to: '/branches', icon: Building2, label: t('sidebar.branches'), permission: 'branches' },
     // Операционный экран филиала — только для операционных ролей

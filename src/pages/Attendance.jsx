@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Check, X, Clock, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useData } from '../contexts/DataContext'
@@ -20,7 +21,9 @@ export default function Attendance() {
   const canMark = hasPermission('attendance', 'mark')
   const canEdit = hasPermission('attendance', 'edit')
   const [selectedDate, setSelectedDate] = useState(localToday)
-  const [selectedGroup, setSelectedGroup] = useState('')
+  // «Мой день» and the bell link straight to a group: /attendance?group=<name>
+  const [searchParams] = useSearchParams()
+  const [selectedGroup, setSelectedGroup] = useState(() => searchParams.get('group') || '')
 
   // Get groups based on role
   const availableGroups = useMemo(() => {
@@ -35,8 +38,9 @@ export default function Attendance() {
     return groups
   }, [students, user])
 
-  // Auto-select first group
-  const activeGroup = selectedGroup || availableGroups[0] || ''
+  // Auto-select first group. A group from the link counts only if this
+  // person may see it (it is in their list).
+  const activeGroup = (availableGroups.includes(selectedGroup) ? selectedGroup : '') || availableGroups[0] || ''
 
   const groupStudents = students.filter(s => s.group === activeGroup)
   const currentAttendance = getAttendanceByGroup(activeGroup, selectedDate)

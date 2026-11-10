@@ -72,7 +72,7 @@ function StatCard({ icon: Icon, tone = 'blue', label, value, sub }) {
 export default function SalesInsights({ show = ['my', 'team', 'debtors', 'business'] }) {
   const has = (k) => show.includes(k)
   const { user, employees } = useAuth()
-  const { payments, students, branches, getSalesPlan, tenantId } = useData()
+  const { payments, students, branches, getSalesPlan, tenantId, getStudentIncome } = useData()
 
   const role = user?.role
   const isSales = role === 'sales'
@@ -166,8 +166,8 @@ export default function SalesInsights({ show = ['my', 'team', 'debtors', 'busine
     return list.map(s => {
       const price = Number(s.totalCoursePrice) || 0
       if (price <= 0) return null
-      const paid = payments
-        .filter(p => p.type === 'income' && !p.cancelled && String(p.studentId) === String(s.id))
+      const paid = getStudentIncome(s.id)
+        .filter(p => !p.cancelled)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
       const debt = price - paid
       if (debt <= 0) return null

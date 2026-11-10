@@ -3,11 +3,12 @@
 // with ?contact=<id> (see pages/Crm.jsx).
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Loader, Plus, X, Trash2, GraduationCap, Copy, Phone } from 'lucide-react'
+import { Loader, Plus, X, Trash2, Copy, Phone } from 'lucide-react'
 import Modal from '../Modal'
 import { toast } from '../Toaster'
 import { crm, watchCrm, formatPhone, formatSum, formatDateTime } from '../../backend/crm'
 import ActivityItem from './ActivityItem'
+import { StudentSnapshot } from '../ClientCard'
 
 const inputCls = 'w-full px-3 py-2 bg-white/70 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
@@ -109,11 +110,8 @@ export default function ContactModal({ contactId, isManager, pipelines, allStage
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <div className="space-y-5 min-w-0">
-            {contact.studentId && (
-              <p className="flex items-center gap-1.5 text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2">
-                <GraduationCap size={16} /> Уже учится в школе
-              </p>
-            )}
+            {/* The same person as a student: payments, debt, attendance, full profile */}
+            <StudentSnapshot studentId={contact.studentId} phones={contact.phones} />
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">{textField('Имя', 'name')}</div>
               <div className="col-span-2 space-y-1.5">
