@@ -19,6 +19,10 @@ import Certificate from '../components/Certificate'
 import StudentOnboarding from '../components/StudentOnboarding'
 import { resolveStudentGroups } from '../utils/lessonAccess'
 import { toast } from '../components/Toaster'
+import StudentCalendar, { buildStudentEvents } from '../components/student/StudentCalendar'
+import StudentPortfolio from '../components/student/StudentPortfolio'
+import StudyNotifySettings from '../components/student/StudyNotifySettings'
+import { todayISO, isoDaysFromNow } from '../utils/dates'
 
 // Russian count word: 1 урок, 2 урока, 5 уроков
 function plural(n, one, few, many) {
@@ -49,7 +53,7 @@ export default function StudentCabinet() {
     students, groups, courses, payments, teachers, branches, loading,
     getAttendanceByGroup, getAttendanceStats,
     lmsProgress, lmsLessons, lmsModules, lmsAssignments, lmsSubmissions, lmsAnnouncements,
-    messages, sendMessage, markMessagesRead,
+    messages, sendMessage, markMessagesRead, schedule,
   } = useData()
 
   const [searchParams] = useSearchParams()
@@ -263,6 +267,16 @@ export default function StudentCabinet() {
 
   const setActiveTab = (tab) => navigate(tab === 'overview' ? '/' : `/?tab=${tab}`)
 
+  // ─── Calendar: the next payment date and what's coming this week ─
+  const nextPaymentDate = myStudent?.nextPaymentDate || myPayments.find(p => p.nextPaymentDate)?.nextPaymentDate || ''
+  const comingUp = useMemo(() => {
+    if (!myStudent) return []
+    return buildStudentEvents({
+      student: myStudent, groups: myGroups, schedule, assignments: myAssignments, submissions: mySubmissions,
+      modules: lmsModules, courses, debt, nextPaymentDate, from: todayISO(), to: isoDaysFromNow(7), t,
+    }).filter(e => !e.done).slice(0, 4)
+  }, [myStudent, myGroups, schedule, myAssignments, mySubmissions, lmsModules, courses, debt, nextPaymentDate, t])
+
   // ─── Data still loading: don't flash "not enrolled / paid 0/0" ─
   if (loading && !myStudent) {
     return (
@@ -341,7 +355,7 @@ export default function StudentCabinet() {
     <div className="min-h-screen pb-20 md:pb-8">
       {/* ─── Welcome Header ─────────────────────────────────────── */}
       {/* Negative margins match <main>'s padding (px-3 / sm:px-4 / md:p-6) */}
-      <div className="bg-gradient-to-br from-indigo-600 via-blue-600 to-purple-700 -mx-3 -mt-3 sm:-mx-4 sm:-mt-4 px-4 pt-8 pb-12 md:px-8 md:-mx-6 md:-mt-6 mb-0 relative overflow-hidden">
+      <div className={`bg-gradient-to-br from-indigo-600 via-blue-600 to-purple-700 -mx-3 -mt-3 sm:-mx-4 sm:-mt-4 px-4 pt-8 pb-12 md:px-8 md:-mx-6 md:-mt-6 mb-0 relative overflow-hidden ${activeTab === 'overview' ? '' : 'max-md:pt-5 max-md:pb-5'}`}>
         <div className="absolute inset-0 opacity-20">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
           <div className="absolute bottom-0 left-0 w-72 h-72 bg-blue-300 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" />
@@ -422,8 +436,8 @@ export default function StudentCabinet() {
               </div>
             </div>
 
-            {/* Right side: quick stats */}
-            <div className="flex items-center gap-3 flex-wrap">
+            {/* Right side: quick stats (phones: on the overview only) */}
+            <div className={`items-center gap-3 flex-wrap ${activeTab === 'overview' ? 'flex' : 'hidden md:flex'}`}>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/10">
                 <ProgressCircle percentage={overallProgress.percentage} size={48} strokeWidth={3.5} color="#fff" />
               </div>
@@ -457,8 +471,8 @@ export default function StudentCabinet() {
       </div>
 
       {/* ─── Stats Cards ────────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto -mt-6 mb-6 px-2 relative z-20">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className={`max-w-5xl mx-auto -mt-6 mb-6 px-2 relative z-20 ${activeTab === 'overview' ? '' : 'max-md:mt-4 max-md:mb-0'}`}>
+        <div className={`grid-cols-2 md:grid-cols-4 gap-3 ${activeTab === 'overview' ? 'grid' : 'hidden md:grid'}`}>
           <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-100 p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
@@ -515,11 +529,42 @@ export default function StudentCabinet() {
 
 
       {/* ─── Tab Content ────────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto px-2">
+      {/* pb: the floating AI button must not cover the last control of a tab */}
+      <div className="max-w-5xl mx-auto px-2 pb-16 md:pb-0">
 
         {/* ══════════ OVERVIEW ══════════ */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Coming up: lessons, deadlines, payment — from the calendar */}
+            {comingUp.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 lg:col-span-2">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center"><Calendar size={16} className="text-blue-500" /></div>
+                    {t('scal.coming_up')}
+                  </h3>
+                  <button onClick={() => setActiveTab('calendar')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 py-2 -my-2">{t('scal.open')} <ChevronRight size={14} /></button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {comingUp.map(e => (
+                    <button key={e.id} onClick={() => setActiveTab('calendar')}
+                      className="flex items-center gap-3 text-left rounded-xl bg-slate-50 hover:bg-slate-100 px-3 py-2.5 min-h-[56px] transition-colors">
+                      <span className="shrink-0 w-12 text-center">
+                        <span className="block text-[11px] font-medium text-slate-400 uppercase">
+                          {e.date === todayISO() ? t('scal.today') : new Date(`${e.date}T12:00:00`).toLocaleDateString('ru-RU', { weekday: 'short' })}
+                        </span>
+                        <span className="block text-sm font-bold text-slate-800">{e.time || new Date(`${e.date}T12:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span>
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-slate-800 truncate">{e.title}</span>
+                        <span className="block text-xs text-slate-500">{t(`scal.legend_${e.kind === 'start' ? 'lesson' : e.kind}`)}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Course Progress */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
               <div className="flex items-center justify-between mb-4">
@@ -527,7 +572,7 @@ export default function StudentCabinet() {
                   <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center"><BookOpen size={16} className="text-blue-500" /></div>
                   Мой курс
                 </h3>
-                <button onClick={() => setActiveTab('course')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">Подробнее <ChevronRight size={14} /></button>
+                <button onClick={() => setActiveTab('course')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 py-3 -my-3 pl-3">Подробнее <ChevronRight size={14} /></button>
               </div>
               {myGroups.map(group => {
                 const prog = courseProgressData[group.id] || { total: 0, completed: 0, nextLesson: null }
@@ -610,7 +655,7 @@ export default function StudentCabinet() {
                   Задания
                   {pendingAssignments.length > 0 && <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-bold">{pendingAssignments.length}</span>}
                 </h3>
-                <button onClick={() => setActiveTab('assignments')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">Все <ChevronRight size={14} /></button>
+                <button onClick={() => setActiveTab('assignments')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 py-3 -my-3 pl-3">Все <ChevronRight size={14} /></button>
               </div>
               {pendingAssignments.length === 0 ? (
                 <div className="text-center py-6">
@@ -639,7 +684,7 @@ export default function StudentCabinet() {
                     Достижения
                     <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-bold">{gam.unlockedCount}/{gam.achievements.length}</span>
                   </h3>
-                  <button onClick={() => setActiveTab('achievements')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">Все <ChevronRight size={14} /></button>
+                  <button onClick={() => setActiveTab('achievements')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 py-3 -my-3 pl-3">Все <ChevronRight size={14} /></button>
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   {gam.achievements.slice(0, 8).map(a => (
@@ -687,7 +732,7 @@ export default function StudentCabinet() {
                   Объявления
                 </h3>
                 {myAnnouncements.length > 0 && (
-                  <button onClick={() => setActiveTab('announcements')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">Все <ChevronRight size={14} /></button>
+                  <button onClick={() => setActiveTab('announcements')} className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 py-3 -my-3 pl-3">Все <ChevronRight size={14} /></button>
                 )}
               </div>
               {myAnnouncements.length === 0 ? (
@@ -996,28 +1041,14 @@ export default function StudentCabinet() {
               </div>
             )}
 
-            {/* Telegram payment reminders */}
-            {payConfig?.telegramBotUsername && myStudent && !myStudent.telegramChatId && (
-              <a
-                href={`https://t.me/${payConfig.telegramBotUsername}?start=st_${myStudent.id}`}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3 bg-white rounded-2xl border border-blue-200 p-4 hover:bg-blue-50/50 transition-colors"
-              >
-                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Send size={18} className="text-blue-500" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-800">Подключить Telegram-напоминания</p>
-                  <p className="text-xs text-slate-500">Бот заранее напомнит о платеже, чтобы доступ к урокам не прервался</p>
-                </div>
-                <ChevronRight size={16} className="text-slate-300" />
-              </a>
-            )}
+            {/* Telegram: payment reminders are on once the bot is linked */}
             {myStudent?.telegramChatId && (
               <div className="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
                 <CheckCircle2 size={16} /> Telegram-напоминания об оплате подключены
               </div>
             )}
+            {/* …linking the bot, and the study notices with a switch for each kind */}
+            <StudyNotifySettings student={myStudent} botUsername={payConfig?.telegramBotUsername} />
 
             {/* Progress bar */}
             {coursePrice > 0 && (
@@ -1115,6 +1146,22 @@ export default function StudentCabinet() {
                 <p className="text-slate-500">Данных пока нет</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ══════════ CALENDAR TAB ══════════ */}
+        {activeTab === 'calendar' && myStudent && (
+          <div className="max-w-2xl mx-auto space-y-5">
+            <StudentCalendar student={myStudent} groups={myGroups} assignments={myAssignments} submissions={mySubmissions}
+              debt={debt} nextPaymentDate={nextPaymentDate} />
+            <StudyNotifySettings student={myStudent} botUsername={payConfig?.telegramBotUsername} />
+          </div>
+        )}
+
+        {/* ══════════ PORTFOLIO TAB ══════════ */}
+        {activeTab === 'portfolio' && myStudent && (
+          <div className="max-w-2xl mx-auto">
+            <StudentPortfolio student={myStudent} submissions={mySubmissions} assignments={myAssignments} />
           </div>
         )}
 

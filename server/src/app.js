@@ -22,6 +22,7 @@ import publicRoutes from './routes/public.js'
 import telegramRoutes from './routes/telegram.js'
 import adminRoutes from './routes/admin.js'
 import workdayRoutes from './routes/workday.js'
+import studentRoutes from './routes/student.js'
 import vercelRoutes from './routes/vercel.js'
 import { initTenantConfig } from './vercel/_lib/tenantConfig.js'
 import { sendTelegram, setTelegramWebhook, setTelegramMenuButton } from './telegram.js'
@@ -88,6 +89,7 @@ export async function buildApp({ config, pool, telegram = { send: sendTelegram, 
   await app.register(telegramRoutes, deps)
   await app.register(adminRoutes, deps)
   await app.register(workdayRoutes, deps)
+  await app.register(studentRoutes, deps)
   await app.register(vercelRoutes, deps)
 
   return app

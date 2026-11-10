@@ -57,6 +57,11 @@ const C = {
   lmsSubmissions:     { table: 'lms_submissions',    read: 'all',   write: 'all', studentKey: 'student_id', studentWrite: true },
   lmsProgress:        { table: 'lms_progress',       read: 'all',   write: 'all', studentKey: 'student_id', studentWrite: true },
   lmsVideoProgress:   { table: 'lms_video_progress', read: 'all',   write: 'all', studentKey: 'data', studentWrite: true },
+  // «Понятно / сложно» after a lesson: a student writes and sees only their own
+  lmsLessonFeedback:  { table: 'lms_lesson_feedback', read: 'all',  write: 'all', studentKey: 'data', studentWrite: true },
+  // Portfolio settings, one per student (id = student id); the public page
+  // is served by /api/public/portfolio/:token
+  portfolios:         { table: 'portfolios',         read: 'all',   write: 'all', studentKey: 'id', studentWrite: true },
   // Leaderboard: every student sees everyone's XP/streaks, but writes only own.
   studentGameData:    { table: 'student_game_data',  read: 'all',   write: 'all', studentKey: 'id', studentReadAll: true, studentWrite: true },
   aiAgentConversations: { table: 'ai_agent_conversations', read: 'staff', write: 'admin' },

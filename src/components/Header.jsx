@@ -42,7 +42,7 @@ export default function Header() {
         <div className="flex items-center rounded-xl overflow-hidden border border-slate-200/60 bg-white/40 backdrop-blur-sm">
           <button
             onClick={() => setLanguage('ru')}
-            className={`px-2.5 py-1.5 text-xs font-bold transition-all ${
+            className={`px-2.5 py-2.5 md:py-1.5 text-xs font-bold transition-all ${
               language === 'ru'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
@@ -52,7 +52,7 @@ export default function Header() {
           </button>
           <button
             onClick={() => setLanguage('uz')}
-            className={`px-2.5 py-1.5 text-xs font-bold transition-all ${
+            className={`px-2.5 py-2.5 md:py-1.5 text-xs font-bold transition-all ${
               language === 'uz'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'

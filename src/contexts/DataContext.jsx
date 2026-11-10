@@ -50,6 +50,8 @@ export function DataProvider({ children, currentUser }) {
   const [lmsAnnouncements, setLmsAnnouncements] = useState([])
   const [lmsModules, setLmsModules] = useState([])
   const [lmsProgress, setLmsProgress] = useState([])
+  // «Понятно / сложно» after a lesson (a student sees only their own)
+  const [lmsLessonFeedback, setLmsLessonFeedback] = useState([])
 
   // Gamification streak data
   const [studentGameData, setStudentGameData] = useState([])
@@ -242,7 +244,10 @@ export function DataProvider({ children, currentUser }) {
     subscribeCollection('payments', setPaymentsList, 'payments')
     subscribeCollection('rooms', setRooms, 'rooms')
     subscribeMetaDoc('attendance', setAttendance, 'attendance')
-    subscribeMetaDoc('salesPlans', setSalesPlansState, 'salesPlans')
+    // Sales plans are staff data: the server refuses them to students, and
+    // the refused listener kept retrying every 15 seconds on their phones.
+    if (role === 'student') skipCollection('salesPlans')
+    else subscribeMetaDoc('salesPlans', setSalesPlansState, 'salesPlans')
 
     // Schedule — everyone except anonymous
     if (needsSchedule) subscribeCollection('schedule', setSchedule, 'schedule')
@@ -310,6 +315,7 @@ export function DataProvider({ children, currentUser }) {
       ['lmsLessons', setLmsLessons], ['lmsAssignments', setLmsAssignments], ['lmsSubmissions', setLmsSubmissions],
       ['lmsAnnouncements', setLmsAnnouncements], ['lmsModules', setLmsModules], ['lmsProgress', setLmsProgress],
       ['lmsVideoProgress', setLmsVideoProgress],
+      ['lmsLessonFeedback', setLmsLessonFeedback],
       ['studentGameData', setStudentGameData], // streaks / XP
       ['messages', setMessages],               // student ↔ teacher chat
     ]
@@ -905,6 +911,14 @@ export function DataProvider({ children, currentUser }) {
     }), { merge: true })
   }
 
+  // One document per student and lesson, so rating again replaces the old mark
+  const saveLessonFeedback = async ({ studentId, lessonId, ...rest }) => {
+    if (!studentId || !lessonId) return
+    await setDoc(doc(db, 'lmsLessonFeedback', `${studentId}_${lessonId}`), withTenant({
+      studentId, lessonId, ...rest, updatedAt: new Date().toISOString(),
+    }), { merge: true })
+  }
+
   const addLmsProgress = async (progress) => {
     const docRef = await addDoc(collection(db, 'lmsProgress'), withTenant(progress))
     return { ...progress, id: docRef.id }
@@ -1042,6 +1056,7 @@ export function DataProvider({ children, currentUser }) {
       lmsModules, addLmsModule, updateLmsModule, deleteLmsModule,
       lmsProgress, addLmsProgress, deleteLmsProgress,
       lmsVideoProgress, saveVideoProgress,
+      lmsLessonFeedback, saveLessonFeedback,
       studentGameData, updateStudentGameData,
       schedule, addScheduleEntry, updateScheduleEntry, deleteScheduleEntry,
       auditLogs,

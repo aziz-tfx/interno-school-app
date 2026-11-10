@@ -33,6 +33,7 @@ import {
   Bot,
   SquareKanban,
   CalendarCheck,
+  Briefcase,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -59,6 +60,7 @@ export default function Sidebar({ open, onClose }) {
         { to: '/?tab=course', icon: BookOpen, label: 'Мой курс' },
         { to: '/?tab=assignments', icon: PenTool, label: 'Задания' },
         { to: '/?tab=achievements', icon: Trophy, label: 'Достижения' },
+        { to: '/?tab=portfolio', icon: Briefcase, label: t('sidebar.portfolio') },
         { to: '/lms', icon: Monitor, label: t('sidebar.lms'), permission: 'lms' },
       ],
     },
@@ -67,6 +69,7 @@ export default function Sidebar({ open, onClose }) {
       icon: Calendar,
       label: 'Информация',
       children: [
+        { to: '/?tab=calendar', icon: CalendarCheck, label: t('sidebar.calendar') },
         { to: '/?tab=payments', icon: Wallet, label: 'Оплата' },
         { to: '/?tab=attendance', icon: ClipboardCheck, label: 'Посещаемость' },
         { to: '/schedule', icon: Calendar, label: t('sidebar.schedule'), permission: 'schedule' },

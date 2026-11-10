@@ -763,3 +763,12 @@ html.dark {
   .rpt-c1 { width: 80px; min-width: 80px; max-width: 80px; }
   .rpt-c2 { left: 80px; width: 112px; min-width: 112px; max-width: 112px; }
 }
+
+/* LMS lesson page for students: the lesson's text can't be selected or
+   copied (see useContentProtection in LMSLessonView). The student's own
+   fields stay ordinary fields — a no-select ancestor made them impossible
+   to type in on older iOS, and blocked pasting a link into the answer. */
+.lms-protected { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.lms-protected :is(input, textarea, [contenteditable="true"]) {
+  -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+}

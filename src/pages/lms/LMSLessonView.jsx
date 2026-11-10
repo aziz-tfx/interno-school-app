@@ -15,14 +15,21 @@ import XPGainAnimation from '../../components/XPGainAnimation'
 import AIChat from '../../components/AIChat'
 import TrackedVideoPlayer from '../../components/TrackedVideoPlayer'
 import { Bot } from 'lucide-react'
+import { LessonFeedbackForm, LessonFeedbackSummary } from '../../components/student/LessonFeedback'
 
 // ─── Content Protection Hook ────────────────────────────────────────
 function useContentProtection(enabled = true) {
   useEffect(() => {
     if (!enabled) return
 
+    // The student's own fields (homework answer, comments, feedback) are not
+    // lesson content. On Android the long-press menu IS the context menu:
+    // blocking it there left no way to paste a link into the answer.
+    const isOwnField = (target) => !!target.closest?.('input, textarea, [contenteditable="true"]')
+
     // Block right-click context menu
     const handleContextMenu = (e) => {
+      if (isOwnField(e.target)) return
       if (e.target.closest('.lms-protected')) {
         e.preventDefault()
       }
@@ -55,6 +62,7 @@ function useContentProtection(enabled = true) {
 
     // Block copy
     const handleCopy = (e) => {
+      if (isOwnField(e.target)) return
       if (e.target.closest?.('.lms-protected')) {
         e.preventDefault()
       }
@@ -388,6 +396,8 @@ export default function LMSLessonView() {
   // Deadline calculation
   const deadlineBadge = useMemo(() => {
     if (!linkedAssignment?.deadline) return null
+    // handed in → the date is just a date, not «Просрочено» next to a grade
+    if (mySubmission) return { label: '', color: 'text-slate-500 bg-slate-50 border-slate-200', urgent: false }
     const now = new Date()
     const dl = new Date(linkedAssignment.deadline)
     const diffDays = Math.ceil((dl - now) / (1000 * 60 * 60 * 24))
@@ -396,7 +406,7 @@ export default function LMSLessonView() {
     if (diffDays === 1) return { label: 'Сдать завтра', color: 'text-amber-600 bg-amber-50 border-amber-200', urgent: true }
     if (diffDays <= 3) return { label: `Осталось ${diffDays} дн.`, color: 'text-amber-600 bg-amber-50 border-amber-200', urgent: false }
     return { label: `Осталось ${diffDays} дн.`, color: 'text-emerald-600 bg-emerald-50 border-emerald-200', urgent: false }
-  }, [linkedAssignment])
+  }, [linkedAssignment, mySubmission])
 
   // Submission status
   const submissionStatus = useMemo(() => {
@@ -508,8 +518,7 @@ export default function LMSLessonView() {
   }
 
   return (
-    <div className={`max-w-4xl mx-auto space-y-6 ${isStudent ? 'lms-protected' : ''}`}
-      style={isStudent ? { userSelect: 'none', WebkitUserSelect: 'none' } : undefined}>
+    <div className={`max-w-4xl mx-auto space-y-6 ${isStudent ? 'lms-protected' : ''}`}>
 
       {/* Content Protection Badge */}
       {isStudent && (
@@ -522,7 +531,7 @@ export default function LMSLessonView() {
       {/* Top navigation bar */}
       <div className="flex items-center justify-between gap-2 sm:gap-4">
         <button onClick={() => navigate(backPath)}
-          className="flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600 transition-colors min-w-0">
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600 transition-colors min-w-0 min-h-[44px] -my-2">
           <ArrowLeft size={16} className="flex-shrink-0" /> <span className="truncate">{t('lms.back_to_course')}</span>
         </button>
 
@@ -531,14 +540,14 @@ export default function LMSLessonView() {
           {prevLesson && (
             <button onClick={() => navigate(`/lms/lesson/${prevLesson.id}`)}
               aria-label={t('lms.prev_lesson')} title={t('lms.prev_lesson')}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+              className="flex items-center justify-center gap-1 min-w-[44px] min-h-[44px] sm:min-h-0 px-2.5 sm:px-3 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
               <ChevronLeft size={16} /> <span className="hidden sm:inline">{t('lms.prev_lesson')}</span>
             </button>
           )}
           {nextLesson && (
             <button onClick={() => navigate(`/lms/lesson/${nextLesson.id}`)}
               aria-label={t('lms.next_lesson')} title={t('lms.next_lesson')}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+              className="flex items-center justify-center gap-1 min-w-[44px] min-h-[44px] sm:min-h-0 px-2.5 sm:px-3 py-1.5 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
               <span className="hidden sm:inline">{t('lms.next_lesson')}</span> <ChevronRight size={16} />
             </button>
           )}
@@ -661,12 +670,12 @@ export default function LMSLessonView() {
       {/* Assignment section */}
       {linkedAssignment && isStudent && (
         <div className="glass-card rounded-2xl p-5 border-2 border-purple-100">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-              <AlertCircle size={16} className="text-purple-500" />
-              {t('lms.homework')}: {linkedAssignment.title}
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <h3 className="font-semibold text-slate-900 flex items-start gap-2 min-w-0">
+              <AlertCircle size={16} className="text-purple-500 shrink-0 mt-1" />
+              <span className="min-w-0 [overflow-wrap:anywhere]">{t('lms.homework')}: {linkedAssignment.title}</span>
             </h3>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 mt-0.5">
               {submissionStatus && (
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${submissionStatus.color}`}>
                   {submissionStatus.label}
@@ -681,7 +690,7 @@ export default function LMSLessonView() {
           {deadlineBadge && (
             <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border mb-3 ${deadlineBadge.color} ${deadlineBadge.urgent ? 'animate-pulse' : ''}`}>
               <Clock size={12} />
-              {linkedAssignment.deadline} — {deadlineBadge.label}
+              {linkedAssignment.deadline}{deadlineBadge.label ? ` — ${deadlineBadge.label}` : ''}
             </div>
           )}
 
@@ -704,7 +713,7 @@ export default function LMSLessonView() {
           {mySubmission && mySubmission.grade == null && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
               <p className="text-xs text-amber-600 font-medium">{t('lms.not_graded_yet')}</p>
-              <p className="text-sm text-slate-700 mt-1">{mySubmission.answer}</p>
+              <p className="text-sm text-slate-700 mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{mySubmission.answer}</p>
             </div>
           )}
 
@@ -748,15 +757,19 @@ export default function LMSLessonView() {
               <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)}
                 placeholder={t('lms.comment_placeholder')}
                 onKeyDown={e => { if (e.key === 'Enter') handleAddComment() }}
-                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-300" />
+                className="flex-1 min-w-0 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-300" />
               <button onClick={handleAddComment} disabled={!commentText.trim() || sendingComment}
-                className="px-3 py-2 text-xs bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50">
-                <Send size={12} />
+                aria-label={t('lms.comments')}
+                className="shrink-0 w-11 flex items-center justify-center text-xs bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50">
+                <Send size={16} />
               </button>
             </div>
           )}
         </div>
       )}
+
+      {/* Teacher / admin: how students rated this lesson */}
+      {!isStudent && <LessonFeedbackSummary lessonId={lesson.id} />}
 
       {/* Mark as complete button */}
       {isStudent && (
@@ -844,6 +857,12 @@ export default function LMSLessonView() {
             ) : <div />}
           </div>
         </div>
+      )}
+
+      {/* «Как вам урок?» — appears once the lesson is marked as done */}
+      {isStudent && myStudent && isCompleted && (
+        <LessonFeedbackForm key={lesson.id} studentId={myStudent.id} studentName={myStudent.name}
+          lesson={lesson} groupId={courseGroup?.id || lesson.groupId || ''} />
       )}
     </div>
   )

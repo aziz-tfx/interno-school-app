@@ -1,9 +1,12 @@
 import { useMemo } from 'react'
 import {
   Users, TrendingUp, PlayCircle, CheckCircle2, AlertTriangle,
-  Trophy, Clock, FileText, BarChart3,
+  Trophy, Clock, FileText, BarChart3, MessageSquare,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useData } from '../../contexts/DataContext'
+import { useLanguage } from '../../contexts/LanguageContext'
+import { countRatings, RatingBar } from '../../components/student/LessonFeedback'
 
 // ─── LMS usage analytics for admins / teachers ──────────────────────────
 // Built entirely from data the app already collects:
@@ -58,7 +61,8 @@ function Bar({ label, value, max, right, tone = 'from-blue-400 to-violet-500' })
 }
 
 export default function LMSAnalytics({ scopeStudentIds = null }) {
-  const { students, groups, courses, lmsLessons, lmsProgress, lmsVideoProgress, lmsSubmissions } = useData()
+  const { students, groups, courses, lmsLessons, lmsProgress, lmsVideoProgress, lmsSubmissions, lmsLessonFeedback } = useData()
+  const { t } = useLanguage()
 
   const data = useMemo(() => {
     // Students in scope who have LMS access
@@ -161,6 +165,23 @@ export default function LMSAnalytics({ scopeStudentIds = null }) {
     }
   }, [students, groups, courses, lmsLessons, lmsProgress, lmsVideoProgress, lmsSubmissions, scopeStudentIds])
 
+  // Lessons by how students rated them: the share of «сложно / остались вопросы» first
+  const lessonRatings = useMemo(() => {
+    const scope = scopeStudentIds ? new Set(scopeStudentIds.map(String)) : null
+    const byLesson = new Map()
+    for (const f of lmsLessonFeedback || []) {
+      if (!f.rating || (scope && !scope.has(String(f.studentId)))) continue
+      if (!byLesson.has(f.lessonId)) byLesson.set(f.lessonId, [])
+      byLesson.get(f.lessonId).push(f)
+    }
+    return [...byLesson].map(([id, list]) => {
+      const lesson = lmsLessons.find(l => l.id === id)
+      return lesson ? { id, title: lesson.title, counts: countRatings(list) } : null
+    }).filter(Boolean).sort((a, b) =>
+      (b.counts.hard + b.counts.questions) / b.counts.total - (a.counts.hard + a.counts.questions) / a.counts.total
+      || b.counts.total - a.counts.total)
+  }, [lmsLessonFeedback, lmsLessons, scopeStudentIds])
+
   const pct = (n, d) => d > 0 ? Math.round((n / d) * 100) : 0
   const fmtAgo = (ms) => {
     if (!ms) return 'ни разу'
@@ -180,6 +201,7 @@ export default function LMSAnalytics({ scopeStudentIds = null }) {
   }
 
   const maxCompleted = Math.max(1, ...data.topActive.map(s => s.completed))
+  const ratedLessons = lessonRatings
 
   return (
     <div className="space-y-5">
@@ -241,6 +263,29 @@ export default function LMSAnalytics({ scopeStudentIds = null }) {
           )}
         </div>
       </div>
+
+      {/* How students rate the lessons — the hardest first */}
+      {ratedLessons.length > 0 && (
+        <div className="glass-card rounded-2xl p-4 md:p-6">
+          <h3 className="text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
+            <MessageSquare size={16} className="text-blue-500" /> {t('lessonfb.analytics_title')}
+          </h3>
+          <p className="text-xs text-slate-400 mb-3">{t('lessonfb.analytics_hint')}</p>
+          <div className="space-y-3">
+            {ratedLessons.slice(0, 12).map(l => (
+              <Link key={l.id} to={`/lms/lesson/${l.id}`} className="block group">
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="font-medium text-slate-800 truncate group-hover:text-blue-700">{l.title}</span>
+                  <span className="shrink-0 text-xs text-slate-500">
+                    {t('lessonfb.analytics_row', { n: l.counts.total, hard: l.counts.hard + l.counts.questions })}
+                  </span>
+                </div>
+                <div className="mt-1.5"><RatingBar counts={l.counts} /></div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* At-risk students */}
       <div className="glass-card rounded-2xl p-4 md:p-6">

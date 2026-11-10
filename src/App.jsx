@@ -38,6 +38,7 @@ const Register = lazyPage(() => import('./pages/Register'))
 const RegisterSchool = lazyPage(() => import('./pages/RegisterSchool'))
 const CourseLanding = lazyPage(() => import('./pages/CourseLanding'))
 const TelegramApp = lazyPage(() => import('./pages/TelegramApp'))
+const PortfolioPublic = lazyPage(() => import('./pages/PortfolioPublic'))
 import { USE_SERVER } from './backend/api'
 import { hasMyDay } from './utils/startPage'
 
@@ -97,6 +98,7 @@ export default function App() {
         <Route path="/course/:courseId" element={<CourseLanding />} />
         <Route path="/contract/:paymentId" element={<ContractSign />} />
         <Route path="/tg" element={<TelegramEntry />} />
+        <Route path="/p/:token" element={<PortfolioPublic />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
       </Suspense>
@@ -117,6 +119,8 @@ export default function App() {
       <Route path="/contract/:paymentId" element={<ContractSign />} />
       <Route path="/course/:courseId" element={<CourseLanding />} />
       <Route path="/tg" element={<TelegramEntry />} />
+      {/* a student's public portfolio — the same page with or without a login */}
+      <Route path="/p/:token" element={<PortfolioPublic />} />
       <Route path="/" element={<Layout />}>
         <Route index element={homePage} />
         {/* the address «Мой день» had before it became the start page */}

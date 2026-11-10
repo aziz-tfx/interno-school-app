@@ -3,6 +3,7 @@ import { createPool } from './db.js'
 import { migrate } from './migrate.js'
 import { buildApp } from './app.js'
 import { startAutomationScheduler, claimDailyRun, tashkentClock } from './automations.js'
+import { startStudyNotices } from './studyNotices.js'
 import { loadTelegramConfig, sendTelegram } from './telegram.js'
 import { runFollowUps, runAgentHealthChecks } from './vercel/_lib/aiAgent.js'
 import { startAmoMirror } from './vercel/_lib/amoMirror.js'
@@ -24,6 +25,12 @@ if (config.automations) {
     loadPayme: (tenantId) => resolvePayme({ query: { tenantId } }),
   }, app.log)
   app.log.info('daily automations: on (14:00 Asia/Tashkent)')
+  // Telegram notices to students about their studies (grades, messages,
+  // deadlines…) — same switch: while the old stack is live nothing is sent twice
+  startStudyNotices(pool, {
+    send: sendTelegram,
+    loadTelegram: (tenantId) => loadTelegramConfig(pool, tenantId),
+  }, app.log)
 }
 
 // AI sales agent: answer clients whose reply failed and nudge those who went

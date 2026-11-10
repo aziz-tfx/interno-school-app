@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
   autoBlockLms: true,
   blockLmsOnDebt: false,
   managerDoplataAlerts: true,
+  studyNotifications: true,
 }
 
 export default function Automations() {
@@ -176,6 +177,25 @@ export default function Automations() {
           <p>• Менеджеру приходит персональный список его студентов-должников</p>
           <p>• В чат филиала — сводка срочных доплат (просрочено + ближайшие 3 дня)</p>
           <p>• Для ЛС менеджеру нужно заполнить <b>telegramChatId</b> в профиле сотрудника</p>
+        </div>
+      ),
+    },
+    {
+      id: 'studyNotifications',
+      icon: Bell,
+      color: 'from-emerald-500 to-teal-600',
+      title: 'Уведомления ученикам об учёбе',
+      description: 'Ученик, подключивший Telegram-бота, получает сообщения об учёбе — не раз в день, а когда это происходит.',
+      enabled: settings.studyNotifications,
+      toggle: (v) => setSettings(s => ({ ...s, studyNotifications: v })),
+      extra: (
+        <div className="mt-3 bg-emerald-50 rounded-xl p-3 text-xs text-emerald-800 space-y-1">
+          <p>• Работа проверена: оценка и комментарий преподавателя</p>
+          <p>• Непрочитанное сообщение от преподавателя</p>
+          <p>• Завтра срок сдачи задания, а работа не сдана</p>
+          <p>• Открылся новый модуль (онлайн-группы)</p>
+          <p>• Серия занятий вот-вот прервётся</p>
+          <p className="pt-1 text-emerald-700">Только с 09:00 до 21:00. Каждый вид ученик может отключить у себя в кабинете.</p>
         </div>
       ),
     },

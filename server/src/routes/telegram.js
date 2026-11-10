@@ -35,8 +35,9 @@ export default async function telegramRoutes(app, { pool, config, telegram }) {
       )
       await telegram.send(tg.botToken, chatId, student
         ? `✅ <b>${student.name || ''}</b>, уведомления подключены!\n\n`
-          + 'Я напомню вам о предстоящих платежах за курс, чтобы доступ к урокам не прерывался.\n\n'
-          + "Eslatmalar ulandi! Kurs to'lovlari haqida oldindan xabar beraman."
+          + 'Я напомню о платежах за курс и буду писать об учёбе: оценки, сообщения преподавателя, сроки заданий. '
+          + 'Лишнее можно отключить в личном кабинете.\n\n'
+          + "Eslatmalar ulandi! To'lovlar, baholar va topshiriq muddatlari haqida xabar beraman."
         : '❌ Ученик не найден. Откройте ссылку из личного кабинета ещё раз.', student ? appButton : {})
       return { ok: true }
     }
