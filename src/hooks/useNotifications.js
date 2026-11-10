@@ -210,7 +210,7 @@ export default function useNotifications() {
         if (marked.has(e.groupName)) continue
         out.push({
           id: `unmarked:${e.id}:${today}`, kind: 'attendance', at: `${today}T${e.endTime}:00`,
-          to: user.role === 'teacher' ? '/' : '/attendance',
+          to: '/attendance',
           title: t('notif.attendance_unmarked', { group: e.groupName || '' }),
           text: [`${e.startTime}–${e.endTime}`, e.teacherName].filter(Boolean).join(' · '),
         })

@@ -39,6 +39,7 @@ const RegisterSchool = lazyPage(() => import('./pages/RegisterSchool'))
 const CourseLanding = lazyPage(() => import('./pages/CourseLanding'))
 const TelegramApp = lazyPage(() => import('./pages/TelegramApp'))
 import { USE_SERVER } from './backend/api'
+import { hasMyDay } from './utils/startPage'
 
 function ProtectedRoute({ children, permission }) {
   const { user, hasPermission } = useAuth()
@@ -81,7 +82,7 @@ function SplashScreen() {
 }
 
 export default function App() {
-  const { user, telegramAuthPending } = useAuth()
+  const { user, telegramAuthPending, hasPermission } = useAuth()
 
   // Telegram mini app: signing in with Telegram — don't flash the login form
   if (!user && telegramAuthPending) return <SplashScreen />
@@ -102,7 +103,10 @@ export default function App() {
     )
   }
 
-  const homePage = user.role === 'student' ? <StudentCabinet /> : user.role === 'teacher' ? <Attendance /> : <Dashboard />
+  // Staff start on «Мой день»; a role it has nothing for — on the dashboard
+  const myDay = hasMyDay(user, hasPermission)
+  const homePage = user.role === 'student' ? <StudentCabinet />
+    : myDay ? <MyDay /> : <Dashboard />
 
   // Pages inside <Layout> have their own Suspense there (the menu stays on
   // screen while a page loads); this one covers the full-screen routes.
@@ -115,8 +119,8 @@ export default function App() {
       <Route path="/tg" element={<TelegramEntry />} />
       <Route path="/" element={<Layout />}>
         <Route index element={homePage} />
-        {/* «Мой день» — every staff role; students have their cabinet */}
-        <Route path="today" element={user.role === 'student' ? <Navigate to="/" /> : <MyDay />} />
+        {/* the address «Мой день» had before it became the start page */}
+        <Route path="today" element={user.role === 'student' || myDay ? <Navigate to="/" replace /> : <MyDay />} />
         <Route path="dashboard" element={
           <ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>
         } />

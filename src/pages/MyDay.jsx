@@ -606,7 +606,7 @@ export default function MyDay() {
             </button>
           )}
           {canMark && (
-            <button type="button" onClick={() => navigate(isTeacher ? '/' : '/attendance')}
+            <button type="button" onClick={() => navigate('/attendance')}
               className="bg-white/70 border border-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-sm font-medium hover:bg-white transition-colors flex items-center gap-1.5">
               <ClipboardCheck size={16} /> {t('myday.act_attendance')}
             </button>

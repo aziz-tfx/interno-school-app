@@ -39,6 +39,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { useTheme } from '../contexts/ThemeContext'
 import Logo from './Logo'
 import { USE_SERVER } from '../backend/api'
+import { hasMyDay } from '../utils/startPage'
 
 export default function Sidebar({ open, onClose }) {
   const { user, hasPermission, getRoleLabel, logout } = useAuth()
@@ -46,6 +47,7 @@ export default function Sidebar({ open, onClose }) {
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  const myDay = hasMyDay(user, hasPermission)
 
   const studentNavItems = [
     { to: '/', icon: BarChart3, label: 'Обзор' },
@@ -79,8 +81,8 @@ export default function Sidebar({ open, onClose }) {
   // section; its children are listed as leaf links when expanded.
   // Flat leaves (no `group`) still render as a single link.
   const allNavItems = [
-    // What this person has to do today — every staff role has one
-    { to: '/today', icon: CalendarCheck, label: t('sidebar.my_day'), permission: null },
+    // What this person has to do today — the start page («/»), see utils/startPage
+    ...(myDay ? [{ to: '/', icon: CalendarCheck, label: t('sidebar.my_day'), permission: null }] : []),
     { to: '/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard'), permission: 'dashboard' },
     { to: '/branches', icon: Building2, label: t('sidebar.branches'), permission: 'branches' },
     // Операционный экран филиала — только для операционных ролей
@@ -365,8 +367,9 @@ export default function Sidebar({ open, onClose }) {
                 key={to}
                 to={to}
                 onClick={onClose}
-                // Staff land on «/», which renders the same Dashboard
-                className={({ isActive }) => linkClass(isActive || (to === '/dashboard' && location.pathname === '/' && user?.role !== 'teacher'))}
+                end={to === '/'}
+                // Without «Мой день» staff land on «/», which renders the same Dashboard
+                className={({ isActive }) => linkClass(isActive || (to === '/dashboard' && location.pathname === '/' && !myDay && user?.role !== 'teacher'))}
               >
                 <Icon size={18} />
                 {label}

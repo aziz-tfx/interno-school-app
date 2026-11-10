@@ -3,16 +3,18 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, SquareKanban, GraduationCap, DollarSign, Calendar, Monitor,
-  ClipboardCheck, BarChart3, BookOpen, PenTool, Wallet, Menu, Users,
+  ClipboardCheck, BarChart3, BookOpen, PenTool, Wallet, Menu, Users, CalendarCheck,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { USE_SERVER } from '../backend/api'
 import { haptic } from '../utils/telegramWebApp'
+import { hasMyDay } from '../utils/startPage'
 
 // [ru, uz] — tab labels must stay short to fit five in 320px
 const L = {
   home: ['Главная', 'Asosiy'],
+  today: ['Мой день', 'Bugun'],
   overview: ['Обзор', 'Umumiy'],
   crm: ['CRM', 'CRM'],
   students: ['Ученики', "O'quvchilar"],
@@ -38,13 +40,17 @@ function tabsFor(user, hasPermission) {
   }
   const candidates = user.role === 'teacher'
     ? [
-        { to: '/', icon: ClipboardCheck, label: 'attendance' },
+        // «/» is «Мой день» (see utils/startPage); attendance has its own address
+        { to: '/', icon: CalendarCheck, label: 'today' },
+        { to: '/attendance', icon: ClipboardCheck, label: 'attendance', perm: 'attendance' },
         { to: '/schedule', icon: Calendar, label: 'schedule', perm: 'schedule' },
         { to: '/lms', icon: Monitor, label: 'lms', perm: 'lms' },
         { to: '/students', icon: GraduationCap, label: 'students', perm: 'students' },
       ]
     : [
-        { to: '/', icon: LayoutDashboard, label: 'home' },
+        hasMyDay(user, hasPermission)
+          ? { to: '/', icon: CalendarCheck, label: 'today' }
+          : { to: '/', icon: LayoutDashboard, label: 'home' },
         ...(USE_SERVER ? [{ to: '/crm', icon: SquareKanban, label: 'crm', perm: 'crm' }] : []),
         { to: '/students', icon: GraduationCap, label: 'students', perm: 'students' },
         { to: '/finance', icon: DollarSign, label: 'sales', perm: 'finance' },
