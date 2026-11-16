@@ -17,9 +17,11 @@ globalThis.fetch = async (url, init) => {
 }
 after(() => { globalThis.fetch = realFetch })
 
+const read = (who, url) => ctx.as(who).post('/api/admin/schedule/sheet-rows', { url })
+
 test('parseSheetUrl takes the spreadsheet and the tab', () => {
   assert.deepEqual(parseSheetUrl(SHEET), { id: '125apwOFXTGRq7hMLvARPsJwMWIi-sd3JEI-Zgcg94jM', gid: '546058976' })
-  assert.deepEqual(parseSheetUrl('https://docs.google.com/spreadsheets/d/125apwOFXTGRq7hMLvARPsJwMWIi-sd3JEI-Zgcg94jM/edit?usp=sharing').gid, null)
+  assert.equal(parseSheetUrl('https://docs.google.com/spreadsheets/d/125apwOFXTGRq7hMLvARPsJwMWIi-sd3JEI-Zgcg94jM/edit?usp=sharing').gid, null)
   assert.equal(parseSheetUrl('https://evil.example/spreadsheets/d/125apwOFXTGRq7hMLvARPsJwMWIi-sd3JEI-Zgcg94jM#gid=1'), null)
 })
 
@@ -31,53 +33,26 @@ test('parseCsv keeps multi-line cells and escaped quotes', () => {
   assert.equal(rows[1].length, 2) // trailing empty cells dropped
 })
 
-test('not linked yet → configured: false', async () => {
-  const res = await ctx.as('owner').get('/api/schedule/sheet')
-  assert.equal(res.statusCode, 200)
-  assert.deepEqual(res.json(), { configured: false, url: '' })
-})
-
-test('only admins link a sheet, and only a tab of a Google Sheet', async () => {
-  assert.equal((await ctx.as('sales').post('/api/admin/schedule/sheet', { url: SHEET })).statusCode, 403)
-  assert.equal((await ctx.as('owner').post('/api/admin/schedule/sheet', { url: 'https://example.com/x' })).statusCode, 400)
-  const noTab = await ctx.as('owner').post('/api/admin/schedule/sheet', { url: SHEET.replace(/#gid=\d+/, '') })
+test('only admins read a tab, and only a tab of a Google Sheet', async () => {
+  for (const who of ['sales', 'teacher', 'student']) assert.equal((await read(who, SHEET)).statusCode, 403, who)
+  assert.equal((await read('owner', 'https://example.com/x')).statusCode, 400)
+  const noTab = await read('owner', SHEET.replace(/#gid=\d+/, ''))
   assert.equal(noTab.statusCode, 400)
   assert.match(noTab.json().error, /gid/)
 
-  const ok = await ctx.as('owner').post('/api/admin/schedule/sheet', { url: SHEET })
+  const ok = await read('owner', SHEET)
   assert.equal(ok.statusCode, 200)
+  assert.deepEqual(ok.json().rows[0], ['', '1(8)', '2(8)', 'Онлайн'])
   assert.equal(calls.at(-1), 'https://docs.google.com/spreadsheets/d/125apwOFXTGRq7hMLvARPsJwMWIi-sd3JEI-Zgcg94jM/export?format=csv&gid=546058976')
-})
-
-test('managers read the rows; the read is cached; teachers, students and other schools do not get it', async () => {
-  const before = calls.length
-  const res = await ctx.as('owner').get('/api/schedule/sheet')
-  assert.equal(res.statusCode, 200)
-  const body = res.json()
-  assert.equal(body.configured, true)
-  assert.equal(body.url, SHEET)
-  assert.deepEqual(body.rows[0], ['', '1(8)', '2(8)', 'Онлайн'])
-  assert.ok(body.fetchedAt)
-  await ctx.as('owner').get('/api/schedule/sheet')
-  assert.equal(calls.length, before + 1, 'second read within a minute comes from the cache')
-
-  assert.equal((await ctx.as('teacher').get('/api/schedule/sheet')).statusCode, 403)
-  assert.equal((await ctx.as('student').get('/api/schedule/sheet')).statusCode, 403)
-  assert.equal((await ctx.as('otherOwner').get('/api/schedule/sheet')).json().configured, false)
 })
 
 test('a sheet that is not shared by link gives a clear message', async () => {
   answer = () => new Response('<html>Sign in</html>', { headers: { 'content-type': 'text/html' } })
   try {
-    const res = await ctx.as('owner').post('/api/admin/schedule/sheet', { url: SHEET.replace('546058976', '7') })
+    const res = await read('owner', SHEET)
     assert.equal(res.statusCode, 422)
     assert.match(res.json().error, /доступ/)
   } finally {
     answer = () => new Response(CSV, { headers: { 'content-type': 'text/csv' } })
   }
-})
-
-test('unlinking clears it', async () => {
-  assert.equal((await ctx.as('owner').post('/api/admin/schedule/sheet', { url: '' })).statusCode, 200)
-  assert.equal((await ctx.as('owner').get('/api/schedule/sheet')).json().configured, false)
 })

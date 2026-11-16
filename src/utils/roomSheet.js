@@ -170,10 +170,10 @@ function parseDays(text) {
 export function parseRoom(header) {
   const h = clean(header)
   const m = h.match(/^(\d+)\s*\((\d+)\)$/)
-  if (m) return { name: `Кабинет ${m[1]}`, short: m[1], capacity: +m[2] }
+  if (m) return { name: `Кабинет ${m[1]}`, short: m[1], capacity: +m[2], online: false }
   const n = h.match(/^(\d+)$/)
-  if (n) return { name: `Кабинет ${n[1]}`, short: n[1], capacity: null }
-  return { name: h, short: h, capacity: null }
+  if (n) return { name: `Кабинет ${n[1]}`, short: n[1], capacity: null, online: false }
+  return { name: h, short: h, capacity: null, online: /онлайн|online/i.test(h) }
 }
 
 const isTimeLabel = (cell) => !!parseTimeRange(cell)
@@ -239,19 +239,191 @@ export function parseRoomSheet(rows, today = new Date()) {
   return { blocks: blocks.filter(b => b.slots.length) }
 }
 
-/** Counts for the summary line of one block. */
-export function blockStats(block) {
-  let total = 0, busy = 0, ended = 0, upcoming = 0
-  for (const s of block.slots) {
-    for (const c of s.cells) {
-      total++
-      if (!c) continue
-      busy++
-      if (c.status === 'ended') ended++
-      if (c.status === 'upcoming') upcoming++
+export const formatShortDate = (d) => (d ? `${pad(d.getDate())}.${pad(d.getMonth() + 1)}` : '')
+export const isoDate = (d) => (d ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` : '')
+
+// ─── Moving the sheet into the system ─────────────────────────────────
+
+export const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+export const dayLabel = (d) => DAY_LABEL[d] || d
+const sortDays = (days) => DAY_ORDER.filter(d => days.includes(d))
+
+/** "07.09" and "7.09", extra spaces, case → the same name */
+export const normalizeGroupName = (s) =>
+  clean(s).toLowerCase().replace(/\s+/g, ' ').replace(/(^|[^\d])0(\d)/g, '$1$2')
+
+/**
+ * The sheet's cards → one item per group. The same group often sits in
+ * several cells (both halves of the week, a second room, the «Онлайн»
+ * column): cards with the same speaker, Telegram name, direction and start
+ * date are one group with several slots { days, start, end, room }.
+ */
+export function sheetGroups(parsed) {
+  const items = new Map()
+  for (const b of parsed?.blocks || []) {
+    for (const s of b.slots) {
+      s.cells.forEach((c, i) => {
+        if (!c || (!c.speaker && !c.tgName && !c.direction)) return
+        const time = c.time || { start: s.start, end: s.end }
+        const room = b.rooms[i]
+        const key = [
+          c.speaker.toLowerCase(), normalizeGroupName(c.tgName), directionKey(c.direction), isoDate(c.start),
+          c.tgName ? '' : `${time.start}-${time.end}`, // without a Telegram name only an identical card is the same group
+        ].join('|')
+        let it = items.get(key)
+        if (!it) {
+          it = {
+            key, speaker: c.speaker, tags: [], direction: c.direction, tgName: c.tgName, students: c.students,
+            notes: [], startDate: isoDate(c.start), endDate: isoDate(c.end), slots: [], raw: [],
+          }
+          items.set(key, it)
+        }
+        for (const t of c.tags) if (!it.tags.includes(t)) it.tags.push(t)
+        for (const n of c.notes) if (!it.notes.includes(n)) it.notes.push(n)
+        if (!it.endDate) it.endDate = isoDate(c.end)
+        if (!it.students) it.students = c.students
+        it.raw.push(c.raw)
+        const online = !!room?.online
+        const slotKey = `${time.start}-${time.end}|${online ? 'online' : room?.short}`
+        let slot = it.slots.find(x => x.key === slotKey)
+        if (!slot) it.slots.push(slot = { key: slotKey, days: [], start: time.start, end: time.end, room: online ? null : room, online })
+        slot.days = sortDays([...new Set([...slot.days, ...b.days])])
+      })
     }
   }
-  return { total, busy, free: total - busy, ended, upcoming }
+
+  // names: the Telegram name; else «Спикер ДД.ММ». Clashes get a suffix.
+  const list = [...items.values()]
+  for (const it of list) {
+    const [y, m, d] = it.startDate.split('-')
+    it.name = it.tgName || [it.speaker, d && `${d}.${m}`].filter(Boolean).join(' ')
+  }
+  const byName = new Map()
+  for (const it of list) {
+    const k = normalizeGroupName(it.name)
+    byName.set(k, [...(byName.get(k) || []), it])
+  }
+  for (const same of byName.values()) {
+    if (same.length < 2) continue
+    const speakersDiffer = new Set(same.map(x => x.speaker)).size > 1
+    same.forEach(x => { x.name = `${x.name} · ${speakersDiffer ? x.speaker : x.direction || x.speaker}` })
+  }
+  return list
 }
 
-export const formatShortDate = (d) => (d ? `${pad(d.getDate())}.${pad(d.getMonth() + 1)}` : '')
+/** Slots → the human schedule line other screens (and contracts) show. */
+export function scheduleLine(slots) {
+  const parts = []
+  for (const s of slots) {
+    const p = parts.find(x => x.start === s.start && x.end === s.end)
+    if (p) p.days = sortDays([...new Set([...p.days, ...s.days])])
+    else parts.push({ start: s.start, end: s.end, days: [...s.days] })
+  }
+  return parts.map(p => `${p.days.map(dayLabel).join(', ')} ${p.start}-${p.end}`).join('; ')
+}
+
+const stems = (s) => directionKey(s).split(' ').filter(Boolean)
+function similarity(a, b) {
+  const A = stems(a), B = stems(b)
+  if (!A.length || !B.length) return 0
+  return A.filter(x => B.includes(x)).length / Math.max(A.length, B.length)
+}
+
+/** Best catalog course for a sheet direction, or '' */
+export function matchCourse(direction, courses) {
+  let best = '', score = 0
+  for (const c of courses || []) {
+    const s = similarity(direction, c.name)
+    if (s > score) { best = c.name; score = s }
+  }
+  return score >= 0.5 ? best : ''
+}
+
+/** The one teacher whose name contains the speaker's name, or '' */
+export function matchTeacher(speaker, teachers) {
+  const sp = clean(speaker).toLowerCase().split(/\s+/)[0]
+  if (!sp) return ''
+  const hits = (teachers || []).filter(t =>
+    clean(t.name).toLowerCase().split(/[\s.,()-]+/).some(w => w === sp || (sp.length >= 4 && w.startsWith(sp))))
+  return hits.length === 1 ? hits[0].id : ''
+}
+
+/** Existing room of the branch with the sheet room's number ("1(8)" ↔ «Кабинет 1»), or '' */
+export function matchRoom(sheetRoom, rooms) {
+  if (!sheetRoom?.short) return ''
+  const hits = (rooms || []).filter(r => (String(r.name || '').match(/\d+/) || [])[0] === sheetRoom.short)
+  return hits.length === 1 ? hits[0].id : ''
+}
+
+/**
+ * The preview the admin checks before the move.
+ *   items       sheetGroups() output
+ *   groups      all groups of the school
+ *   branchRooms / branchTeachers / branchGroups  — of the chosen branch
+ * → { rooms: [{ short, name, capacity, roomId }], rows: [{ ...item, groupId, course, teacherId, include }] }
+ * roomId / groupId '' means «создать».
+ */
+export function planImport(items, { courses, branchTeachers, teachers, branchRooms, branchGroups }) {
+  const rooms = []
+  for (const it of items) {
+    for (const s of it.slots) {
+      if (s.online || !s.room || rooms.some(r => r.short === s.room.short)) continue
+      rooms.push({ short: s.room.short, name: s.room.name, capacity: s.room.capacity, roomId: matchRoom(s.room, branchRooms) })
+    }
+  }
+  rooms.sort((a, b) => (parseInt(a.short) || 0) - (parseInt(b.short) || 0))
+
+  const claimed = new Set()
+  const rows = items.map(it => {
+    const teacherId = matchTeacher(it.speaker, branchTeachers) || matchTeacher(it.speaker, teachers)
+    const names = new Set([normalizeGroupName(it.name), it.tgName && normalizeGroupName(it.tgName)].filter(Boolean))
+    let candidates = (branchGroups || []).filter(g => names.has(normalizeGroupName(g.name)))
+    if (candidates.length > 1 && teacherId) candidates = candidates.filter(g => String(g.teacherId) === String(teacherId))
+    const match = candidates.length === 1 && !claimed.has(candidates[0].id) ? candidates[0] : null
+    if (match) claimed.add(match.id)
+    return {
+      ...it,
+      groupId: match?.id || '',
+      course: matchCourse(it.direction, courses) || match?.course || '',
+      teacherId: teacherId || (match?.teacherId ?? ''),
+      include: true,
+    }
+  })
+  return { rooms, rows }
+}
+
+/**
+ * One preview row → the fields written to the group.
+ * roomIds: sheet room short → room id in the system.
+ */
+export function groupDocFromRow(row, { branch, roomIds, rooms, existing, now = new Date() }) {
+  const slots = row.slots.map(s => ({
+    days: s.days, start: s.start, end: s.end, online: s.online, roomId: s.online ? '' : (roomIds[s.room.short] || ''),
+  }))
+  const offline = slots.filter(s => !s.online)
+  const firstRoomId = offline.find(s => s.roomId)?.roomId || ''
+  const capacity = rooms.find(r => r.id === firstRoomId)?.capacity
+  const note = [row.tags.join(', '), row.students && `Студенты: ${row.students}`, ...row.notes].filter(Boolean).join(' · ')
+  const doc = {
+    branch,
+    course: row.course || row.direction || '',
+    schedule: scheduleLine(row.slots),
+    slots,
+    room: firstRoomId,
+    format: !offline.length ? 'online' : offline.length < slots.length ? 'hybrid' : 'offline',
+    startDate: row.startDate || '',
+    endDate: row.endDate || null,
+    status: existing?.status === 'full' ? 'full' : 'active',
+    teacherId: row.teacherId === '' || row.teacherId == null ? null : row.teacherId,
+    teacherName: row.speaker || '',
+    importedFrom: 'sheet',
+    importedAt: now.toISOString(),
+    sheetNote: note,
+  }
+  if (!existing) {
+    doc.name = row.name
+    doc.maxOffline = capacity || 15
+    doc.language = 'ru'
+  }
+  return doc
+}

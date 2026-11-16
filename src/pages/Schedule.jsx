@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
-import RoomSheetView from '../components/RoomSheetView'
+import RoomsView from '../components/RoomsView'
 import {
   Calendar, Plus, X, Save, Trash2, AlertTriangle,
   Users, MapPin, Clock, ChevronLeft, ChevronRight, Filter, LayoutGrid, CalendarDays
@@ -260,7 +260,7 @@ export default function Schedule() {
   const [editingEntry, setEditingEntry] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  // Managers also get the live room grid from the school's Google Sheet
+  // Managers also get the room grid (кабинеты × время) built from the groups
   const canSeeRooms = !isStudent && !isTeacher
   const [tab, setTabState] = useState(() => {
     try { return localStorage.getItem('interno_schedule_tab') || 'rooms' } catch { return 'rooms' }
@@ -368,7 +368,7 @@ export default function Schedule() {
       {canSeeRooms && (
         <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl w-full sm:w-fit">
           {[
-            { key: 'rooms', label: 'Кабинеты (Google Таблица)', icon: LayoutGrid },
+            { key: 'rooms', label: 'Кабинеты', icon: LayoutGrid },
             { key: 'groups', label: 'Расписание групп', icon: CalendarDays },
           ].map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setTab(key)}
@@ -381,7 +381,7 @@ export default function Schedule() {
         </div>
       )}
 
-      {showRooms ? <RoomSheetView /> : (<>
+      {showRooms ? <RoomsView /> : (<>
       {/* Filters */}
       {!isStudent && !isTeacher && (
         <div className="glass-card rounded-2xl p-4">

@@ -1,25 +1,22 @@
-// «Расписание» → «Кабинеты (Google Таблица)»: the school keeps its live room
-// grid (кабинеты × время) in a Google Sheet. The admin links one tab of it
-// once; the platform reads that tab and shows it, so nobody has to retype it.
+// One-time move of the school's room grid from Google Sheets into the
+// system. The admins kept the real schedule (кабинеты × время) in a sheet;
+// «Расписание» → «Кабинеты» → «Перенести из Google Таблицы» reads that tab
+// once, the admin checks the preview, and the client creates / updates the
+// groups (room, days, time, teacher, dates). After that groups are added in
+// the system as usual and the sheet is no longer read.
 //
-//   GET  /api/schedule/sheet              staff who manage the schedule:
-//                                         { configured, url, rows, fetchedAt }
-//                                         ?refresh=1 skips the 60 s cache
-//   POST /api/admin/schedule/sheet {url}  owner/admin: link a tab ('' unlinks)
+//   POST /api/admin/schedule/sheet-rows {url}  owner/admin: the tab's cells
+//                                              { rows: string[][] }
 //
-// The link lives in tenant_integrations.data.scheduleSheet.url. The sheet must
-// be shared «по ссылке»: it is read as CSV through Google's public export of
-// that single tab (gid), so the other tabs never leave Google.
+// The sheet must be shared «по ссылке»: one tab (gid) is read as CSV through
+// Google's public export, so the other tabs never leave Google.
 
-import { isAdmin, isStudent } from '../collections.js'
+import { isAdmin } from '../collections.js'
 import { badRequest, forbidden, HttpError } from '../lib/errors.js'
-import { loadTenantIntegration, saveTenantIntegration } from '../vercel/_lib/tenantConfig.js'
 
-const CACHE_MS = 60_000
-const MIN_REFRESH_MS = 5_000
 const MAX_BYTES = 2 * 1024 * 1024
 
-/** Google Sheets link → { id, gid } or null. The tab (gid) is required. */
+/** Google Sheets link → { id, gid } or null. gid is null when the link names no tab. */
 export function parseSheetUrl(url) {
   const s = String(url || '').trim()
   const id = s.match(/^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/)?.[1]
@@ -74,44 +71,16 @@ async function fetchSheetRows({ id, gid }) {
 }
 
 export default async function scheduleSheetRoutes(app) {
-  const cache = new Map() // tenantId → { url, rows, at }
-
-  // the roles that see the school-wide schedule (not teachers / students)
-  const managers = async (req) => {
-    if (isStudent(req.user) || req.user.role === 'teacher') throw forbidden()
-  }
   const admins = async (req) => { if (!isAdmin(req.user)) throw forbidden() }
 
-  app.get('/api/schedule/sheet', { preHandler: [app.authenticate, managers] }, async (req, reply) => {
-    const tenantId = req.user.tenantId
-    const { url = '' } = await loadTenantIntegration(tenantId, 'scheduleSheet')
+  app.post('/api/admin/schedule/sheet-rows', {
+    preHandler: [app.authenticate, admins],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    const ref = parseSheetUrl(req.body?.url)
+    if (!ref) throw badRequest('Это не ссылка на Google Таблицу')
+    if (!ref.gid) throw badRequest('В ссылке нет листа: откройте лист с расписанием и скопируйте ссылку из адресной строки (в ней есть #gid=…)')
     reply.header('Cache-Control', 'private, no-store')
-    const ref = parseSheetUrl(url)
-    if (!ref?.gid) return { configured: false, url: url || '' }
-
-    const hit = cache.get(tenantId)
-    const age = hit && hit.url === url ? Date.now() - hit.at : Infinity
-    const wantFresh = req.query?.refresh === '1' && age > MIN_REFRESH_MS
-    if (age < CACHE_MS && !wantFresh) return { configured: true, url, rows: hit.rows, fetchedAt: new Date(hit.at).toISOString() }
-
-    const rows = await fetchSheetRows(ref)
-    const at = Date.now()
-    cache.set(tenantId, { url, rows, at })
-    return { configured: true, url, rows, fetchedAt: new Date(at).toISOString() }
-  })
-
-  app.post('/api/admin/schedule/sheet', { preHandler: [app.authenticate, admins] }, async (req) => {
-    const tenantId = req.user.tenantId
-    const url = String(req.body?.url || '').trim()
-    if (url) {
-      const ref = parseSheetUrl(url)
-      if (!ref) throw badRequest('Это не ссылка на Google Таблицу')
-      if (!ref.gid) throw badRequest('В ссылке нет листа: откройте лист с расписанием и скопируйте ссылку из адресной строки (в ней есть #gid=…)')
-      await fetchSheetRows(ref) // fail now, while the admin is looking, not later
-    }
-    const ok = await saveTenantIntegration(tenantId, 'scheduleSheet', { url })
-    if (!ok) throw new HttpError(500, 'Не удалось сохранить ссылку')
-    cache.delete(tenantId)
-    return { ok: true, url }
+    return { rows: await fetchSheetRows(ref) }
   })
 }
