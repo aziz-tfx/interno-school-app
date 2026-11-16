@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import RoomsView from '../components/RoomsView'
 import {
   Calendar, Plus, X, Save, Trash2, AlertTriangle,
-  Users, MapPin, Clock, ChevronLeft, ChevronRight, Filter
+  Users, MapPin, Clock, ChevronLeft, ChevronRight, Filter, LayoutGrid, CalendarDays
 } from 'lucide-react'
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
@@ -259,6 +260,17 @@ export default function Schedule() {
   const [editingEntry, setEditingEntry] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
+  // Managers also get the room grid (кабинеты × время) built from the groups
+  const canSeeRooms = !isStudent && !isTeacher
+  const [tab, setTabState] = useState(() => {
+    try { return localStorage.getItem('interno_schedule_tab') || 'rooms' } catch { return 'rooms' }
+  })
+  const setTab = (v) => {
+    setTabState(v)
+    try { localStorage.setItem('interno_schedule_tab', v) } catch { /* private mode */ }
+  }
+  const showRooms = canSeeRooms && tab === 'rooms'
+
   // Find student's group for auto-filter (by linked studentId first)
   const myStudent = useMemo(() => {
     if (!isStudent) return null
@@ -345,7 +357,7 @@ export default function Schedule() {
             <p className="text-sm text-slate-500">{t('schedule.subtitle')}</p>
           </div>
         </div>
-        {canEdit && (
+        {canEdit && !showRooms && (
           <button onClick={() => { setEditingEntry(null); setShowForm(true) }}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors">
             <Plus size={16} /> {t('schedule.add_entry')}
@@ -353,6 +365,23 @@ export default function Schedule() {
         )}
       </div>
 
+      {canSeeRooms && (
+        <div className="flex gap-1.5 p-1 bg-slate-100 rounded-xl w-full sm:w-fit">
+          {[
+            { key: 'rooms', label: 'Кабинеты', icon: LayoutGrid },
+            { key: 'groups', label: 'Расписание групп', icon: CalendarDays },
+          ].map(({ key, label, icon: Icon }) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                tab === key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}>
+              <Icon size={15} /> {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showRooms ? <RoomsView /> : (<>
       {/* Filters */}
       {!isStudent && !isTeacher && (
         <div className="glass-card rounded-2xl p-4">
@@ -528,6 +557,8 @@ export default function Schedule() {
           )}
         </div>
       )}
+
+      </>)}
 
       {/* Delete confirmation */}
       {deleteConfirm && (

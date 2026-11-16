@@ -3,6 +3,8 @@ import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { toast } from './Toaster'
+import { parseScheduleLine, groupSlots } from '../utils/roomGrid'
+import { scheduleLine } from '../utils/roomSheet'
 
 const WEEKDAYS = [
   { key: 'mon', label: 'Пн' },
@@ -14,11 +16,11 @@ const WEEKDAYS = [
   { key: 'sun', label: 'Вс' },
 ]
 
-const TIME_PRESETS = [
-  '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
-  '13:00', '14:00', '15:00', '16:00', '17:00', '18:00',
-  '19:00', '20:00', '21:00', '22:00', '23:00',
-]
+// every half hour 07:00–23:00 (lessons start at 18:30, 19:30 …)
+const TIME_PRESETS = Array.from({ length: 33 }, (_, i) => {
+  const m = 7 * 60 + i * 30
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+})
 
 const BRANCH_TO_REGION = {
   tashkent: 'tashkent',
@@ -54,6 +56,8 @@ export default function GroupForm({ group, onClose }) {
   const [timeFrom, setTimeFrom] = useState('14:00')
   const [timeTo, setTimeTo] = useState('16:00')
   const [errors, setErrors] = useState({})
+  // the user changed days / time / room / format (not just the form loading the group)
+  const [scheduleTouched, setScheduleTouched] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -71,19 +75,12 @@ export default function GroupForm({ group, onClose }) {
         format: group.format || 'offline',
         language: group.language || 'ru',
       })
-      // Parse existing schedule into days/time
-      if (group.schedule) {
-        const parts = group.schedule.split(' ')
-        const timePart = parts.find(p => p.includes(':') && p.includes('-'))
-        const dayPart = parts.filter(p => !p.includes(':') || !p.includes('-'))
-        if (timePart) {
-          const [from, to] = timePart.split('-')
-          if (from) setTimeFrom(from)
-          if (to) setTimeTo(to)
-        }
-        const dayMap = { 'Пн': 'mon', 'Вт': 'tue', 'Ср': 'wed', 'Чт': 'thu', 'Пт': 'fri', 'Сб': 'sat', 'Вс': 'sun' }
-        const parsed = dayPart.map(d => d.replace(',', '')).map(d => dayMap[d]).filter(Boolean)
-        if (parsed.length > 0) setSelectedDays(parsed)
+      // Parse existing schedule into days/time ("Пн, Ср, Пт 18:30-20:30")
+      const [first] = parseScheduleLine(group.schedule)
+      if (first) {
+        setTimeFrom(first.start)
+        setTimeTo(first.end)
+        if (first.days.length > 0) setSelectedDays(first.days)
       }
     }
   }, [group])
@@ -110,6 +107,7 @@ export default function GroupForm({ group, onClose }) {
   // group's data loads — that would overwrite its saved limit).
   const handleRoomChange = (roomId) => {
     const selectedRoom = rooms.find(r => r.id === roomId)
+    setScheduleTouched(true)
     setForm(prev => ({
       ...prev,
       room: roomId,
@@ -133,13 +131,21 @@ export default function GroupForm({ group, onClose }) {
   const courseDuration = regionDuration
     ? parseInt(regionDuration)
     : (selectedCourse?.duration ? parseInt(selectedCourse.duration) : 0)
-  const endDate = form.startDate && courseDuration
+  const computedEndDate = form.startDate && courseDuration
     ? (() => {
         const d = new Date(form.startDate)
         d.setMonth(d.getMonth() + courseDuration)
         return d.toISOString().split('T')[0]
       })()
     : ''
+  // A group's own end date (e.g. moved from the Google Sheet) stays until its
+  // start date or course is changed here.
+  const keepsOwnEnd = isEdit && group.endDate && form.startDate === (group.startDate || '') && form.course === (group.course || '')
+  const endDate = keepsOwnEnd ? group.endDate : computedEndDate
+
+  // Groups moved from the sheet may meet in several rooms / at several times
+  const multiSlots = isEdit && Array.isArray(group.slots) && group.slots.length > 1 ? groupSlots(group) : null
+  const slotsChanged = isEdit && scheduleTouched
 
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
 
@@ -147,6 +153,7 @@ export default function GroupForm({ group, onClose }) {
   const branchRooms = rooms.filter(r => r.branchId === form.branch)
 
   const toggleDay = (dayKey) => {
+    setScheduleTouched(true)
     setSelectedDays(prev =>
       prev.includes(dayKey) ? prev.filter(d => d !== dayKey) : [...prev, dayKey]
     )
@@ -172,6 +179,10 @@ export default function GroupForm({ group, onClose }) {
       teacherId: form.teacherId ? (/^\d+$/.test(String(form.teacherId)) ? Number(form.teacherId) : form.teacherId) : null,
       maxOffline: Number(form.maxOffline) || 15,
       endDate: endDate || null,
+      // days / time / room changed here → the form's single slot replaces the sheet's slots;
+      // untouched, a multi-slot group keeps its full schedule line
+      ...(slotsChanged && group.slots ? { slots: null } : {}),
+      ...(multiSlots && !slotsChanged ? { schedule: group.schedule } : {}),
     }
     setSaving(true)
     try {
@@ -230,7 +241,7 @@ export default function GroupForm({ group, onClose }) {
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('groupForm.label_format')}</label>
-          <select value={form.format} onChange={e => set('format', e.target.value)}
+          <select value={form.format} onChange={e => { set('format', e.target.value); setScheduleTouched(true) }}
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="offline">{t('groupForm.format_offline')}</option>
             <option value="online">{t('groupForm.format_online')}</option>
@@ -288,7 +299,9 @@ export default function GroupForm({ group, onClose }) {
           <label className="block text-sm font-medium text-slate-700 mb-1">Дата окончания</label>
           <input type="date" value={endDate} disabled
             className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-500" />
-          {courseDuration > 0 && (
+          {keepsOwnEnd ? (
+            <p className="text-[10px] text-slate-400 mt-1">Из карточки группы; пересчитается при смене даты старта или курса</p>
+          ) : courseDuration > 0 && (
             <p className="text-[10px] text-slate-400 mt-1">Авто: {courseDuration} мес ({selectedCourse?.name})</p>
           )}
         </div>
@@ -296,6 +309,15 @@ export default function GroupForm({ group, onClose }) {
         {/* Schedule: day picker + time */}
         <div className="col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-2">{t('groupForm.label_schedule')}</label>
+
+          {multiSlots && (
+            <div className={`mb-3 rounded-lg border px-3 py-2 text-xs ${slotsChanged ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+              <p className="font-medium">Сейчас у группы несколько слотов: {scheduleLine(multiSlots)}</p>
+              <p className="mt-0.5">{slotsChanged
+                ? 'Вы изменили дни, время или кабинет: после сохранения останется один слот из формы.'
+                : 'Если изменить дни, время или кабинет, останется один слот из формы.'}</p>
+            </div>
+          )}
 
           {/* Day buttons */}
           <div className="flex gap-1.5 mb-3">
@@ -313,12 +335,12 @@ export default function GroupForm({ group, onClose }) {
 
           {/* Time range */}
           <div className="flex items-center gap-2">
-            <select value={timeFrom} onChange={e => setTimeFrom(e.target.value)}
+            <select value={timeFrom} onChange={e => { setTimeFrom(e.target.value); setScheduleTouched(true) }}
               className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               {TIME_PRESETS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <span className="text-slate-400 text-sm">—</span>
-            <select value={timeTo} onChange={e => setTimeTo(e.target.value)}
+            <select value={timeTo} onChange={e => { setTimeTo(e.target.value); setScheduleTouched(true) }}
               className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               {TIME_PRESETS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -333,7 +355,7 @@ export default function GroupForm({ group, onClose }) {
 
           {/* Manual override */}
           {selectedDays.length === 0 && (
-            <input type="text" value={form.schedule} onChange={e => set('schedule', e.target.value)}
+            <input type="text" value={form.schedule} onChange={e => { set('schedule', e.target.value); setScheduleTouched(true) }}
               placeholder="Пн, Ср, Пт 14:00-16:00"
               className="w-full mt-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           )}
