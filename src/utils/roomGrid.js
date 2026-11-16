@@ -80,6 +80,38 @@ const byRoomName = (a, b) => {
 const overlap = (a, b) =>
   a.days.some(d => b.days.includes(d)) && toMinutes(a.start) < toMinutes(b.end) && toMinutes(b.start) < toMinutes(a.end)
 
+const DAY_MS = 86_400_000
+const dateOf = (iso, endOfDay = false) => {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], endOfDay ? 23 : 0, endOfDay ? 59 : 0) : null
+}
+
+/** 'upcoming' (start date ahead) | 'ended' (end date passed) | 'active' */
+export function groupStatus(group, today = new Date()) {
+  const day0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const start = dateOf(group?.startDate)
+  const end = dateOf(group?.endDate, true)
+  if (start && start > day0) return 'upcoming'
+  if (end && end < day0) return 'ended'
+  return 'active'
+}
+
+/** Whole days until the group starts (0 = today), or null */
+export function daysUntilStart(group, today = new Date()) {
+  const start = dateOf(group?.startDate)
+  if (!start) return null
+  const day0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return Math.round((start - day0) / DAY_MS)
+}
+
+// Do the two groups study during the same weeks? (no dates = always)
+const samePeriod = (a, b) => {
+  const as = dateOf(a.startDate), ae = dateOf(a.endDate, true)
+  const bs = dateOf(b.startDate), be = dateOf(b.endDate, true)
+  return (!as || !be || as <= be) && (!bs || !ae || bs <= ae)
+}
+const STATUS_ORDER = { active: 0, ended: 1, upcoming: 2 }
+
 /**
  * → [{ ...block, columns: [{ id, name, capacity, kind: 'room'|'online'|'none' }],
  *      rows: [{ label, start, end, cells: [[{ group, slot, days, partial, conflict }]] }],
@@ -90,8 +122,6 @@ export function buildRoomGrid({ groups, rooms, branchId, branches, today = new D
   const branchRooms = (rooms || []).filter(r => inBranch(r.branchId || r.branch)).sort(byRoomName)
   const roomIds = new Set(branchRooms.map(r => r.id))
   const live = (groups || []).filter(g => g.status !== 'archived' && inBranch(g.branch))
-  const day0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-
   const blocks = BLOCKS.map(b => {
     const placements = []
     for (const group of live) {
@@ -99,7 +129,7 @@ export function buildRoomGrid({ groups, rooms, branchId, branches, today = new D
         const days = slot.days.filter(d => b.days.includes(d))
         if (!days.length) continue
         const col = slot.online ? 'online' : roomIds.has(slot.roomId) ? slot.roomId : 'none'
-        placements.push({ group, slot, days, partial: days.length < b.days.length, col, row: rowIndex(slot.start) })
+        placements.push({ group, slot, days, partial: days.length < b.days.length, col, row: rowIndex(slot.start), status: groupStatus(group, today) })
       }
     }
     const columns = branchRooms.map(r => ({ id: r.id, name: r.name, capacity: r.capacity || null, kind: 'room' }))
@@ -113,24 +143,27 @@ export function buildRoomGrid({ groups, rooms, branchId, branches, today = new D
         label: r.label, start: r.start, end: r.end,
         cells: columns.map(c => placements
           .filter(p => p.row === r.index && p.col === c.id)
-          .sort((a, b) => toMinutes(a.slot.start) - toMinutes(b.slot.start))),
+          // the group studying now first, the next one to start after it
+          .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
+            String(a.group.startDate || '').localeCompare(String(b.group.startDate || '')) ||
+            toMinutes(a.slot.start) - toMinutes(b.slot.start))),
       }))
 
-    // two groups in one room at the same time on the same day
+    // two groups in one room at the same time on the same day, in the same
+    // weeks: a new group taking the room after the current one ends is fine
     for (const p of placements) {
       if (p.col === 'online') continue
       p.conflict = placements.some(q => q !== p && q.col === p.col && q.group.id !== p.group.id &&
-        overlap({ ...p.slot, days: p.days }, { ...q.slot, days: q.days }))
+        overlap({ ...p.slot, days: p.days }, { ...q.slot, days: q.days }) && samePeriod(p.group, q.group))
     }
 
     const roomCells = rows.flatMap(r => r.cells.filter((_, i) => columns[i].kind === 'room'))
     const busy = roomCells.filter(c => c.length).length
     const ids = new Set(placements.map(p => p.group.id))
-    const ended = [...ids].filter(id => {
-      const g = live.find(x => x.id === id)
-      return g?.endDate && new Date(`${g.endDate}T23:59:59`) < day0
-    }).length
-    return { ...b, columns, rows, stats: { groups: ids.size, busy, free: roomCells.length - busy, ended } }
+    const statusOf = (id) => groupStatus(live.find(x => x.id === id), today)
+    const ended = [...ids].filter(id => statusOf(id) === 'ended').length
+    const upcoming = [...ids].filter(id => statusOf(id) === 'upcoming').length
+    return { ...b, columns, rows, stats: { groups: ids.size, busy, free: roomCells.length - busy, ended, upcoming } }
   })
 
   // Sunday only when someone studies on Sunday
@@ -142,4 +175,13 @@ export function groupsWithoutTime({ groups, branchId, branches }) {
   return (groups || []).filter(g => g.status !== 'archived' &&
     (!branchId || branchId === 'all' || sameBranch(g.branch, branchId, branches)) &&
     groupSlots(g).length === 0)
+}
+
+/** New groups of the branch that have not started yet, soonest first. */
+export function upcomingGroups({ groups, branchId, branches, today = new Date() }) {
+  return (groups || [])
+    .filter(g => g.status !== 'archived' &&
+      (!branchId || branchId === 'all' || sameBranch(g.branch, branchId, branches)) &&
+      groupStatus(g, today) === 'upcoming')
+    .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)) || String(a.name).localeCompare(String(b.name), 'ru'))
 }

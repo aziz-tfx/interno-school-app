@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Users, Clock, Sheet, UserRound, CalendarRange, Upload, Info } from 'lucide-react'
+import { AlertTriangle, Users, Clock, Sheet, UserRound, CalendarRange, Upload, Info, Rocket, MapPin } from 'lucide-react'
 import { useData } from '../contexts/DataContext'
 import { useAuth } from '../contexts/AuthContext'
-import { buildRoomGrid, groupsWithoutTime } from '../utils/roomGrid'
+import { buildRoomGrid, groupsWithoutTime, upcomingGroups, daysUntilStart, groupSlots } from '../utils/roomGrid'
+import { scheduleLine } from '../utils/roomSheet'
 import { directionKey, dayLabel, toMinutes, WEEKDAY_KEYS } from '../utils/roomSheet'
 import SheetImportModal from './SheetImportModal'
 
@@ -29,14 +30,26 @@ const shortDate = (iso) => {
   return m ? `${m[2]}.${m[1]}` : ''
 }
 
-function GroupCard({ placement, color, teacherName, students, ended, onOpen }) {
-  const { group, slot, days, partial, conflict } = placement
+/** «сегодня», «завтра», «через 5 дн.» */
+const inDays = (n) => (n == null ? '' : n <= 0 ? 'сегодня' : n === 1 ? 'завтра' : `через ${n} дн.`)
+
+const UPCOMING_CARD = 'bg-white border-dashed border-sky-400 text-slate-800 dark:bg-sky-400/5 dark:border-sky-400/50 dark:text-slate-100'
+
+function GroupCard({ placement, color, teacherName, students, today, onOpen }) {
+  const { group, slot, days, partial, conflict, status } = placement
+  const ended = status === 'ended'
+  const upcoming = status === 'upcoming'
   return (
     // a div, not a <button>: the app turns light-theme buttons into pills
     <div role="button" tabIndex={0} onClick={onOpen} title={group.sheetNote || group.name}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
       className={`w-full h-full rounded-xl border p-2.5 text-left cursor-pointer transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-        conflict ? 'border-red-400 ring-1 ring-red-300 ' : ''}${ended ? 'bg-slate-50 border-dashed border-amber-400 text-slate-600 dark:text-slate-300' : color}`}>
+        conflict ? 'border-red-400 ring-1 ring-red-300 ' : ''}${upcoming ? UPCOMING_CARD : ended ? 'bg-slate-50 border-dashed border-amber-400 text-slate-600 dark:text-slate-300' : color}`}>
+      {upcoming && (
+        <p className="mb-1 inline-flex items-center gap-1 rounded-md bg-sky-100 text-sky-800 dark:bg-sky-400/20 dark:text-sky-200 px-1.5 py-0.5 text-[10px] font-semibold">
+          <Rocket size={10} /> Старт {shortDate(group.startDate)} · {inDays(daysUntilStart(group, today))}
+        </p>
+      )}
       <p className="text-[11px] font-bold flex items-center gap-1 tabular-nums">
         <Clock size={11} /> {slot.start}–{slot.end}
         {partial && <span className="ml-auto font-medium opacity-80">только {days.map(dayLabel).join(', ')}</span>}
@@ -83,6 +96,7 @@ export default function RoomsView() {
   const [blockId, setBlockId] = useState(null)
   const [teacherFilter, setTeacherFilter] = useState('')
   const [onlyEnded, setOnlyEnded] = useState(false)
+  const [show, setShow] = useState('all') // all | now | upcoming
   const [importing, setImporting] = useState(false)
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -96,6 +110,10 @@ export default function RoomsView() {
   const grid = useMemo(
     () => buildRoomGrid({ groups, rooms, branchId: branchId || defaultBranch, branches, today: now }),
     [groups, rooms, branchId, defaultBranch, branches, now],
+  )
+  const upcoming = useMemo(
+    () => upcomingGroups({ groups, branchId: branchId || defaultBranch, branches, today: now }),
+    [groups, branchId, defaultBranch, branches, now],
   )
   const noTime = useMemo(
     () => groupsWithoutTime({ groups, branchId: branchId || defaultBranch, branches }),
@@ -120,11 +138,12 @@ export default function RoomsView() {
     return [...set].sort((a, b) => a.localeCompare(b, 'ru'))
   }, [grid, teachers]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const isEnded = (g) => !!g.endDate && new Date(`${g.endDate}T23:59:59`) < day0
+  const studentsOf = (g) => getGroupOfflineCount(g.name) + getGroupOnlineCount(g.name)
   const totalPlaced = grid.reduce((s, b) => s + b.stats.groups, 0)
   const imported = groups.some(g => g.importedFrom === 'sheet')
-  const visible = (p) => (!teacherFilter || teacherNameOf(p.group) === teacherFilter) && (!onlyEnded || isEnded(p.group))
+  const visible = (p) => (!teacherFilter || teacherNameOf(p.group) === teacherFilter) &&
+    (!onlyEnded || p.status === 'ended') &&
+    (show === 'all' || (show === 'upcoming' ? p.status === 'upcoming' : p.status !== 'upcoming'))
   const nowMin = now.getHours() * 60 + now.getMinutes()
   const legend = useMemo(() => {
     const seen = new Map()
@@ -156,6 +175,57 @@ export default function RoomsView() {
           </button>
         )}
       </div>
+
+      {/* New groups that have not started yet */}
+      <section className="glass-card rounded-2xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Rocket size={17} className="text-sky-600" />
+          <h3 className="font-semibold text-slate-900">Скоро старт</h3>
+          <span className="text-xs text-slate-500">{upcoming.length ? `${upcoming.length} новых групп` : ''}</span>
+        </div>
+        {upcoming.length === 0 ? (
+          <p className="text-sm text-slate-500">Новых групп, которые ещё не стартовали, нет. Как только менеджер создаст группу с будущей датой старта, она появится здесь и в сетке.</p>
+        ) : (
+          <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1 snap-x">
+            {upcoming.map(g => {
+              const slots = groupSlots(g)
+              const roomNames = [...new Set(slots.map(s => s.online ? 'Онлайн' : rooms.find(r => r.id === s.roomId)?.name).filter(Boolean))]
+              const n = studentsOf(g)
+              const cap = g.format === 'online' ? null : Number(g.maxOffline) || null
+              const left = daysUntilStart(g, now)
+              return (
+                <div key={g.id} role="button" tabIndex={0}
+                  onClick={() => navigate(`/students?tab=groups&q=${encodeURIComponent(g.name)}`)}
+                  onKeyDown={e => { if (e.key === 'Enter') navigate(`/students?tab=groups&q=${encodeURIComponent(g.name)}`) }}
+                  className="snap-start shrink-0 w-[250px] rounded-xl border border-dashed border-sky-300 bg-white/70 dark:bg-sky-400/5 dark:border-sky-400/40 p-3 cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-sm font-bold text-sky-700 dark:text-sky-300 tabular-nums">{shortDate(g.startDate)}</p>
+                    <p className={`text-[11px] font-medium ${left <= 7 ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500'}`}>{inDays(left)}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-slate-900 leading-tight mt-0.5 break-words">{g.name}</p>
+                  {g.course && <p className="text-xs text-slate-500">{g.course}</p>}
+                  <div className="mt-1.5 space-y-0.5 text-[11px] text-slate-600">
+                    {teacherNameOf(g) && <p className="flex items-center gap-1"><UserRound size={11} /> {teacherNameOf(g)}</p>}
+                    <p className="flex items-center gap-1"><Clock size={11} /> {slots.length ? scheduleLine(slots) : <span className="text-amber-700">дни и время не указаны</span>}</p>
+                    <p className="flex items-center gap-1"><MapPin size={11} /> {roomNames.length ? roomNames.join(', ') : <span className="text-amber-700">кабинет не указан</span>}</p>
+                  </div>
+                  <div className="mt-2">
+                    <div className="flex justify-between text-[11px] text-slate-600 mb-0.5">
+                      <span>Записано</span>
+                      <span className="font-semibold tabular-nums">{n}{cap ? ` из ${cap}` : ''}</span>
+                    </div>
+                    {cap && (
+                      <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div className="h-full bg-sky-500" style={{ width: `${Math.min(100, (n / cap) * 100)}%` }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
 
       {totalPlaced === 0 ? (
         <div className="glass-card rounded-2xl p-8 sm:p-10 text-center">
@@ -190,6 +260,14 @@ export default function RoomsView() {
               })}
             </div>
             <div className="flex flex-wrap gap-2 lg:ml-auto">
+              <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
+                {[['all', 'Все'], ['now', 'Идут сейчас'], ['upcoming', `Скоро старт${block.stats.upcoming ? ` · ${block.stats.upcoming}` : ''}`]].map(([k, label]) => (
+                  <button key={k} onClick={() => setShow(k)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium ${show === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <select value={teacherFilter} onChange={e => setTeacherFilter(e.target.value)}
                 className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm max-w-full">
                 <option value="">Все учителя</option>
@@ -207,8 +285,8 @@ export default function RoomsView() {
           {/* Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              [block.stats.groups, 'групп', 'text-slate-900'],
-              [block.stats.busy, 'занятых слотов', 'text-blue-600'],
+              [block.stats.groups - block.stats.upcoming, 'групп идут', 'text-slate-900'],
+              [block.stats.upcoming, 'скоро старт', 'text-sky-600'],
               [block.stats.free, 'свободных слотов', 'text-emerald-600'],
               [block.stats.ended, 'дата окончания прошла', 'text-amber-600'],
             ].map(([v, label, color]) => (
@@ -254,8 +332,8 @@ export default function RoomsView() {
                                     <GroupCard key={`${p.group.id}-${p.slot.start}`} placement={p}
                                       color={PALETTE[colorOf(p.group.course)]}
                                       teacherName={teacherNameOf(p.group)}
-                                      students={getGroupOfflineCount(p.group.name) + getGroupOnlineCount(p.group.name)}
-                                      ended={isEnded(p.group)}
+                                      students={studentsOf(p.group)}
+                                      today={now}
                                       onOpen={() => navigate(`/students?tab=groups&q=${encodeURIComponent(p.group.name)}`)} />
                                   ))}
                                 </div>
@@ -289,7 +367,7 @@ export default function RoomsView() {
 
       {noTime.length > 0 && totalPlaced > 0 && (
         <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 dark:bg-amber-400/10 dark:border-amber-400/30 dark:text-amber-200">
-          <p className="font-medium flex items-center gap-1.5"><AlertTriangle size={15} /> Не в сетке: у {noTime.length} групп не указаны дни и время</p>
+          <p className="font-medium flex items-center gap-1.5"><AlertTriangle size={15} /> Не в сетке — групп без дней и времени: {noTime.length}</p>
           <p className="mt-1 text-xs">{noTime.slice(0, 12).map(g => g.name).join(', ')}{noTime.length > 12 ? ` и ещё ${noTime.length - 12}` : ''}. Укажите расписание в карточке группы.</p>
         </div>
       )}
