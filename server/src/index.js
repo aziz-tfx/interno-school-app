@@ -9,6 +9,13 @@ import { startAmoMirror } from './vercel/_lib/amoMirror.js'
 import { resolvePayme } from './vercel/_lib/tenantConfig.js'
 import { syncAllCalls } from './routes/crm/telephony.js'
 
+// A background job (amoCRM mirror, AI agent sweep, calls sync…) whose promise
+// fails without a .catch would otherwise end the process — taking the whole
+// API, every school and every open tab down with it. Log it and keep serving.
+process.on('unhandledRejection', (err) => {
+  console.error('unhandled rejection:', err?.stack || err)
+})
+
 const config = loadConfig()
 const pool = createPool(config.databaseUrl)
 

@@ -10,7 +10,17 @@ pg.types.setTypeParser(1700, Number)  // numeric
 pg.types.setTypeParser(1082, v => v)
 
 export function createPool(databaseUrl) {
-  return new pg.Pool({ connectionString: databaseUrl, max: 10 })
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 10 })
+  // A connection resting in the pool that the database drops (Postgres
+  // restarting, out of disk, a killed backend) makes the pool emit 'error'.
+  // With no listener Node treats it as fatal and the whole API exits — and
+  // under Docker's restart policy that became a loop: up ~20 s, 502 for ~2 s.
+  // The pool already discards the broken connection and opens a new one on
+  // the next query, so logging is all that's needed here.
+  pool.on('error', (err) => {
+    console.error(`postgres: idle connection lost: ${err?.message || err}`)
+  })
+  return pool
 }
 
 /**
