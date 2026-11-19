@@ -57,7 +57,7 @@ services:
       DATABASE_URL: postgres://interno:${POSTGRES_PASSWORD}@db:5432/interno
       PORT: 3000
       # keep the heap bounded so a runaway request can't starve Postgres
-      NODE_OPTIONS: --max-old-space-size=768
+      NODE_OPTIONS: --max-old-space-size=1536
     volumes:
       # deploy/autodeploy.sh writes its result here; /api/health shows it
       - ./state:/app/state:ro

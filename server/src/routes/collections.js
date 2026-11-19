@@ -12,6 +12,9 @@
 import { tx } from '../db.js'
 import { listDocs, getDocument, writeDoc, deleteDocument, MAX_BATCH } from '../documents.js'
 import { badRequest, notFound } from '../lib/errors.js'
+import { limitConcurrency } from '../lib/limit.js'
+
+const listSlot = limitConcurrency(4)
 
 function parseWhere(raw) {
   if (!raw) return []
@@ -27,11 +30,14 @@ function parseWhere(raw) {
 export default async function collectionRoutes(app, { pool }) {
   const auth = { preHandler: app.authenticate }
 
-  app.get('/api/collections/:name', auth, async (req) => {
+  // A list can be thousands of documents (payments?limit=5000). Build only a
+  // few at a time and turn each into its JSON text before the next starts, so
+  // the rows' objects are garbage at once instead of piling up in the heap.
+  app.get('/api/collections/:name', auth, async (req, reply) => {
     const { where, orderBy, direction, limit, offset } = req.query
-    return listDocs(pool, req.user, req.params.name, {
-      where: parseWhere(where), orderBy, direction, limit, offset,
-    })
+    const opts = { where: parseWhere(where), orderBy, direction, limit, offset }
+    const body = await listSlot(async () => JSON.stringify(await listDocs(pool, req.user, req.params.name, opts)))
+    return reply.type('application/json; charset=utf-8').send(body)
   })
 
   app.get('/api/collections/:name/:id', auth, async (req) => {
